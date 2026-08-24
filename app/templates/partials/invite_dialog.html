@@ -1,0 +1,41 @@
+<div class="dialog-backdrop" id="invite-dialog">
+  <div class="dialog">
+    <div class="dialog-header">
+      <h2>초대 메일 보내기</h2>
+      <button class="btn-icon" type="button" data-dialog-close>&times;</button>
+    </div>
+
+    <p class="hint" style="margin-top: 0;">
+      선택한 사람에게 가능한 시간을 입력할 수 있는 링크를 메일로 보냅니다.
+      보내는 사람 이름은 회원님 이름으로 표시됩니다.
+    </p>
+
+    <div class="field">
+      <label>연락처에서 선택</label>
+      <div id="invite-contacts" class="invite-contact-list">
+        <p class="hint" style="margin: 0;">불러오는 중...</p>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="invite-email-input">직접 입력</label>
+      <div class="chip-input" id="invite-email-chips">
+        <input type="text" id="invite-email-input" placeholder="이메일 입력 후 Enter" />
+      </div>
+      <div class="hint">연락처에 없는 외부 사람도 이메일만 있으면 보낼 수 있습니다.</div>
+    </div>
+
+    <div class="field">
+      <label for="invite-message">메시지 (선택)</label>
+      <textarea class="input" id="invite-message" rows="2" maxlength="500"
+                placeholder="예: 다음 주 회의 시간 정하려고 해요. 가능한 시간 알려주세요!"></textarea>
+    </div>
+
+    <p class="form-error" id="invite-error"></p>
+
+    <div class="dialog-footer">
+      <button type="button" class="btn btn-ghost" data-dialog-close>취소</button>
+      <button type="button" class="btn btn-primary" id="invite-send-btn">보내기</button>
+    </div>
+  </div>
+</div>

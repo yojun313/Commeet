@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}연락처 - {{ APP_NAME }}{% endblock %}
+{% block content %}
+<div class="container" style="max-width: 640px; padding-bottom: 60px;">
+  <h1 style="margin-top: 32px;">연락처</h1>
+  <p>일정에 자주 초대하는 사람을 저장해 두세요. 가입하지 않은 사람도 추가할 수 있습니다.</p>
+
+  <div class="card card-pad" style="margin-bottom: 24px;">
+    <div class="field" style="margin-bottom: 8px;">
+      <label for="contact-search">이름 또는 이메일로 검색</label>
+      <input class="input" id="contact-search" placeholder="예: 홍길동 또는 gildong@{{ ALLOWED_EMAIL_DOMAIN }}"
+             autocomplete="off" />
+    </div>
+    <div id="search-results"></div>
+
+    <details class="expandable" id="manual-add" style="margin-top: 4px;">
+      <summary>직접 입력해서 추가하기</summary>
+      <div class="expandable-body">
+        <p class="hint" style="margin-top: 0;">
+          아직 {{ APP_NAME }}에 가입하지 않은 사람도 이메일만 있으면 연락처에 추가할 수 있습니다.
+        </p>
+        <form id="manual-add-form">
+          <div class="field">
+            <label for="manual-name">이름</label>
+            <input class="input" id="manual-name" required />
+          </div>
+          <div class="field">
+            <label for="manual-email">이메일</label>
+            <input class="input" type="email" id="manual-email"
+                   placeholder="someone@{{ ALLOWED_EMAIL_DOMAIN }}" required />
+            <div class="hint">@{{ ALLOWED_EMAIL_DOMAIN }} 주소만 추가할 수 있습니다.</div>
+          </div>
+          <p class="form-error" id="manual-error"></p>
+          <button class="btn btn-primary" type="submit">연락처에 추가</button>
+        </form>
+      </div>
+    </details>
+  </div>
+
+  <h2 style="font-size: 15px;">저장된 연락처 (<span id="contact-count">0</span>)</h2>
+  <div id="contacts-list"><div class="empty-state"><span class="spinner"></span></div></div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ asset('js/contacts.js') }}"></script>
+{% endblock %}

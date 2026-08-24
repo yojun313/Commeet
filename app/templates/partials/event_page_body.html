@@ -1,0 +1,49 @@
+<div class="container">
+  <div class="event-header">
+    <div>
+      <h1 id="ev-title">{{ event_name }}</h1>
+      <div class="event-meta" id="ev-meta"></div>
+    </div>
+    <div class="event-header-actions">
+      {% if is_group %}
+      <div class="week-nav" id="week-nav" style="display: none;">
+        <button class="btn-icon" type="button" id="week-prev">&lsaquo;</button>
+        <span id="week-label"></span>
+        <button class="btn-icon" type="button" id="week-next">&rsaquo;</button>
+        <button class="btn btn-sm btn-ghost" type="button" id="week-today">이번 주</button>
+      </div>
+      {% endif %}
+      <button class="btn btn-secondary btn-sm" type="button" id="copy-link-btn">링크 복사</button>
+      <button class="btn btn-primary btn-sm" type="button" id="invite-btn" style="display: none;">초대 메일 보내기</button>
+      <button class="btn btn-secondary btn-sm" type="button" id="edit-event-btn" style="display: none;">수정</button>
+      <button class="btn btn-ghost btn-sm" type="button" id="delete-event-btn" style="display: none; color: var(--color-danger);">삭제</button>
+    </div>
+  </div>
+
+  <div id="guest-owner-banner"></div>
+  <div id="event-body-root">
+    <div class="empty-state"><span class="spinner"></span></div>
+  </div>
+</div>
+
+{% include "partials/new_event_dialog.html" %}
+{% include "partials/guest_name_dialog.html" %}
+{% include "partials/invite_dialog.html" %}
+
+<div class="dialog-backdrop" id="delete-event-page-dialog">
+  <div class="dialog dialog-sm">
+    <div class="dialog-header">
+      <h2>삭제</h2>
+      <button class="btn-icon" type="button" data-dialog-close>&times;</button>
+    </div>
+    <p>정말 삭제하시겠어요?</p>
+    <div class="dialog-footer">
+      <button type="button" class="btn btn-ghost" data-dialog-close>취소</button>
+      <button type="button" class="btn btn-danger" id="confirm-delete-event-page-btn">삭제</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  window.PCTS_EVENT_CONFIG = {{ config_json | safe }};
+</script>

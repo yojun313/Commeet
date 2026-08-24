@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}{{ "로그인" if mode == "sign-in" else "회원가입" }} - {{ APP_NAME }}{% endblock %}
+{% block content %}
+<div class="container" style="max-width: 560px;">
+  <div class="notice" style="margin-top: 32px;">
+    <p><b>POSTECH 구성원 전용 서비스입니다.</b></p>
+    <p style="font-size: 13px; opacity: 0.75;">
+      @{{ ALLOWED_EMAIL_DOMAIN }} 이메일 계정으로만 가입할 수 있으며, 가입 시 이메일 인증이 필요합니다.
+    </p>
+  </div>
+
+  <div class="card auth-card" style="margin-top: 0;">
+
+    {% if mode == "sign-in" %}
+    <h1>다시 오셨네요</h1>
+    <p class="subtitle">계정에 로그인하세요</p>
+
+    <form id="login-form">
+      <div class="field">
+        <label for="auth-email">이메일</label>
+        <input class="input" type="email" id="auth-email" autocomplete="email" required />
+      </div>
+      <div class="field">
+        <label for="auth-password">비밀번호</label>
+        <input class="input" type="password" id="auth-password" autocomplete="current-password" required />
+      </div>
+      <p class="form-error" id="auth-error"></p>
+      <button class="btn btn-primary btn-block" type="submit" id="auth-submit">로그인</button>
+    </form>
+
+    <p class="auth-switch">계정이 없으신가요? <a href="/sign-up">회원가입</a></p>
+
+    {% else %}
+    <h1>시작하기</h1>
+    <p class="subtitle">{{ ALLOWED_EMAIL_DOMAIN }} 이메일로 가입할 수 있습니다</p>
+
+    <ol class="signup-steps" id="signup-steps">
+      <li class="active" data-step="1"><span class="step-dot">1</span>정보 입력</li>
+      <li data-step="2"><span class="step-dot">2</span>이메일 인증</li>
+    </ol>
+
+    <!-- Step 1: details -->
+    <form id="signup-form">
+      <div class="field">
+        <label for="signup-name">이름</label>
+        <input class="input" id="signup-name" autocomplete="name" required />
+      </div>
+      <div class="field">
+        <label for="signup-email">이메일</label>
+        <input class="input" type="email" id="signup-email" autocomplete="email"
+               placeholder="myid@{{ ALLOWED_EMAIL_DOMAIN }}" required />
+        <div class="hint">@{{ ALLOWED_EMAIL_DOMAIN }} 주소만 가입할 수 있습니다.</div>
+      </div>
+      <div class="field">
+        <label for="signup-password">비밀번호</label>
+        <input class="input" type="password" id="signup-password" autocomplete="new-password" required minlength="8" />
+        <div class="hint">8자 이상 입력해 주세요.</div>
+      </div>
+      <p class="form-error" id="signup-error"></p>
+      <button class="btn btn-primary btn-block" type="submit" id="signup-submit">인증 코드 받기</button>
+    </form>
+
+    <!-- Step 2: emailed code -->
+    <form id="verify-form" style="display: none;">
+      <p class="verify-sent">
+        <strong id="verify-email"></strong> 로 6자리 인증 코드를 보냈습니다.<br />
+        메일함을 확인해 주세요.
+      </p>
+      <div class="field">
+        <label for="verify-code">인증 코드</label>
+        <input class="input code-input" id="verify-code" inputmode="numeric" pattern="[0-9]{6}"
+               maxlength="6" autocomplete="one-time-code" required />
+      </div>
+      <p class="form-error" id="verify-error"></p>
+      <button class="btn btn-primary btn-block" type="submit" id="verify-submit">가입 완료</button>
+      <button class="btn btn-ghost btn-block" type="button" id="verify-back" style="margin-top: 8px;">
+        정보 다시 입력하기
+      </button>
+    </form>
+
+    <p class="auth-switch">이미 계정이 있으신가요? <a href="/sign-in">로그인</a></p>
+    {% endif %}
+
+    <p class="auth-switch">계속 진행하면 <a href="/privacy-policy">개인정보처리방침</a>에 동의하는 것으로 간주됩니다.</p>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>const AUTH_MODE = "{{ mode }}";</script>
+<script src="{{ asset('js/auth.js') }}"></script>
+{% endblock %}

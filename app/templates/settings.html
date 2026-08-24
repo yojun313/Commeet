@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}설정 - {{ APP_NAME }}{% endblock %}
+{% block content %}
+<div class="container" style="max-width: 720px; padding-bottom: 60px;">
+  <h1 style="margin-top: 32px;">설정</h1>
+
+  <section class="settings-section">
+    <h2>프로필</h2>
+    <div class="field">
+      <label for="st-name">이름</label>
+      <input class="input" id="st-name" autocomplete="name" />
+    </div>
+    <div class="field">
+      <label>이메일</label>
+      <input class="input" id="st-email" disabled />
+      <div class="hint">이메일은 변경할 수 없습니다.</div>
+    </div>
+    <button class="btn btn-primary btn-sm" id="st-save-name" style="display: none;">저장</button>
+  </section>
+
+  <section class="settings-section">
+    <h2>비밀번호 변경</h2>
+    <form id="st-password-form" style="max-width: 360px;">
+      <div class="field">
+        <label for="st-current-password">현재 비밀번호</label>
+        <input class="input" type="password" id="st-current-password" autocomplete="current-password" required />
+      </div>
+      <div class="field">
+        <label for="st-new-password">새 비밀번호</label>
+        <input class="input" type="password" id="st-new-password" autocomplete="new-password" required minlength="8" />
+        <div class="hint">8자 이상 입력해 주세요.</div>
+      </div>
+      <div class="field">
+        <label for="st-new-password2">새 비밀번호 확인</label>
+        <input class="input" type="password" id="st-new-password2" autocomplete="new-password" required minlength="8" />
+      </div>
+      <p class="form-error" id="st-password-error"></p>
+      <button class="btn btn-primary btn-sm" type="submit">비밀번호 변경</button>
+    </form>
+  </section>
+
+  <section class="settings-section">
+    <h2>캘린더 연동</h2>
+    <p class="section-desc">캘린더 데이터를 서버에 저장하지 않으며, 보고 있는 기간의 일정만 그때그때 조회합니다.</p>
+    {% if GOOGLE_CALENDAR_ENABLED %}
+    <div id="calendar-accounts-root"></div>
+    <a class="btn btn-secondary btn-sm" href="/calendar/google/connect">+ Google Calendar 연결</a>
+    {% else %}
+    <p class="hint">이 서버에는 Google Calendar 연동이 설정되어 있지 않습니다.</p>
+    {% endif %}
+  </section>
+
+  {% if GOOGLE_CALENDAR_ENABLED %}
+  <section class="settings-section">
+    <h2>가용시간 자동 계산 옵션</h2>
+    <label class="checkbox-row">
+      <input type="checkbox" id="st-buffer-enabled" />
+      <span class="checkbox-copy">일정 사이 여유 시간 두기</span>
+    </label>
+    <input class="input" type="number" id="st-buffer-time" min="0" style="max-width: 140px; margin-bottom: 12px;" placeholder="분" />
+
+    <label class="checkbox-row">
+      <input type="checkbox" id="st-workinghours-enabled" />
+      <span class="checkbox-copy">근무 시간 내에서만 가능 시간 계산</span>
+    </label>
+    <div class="input-row" style="max-width: 260px;">
+      <input class="input" type="number" id="st-workinghours-start" min="0" max="24" placeholder="시작" />
+      <span>~</span>
+      <input class="input" type="number" id="st-workinghours-end" min="0" max="24" placeholder="종료" />
+    </div>
+    <button class="btn btn-primary btn-sm" id="st-save-options" style="margin-top: 12px;">저장</button>
+  </section>
+
+  <section class="settings-section">
+    <h2>권한 안내</h2>
+    <table class="perm-table">
+      <thead>
+        <tr><th>권한</th><th>목적</th><th>요청 시점</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>캘린더 읽기 (읽기 전용)</td><td>바쁜 시간을 자동으로 계산해 빠르게 응답하기 위함</td><td>Google Calendar 연결 시</td></tr>
+        <tr><td>기본 프로필 정보</td><td>연결된 계정을 식별하기 위함</td><td>Google Calendar 연결 시</td></tr>
+      </tbody>
+    </table>
+  </section>
+  {% endif %}
+
+  <section class="settings-section">
+    <h2>문의하기</h2>
+    <p class="section-desc">궁금한 점이 있으신가요? <a href="mailto:{{ SUPPORT_EMAIL }}">{{ SUPPORT_EMAIL }}</a>로 연락해 주세요.</p>
+  </section>
+
+  <section class="settings-section">
+    <h2 style="color: var(--color-danger);">계정 삭제</h2>
+    <p class="section-desc">계정을 삭제하면 되돌릴 수 없습니다.</p>
+    <button class="btn btn-danger btn-sm" id="st-delete-account-btn">계정 삭제</button>
+  </section>
+</div>
+
+<div class="dialog-backdrop" id="delete-account-dialog">
+  <div class="dialog dialog-sm">
+    <div class="dialog-header">
+      <h2>계정 삭제</h2>
+      <button class="btn-icon" type="button" data-dialog-close>&times;</button>
+    </div>
+    <p>확인을 위해 본인의 이메일 주소(<strong id="dac-email"></strong>)를 입력해 주세요.</p>
+    <input class="input" id="dac-confirm-email" style="margin-bottom: 12px;" />
+    <div class="dialog-footer">
+      <button type="button" class="btn btn-ghost" data-dialog-close>취소</button>
+      <button type="button" class="btn btn-danger" id="dac-confirm-btn" disabled>영구 삭제</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>const GOOGLE_CALENDAR_ENABLED = {{ "true" if GOOGLE_CALENDAR_ENABLED else "false" }};</script>
+<script src="{{ asset('js/settings.js') }}"></script>
+{% endblock %}

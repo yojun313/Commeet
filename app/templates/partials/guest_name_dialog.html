@@ -1,0 +1,20 @@
+<div class="dialog-backdrop" id="guest-name-dialog">
+  <div class="dialog dialog-sm">
+    <div class="dialog-header">
+      <h2>이름을 알려주세요</h2>
+    </div>
+    <div class="field">
+      <label for="guest-name-input">이름</label>
+      <input class="input" id="guest-name-input" placeholder="예: 홍길동" />
+    </div>
+    <div class="field" id="guest-email-field" style="display: none;">
+      <label for="guest-email-input">이메일</label>
+      <input class="input" type="email" id="guest-email-input" />
+    </div>
+    <p class="form-error" id="guest-name-error"></p>
+    <div class="dialog-footer">
+      <button type="button" class="btn btn-ghost" data-dialog-close>취소</button>
+      <button type="button" class="btn btn-primary" id="guest-name-submit">저장</button>
+    </div>
+  </div>
+</div>

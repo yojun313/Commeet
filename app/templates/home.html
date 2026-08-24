@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}대시보드 - {{ APP_NAME }}{% endblock %}
+{% block content %}
+<div class="container">
+  <div class="dashboard-head">
+    <h1 style="margin: 0;">대시보드</h1>
+    <div style="display: flex; gap: 8px;">
+      <button class="btn btn-secondary" id="new-folder-btn">+ 폴더</button>
+      <button class="btn btn-primary" id="new-event-btn">+ 새 일정</button>
+    </div>
+  </div>
+
+  <div id="folders-root">
+    <div class="empty-state"><span class="spinner"></span></div>
+  </div>
+</div>
+
+{% include "partials/new_event_dialog.html" %}
+
+<div class="dialog-backdrop" id="new-folder-dialog">
+  <div class="dialog dialog-sm">
+    <div class="dialog-header">
+      <h2>새 폴더</h2>
+      <button class="btn-icon" type="button" data-dialog-close>&times;</button>
+    </div>
+    <form id="new-folder-form">
+      <div class="field">
+        <label for="nf-name">폴더 이름</label>
+        <input class="input" id="nf-name" required />
+      </div>
+      <div class="field">
+        <label>색상</label>
+        <div id="nf-colors" style="display: flex; gap: 8px;"></div>
+      </div>
+      <div class="dialog-footer">
+        <button type="button" class="btn btn-ghost" data-dialog-close>취소</button>
+        <button type="submit" class="btn btn-primary">만들기</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="dialog-backdrop" id="delete-event-dialog">
+  <div class="dialog dialog-sm">
+    <div class="dialog-header">
+      <h2>일정 삭제</h2>
+      <button class="btn-icon" type="button" data-dialog-close>&times;</button>
+    </div>
+    <p>정말 삭제하시겠어요? 다른 사람의 응답이 있다면 안전하게 보관 처리되고, 없다면 완전히 삭제됩니다.</p>
+    <div class="dialog-footer">
+      <button type="button" class="btn btn-ghost" data-dialog-close>취소</button>
+      <button type="button" class="btn btn-danger" id="confirm-delete-event-btn">삭제</button>
+    </div>
+  </div>
+</div>
+
+<div class="speed-dial">
+  <button class="btn btn-primary" id="fab-new-event">+ 새 일정</button>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ asset('js/new-event.js') }}"></script>
+<script src="{{ asset('js/dashboard.js') }}"></script>
+{% endblock %}

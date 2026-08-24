@@ -1,0 +1,123 @@
+<div class="dialog-backdrop" id="new-event-dialog">
+  <div class="dialog">
+    <div class="dialog-header">
+      <h2 id="new-event-title">새 일정 만들기</h2>
+      <button class="btn-icon" type="button" data-dialog-close>&times;</button>
+    </div>
+
+    {% if user %}
+    <div class="toggle-group" id="ne-tabs" style="margin-bottom: 16px;">
+      <button type="button" class="active" data-tab="event">일정</button>
+      <button type="button" data-tab="group">그룹</button>
+    </div>
+    {% endif %}
+
+    <form id="new-event-form">
+      <div class="field">
+        <label for="ne-name">이름</label>
+        <input class="input" id="ne-name" placeholder="예: 팀 회의 시간 정하기" required />
+      </div>
+
+      <div class="field" id="ne-date-mode-field">
+        <label>날짜 선택 방식</label>
+        <div class="toggle-group" id="ne-date-mode">
+          <button type="button" class="active" data-mode="specific_dates">특정 날짜</button>
+          <button type="button" data-mode="dow">요일</button>
+        </div>
+      </div>
+
+      <div class="field" id="ne-specific-dates-field">
+        <label>날짜를 클릭해서 선택하세요 (여러 개 선택 가능)</label>
+        <div class="input-row" style="justify-content: space-between; margin-bottom: 8px;">
+          <button type="button" class="btn-icon" id="ne-cal-prev">&lsaquo;</button>
+          <strong id="ne-cal-label"></strong>
+          <button type="button" class="btn-icon" id="ne-cal-next">&rsaquo;</button>
+        </div>
+        <div class="month-grid" id="ne-calendar"></div>
+      </div>
+
+      <div class="field" id="ne-dow-field" style="display: none;">
+        <label>요일을 선택하세요</label>
+        <div class="dow-toggle-row" id="ne-dow-row"></div>
+      </div>
+
+      <div class="field">
+        <label>시간대</label>
+        <div class="input-row">
+          <select class="input" id="ne-start-time"></select>
+          <span>~</span>
+          <select class="input" id="ne-end-time"></select>
+        </div>
+      </div>
+
+      {% if user %}
+      <label class="checkbox-row">
+        <input type="checkbox" id="ne-notify" />
+        <span class="checkbox-copy">누군가 응답할 때마다 이메일 알림 받기</span>
+      </label>
+
+      <div class="field" id="ne-remindees-field">
+        <label>이메일로 초대하기 (선택)</label>
+        <div class="chip-input" id="ne-remindees-chips">
+          <input type="text" id="ne-remindees-input" placeholder="이메일 입력 후 Enter" />
+        </div>
+      </div>
+
+      <div class="field" id="ne-attendees-field" style="display: none;">
+        <label>참여자 이메일</label>
+        <div class="chip-input" id="ne-attendees-chips">
+          <input type="text" id="ne-attendees-input" placeholder="이메일 입력 후 Enter" />
+        </div>
+      </div>
+      {% else %}
+      <p class="hint">로그인하면 이메일 알림, 초대, 고급 옵션을 사용할 수 있습니다.</p>
+      {% endif %}
+
+      <details class="expandable">
+        <summary>고급 옵션</summary>
+        <div class="expandable-body">
+          <div class="field">
+            <label for="ne-time-increment">시간 단위</label>
+            <select class="input" id="ne-time-increment">
+              <option value="15">15분</option>
+              <option value="30">30분</option>
+              <option value="60">60분</option>
+            </select>
+          </div>
+          {% if user %}
+          <label class="checkbox-row">
+            <input type="checkbox" id="ne-collect-emails" />
+            <span class="checkbox-copy">응답자 이메일 주소 수집하기</span>
+          </label>
+          <label class="checkbox-row">
+            <input type="checkbox" id="ne-blind" />
+            <span class="checkbox-copy">
+              다른 응답자에게 결과 숨기기
+              <div class="desc">켜면 생성자만 전체 응답을 볼 수 있습니다.</div>
+            </span>
+          </label>
+          <label class="checkbox-row">
+            <input type="checkbox" id="ne-threshold-enable" />
+            <span class="checkbox-copy">일정 인원이 응답하면 이메일 받기</span>
+          </label>
+          <input
+            class="input"
+            type="number"
+            id="ne-threshold-count"
+            min="1"
+            placeholder="인원 수"
+            style="display: none; margin-bottom: 12px; max-width: 140px;"
+          />
+          {% endif %}
+        </div>
+      </details>
+
+      <p class="form-error" id="ne-error"></p>
+
+      <div class="dialog-footer">
+        <button type="button" class="btn btn-ghost" data-dialog-close>취소</button>
+        <button type="submit" class="btn btn-primary" id="ne-submit">만들기</button>
+      </div>
+    </form>
+  </div>
+</div>

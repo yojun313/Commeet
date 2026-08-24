@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}오류가 발생했습니다 - {{ APP_NAME }}{% endblock %}
+{% block content %}
+<div class="container error-page">
+  <h1>500</h1>
+  <p>서버에서 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.</p>
+  <a class="btn btn-primary" href="/">홈으로 돌아가기</a>
+</div>
+{% endblock %}

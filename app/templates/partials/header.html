@@ -1,0 +1,36 @@
+<header class="site-header">
+  <div class="container">
+    <div class="header-logos">
+      <a class="header-logo-left" href="https://www.postech.ac.kr/kor/index.do" target="_blank" rel="noopener">
+        <img src="{{ asset('images/value_postech_logo.png') }}" alt="가치창출대학 POSTECH" />
+      </a>
+      <span class="header-divider"></span>
+      <a class="brand" href="{{ '/home' if user else '/' }}">
+        <span class="brand-mark">{{ APP_NAME }}</span>
+        <span class="brand-sub">{{ APP_FULL_NAME }}</span>
+      </a>
+    </div>
+
+    <div class="nav-actions">
+      {% if user %}
+        <nav class="nav-links">
+          <a href="/home" class="{{ 'active' if request.url.path == '/home' else '' }}">대시보드</a>
+          <a href="/contacts" class="{{ 'active' if request.url.path == '/contacts' else '' }}">연락처</a>
+        </nav>
+        <div class="user-menu" data-user-menu>
+          <button class="user-menu-trigger" type="button" data-user-menu-trigger>
+            <span class="avatar sm">{{ (user.name or user.email)[0] | upper }}</span>
+            <span class="user-menu-name">{{ user.name or user.email }}</span>
+          </button>
+          <div class="user-menu-dropdown" data-user-menu-dropdown>
+            <a href="/settings">설정</a>
+            <button type="button" data-sign-out>로그아웃</button>
+          </div>
+        </div>
+      {% else %}
+        <a class="btn btn-ghost btn-sm" href="/sign-in">로그인</a>
+        <a class="btn btn-primary btn-sm" href="/sign-up">시작하기</a>
+      {% endif %}
+    </div>
+  </div>
+</header>

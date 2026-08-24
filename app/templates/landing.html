@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero">
+  <div class="container">
+    <span class="badge">{{ APP_NAME }} &middot; {{ APP_FULL_NAME }}</span>
+    <h1>모두가 가능한 시간을<br />한눈에 찾아보세요</h1>
+    <p class="subtitle">
+      번거로운 대화 없이 그룹 일정을 조율하세요. 링크 하나로 팀원들의 가능한 시간을 모으고,
+      Google Calendar를 연동하면 자동으로 빈 시간을 채워줍니다.
+    </p>
+    <div class="cta-row">
+      {% if user %}
+      <a class="btn btn-primary" href="/home" style="padding: 14px 28px; font-size: 15px;">대시보드 열기</a>
+      {% else %}
+      <button class="btn btn-primary" id="landing-create-btn" style="padding: 14px 28px; font-size: 15px;">일정 만들기</button>
+      <span class="cta-caption">무료입니다. 로그인 없이 바로 만들 수 있어요.</span>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <h2 class="section-title">이렇게 사용하세요</h2>
+    <p class="section-subtitle">세 단계면 충분합니다.</p>
+    <div class="steps-grid">
+      <div class="step-card">
+        <div class="step-number">1</div>
+        <h3>일정 만들기</h3>
+        <p>이름을 정하고, 후보 날짜(또는 요일)와 시간대를 선택하세요.</p>
+      </div>
+      <div class="step-card">
+        <div class="step-number">2</div>
+        <h3>링크 공유하기</h3>
+        <p>생성된 링크를 그룹원들에게 공유하면, 로그인 없이도 가능한 시간을 표시할 수 있어요.</p>
+      </div>
+      <div class="step-card">
+        <div class="step-number">3</div>
+        <h3>겹치는 시간 확인하기</h3>
+        <p>모두의 응답이 겹치는 시간이 색으로 강조되어 한눈에 최적의 시간을 찾을 수 있습니다.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" style="background: var(--color-surface); border-top: 1px solid var(--color-border); border-bottom: 1px solid var(--color-border);">
+  <div class="container">
+    <h2 class="section-title">자주 묻는 질문</h2>
+    <div style="max-width: 680px; margin: 0 auto;">
+      <details class="faq-item" open>
+        <summary>시간대를 지원하나요?</summary>
+        <p>네. 보고 있는 사람의 로컬 시간대로 자동 변환되며, 직접 시간대를 선택할 수도 있습니다.</p>
+      </details>
+      <details class="faq-item">
+        <summary>몇 명까지 응답할 수 있나요?</summary>
+        <p>인원 제한이 없습니다.</p>
+      </details>
+      <details class="faq-item">
+        <summary>어떤 캘린더와 연동되나요?</summary>
+        <p>현재 Google Calendar 연동을 지원합니다. 설정 페이지에서 연결할 수 있어요.</p>
+      </details>
+      <details class="faq-item">
+        <summary>캘린더 연동이 꼭 필요한가요?</summary>
+        <p>아니요. 캘린더 없이 직접 가능한 시간을 클릭해서 표시할 수 있습니다. 캘린더 연동은 이 과정을 더 빠르게 해줄 뿐입니다.</p>
+      </details>
+      <details class="faq-item">
+        <summary>다른 사람이 제 캘린더 일정을 볼 수 있나요?</summary>
+        <p>아니요. 다른 참여자에게는 오직 "바쁨" 여부만 표시되고, 일정 제목 등 세부 내용은 공유되지 않습니다.</p>
+      </details>
+      <details class="faq-item">
+        <summary>제 응답을 수정하려면 어떻게 하나요?</summary>
+        <p>로그인한 경우 "가용시간 수정" 버튼을, 게스트로 참여한 경우 이름 옆의 연필 아이콘을 눌러 수정할 수 있습니다.</p>
+      </details>
+      <details class="faq-item">
+        <summary>다른 사람에게 결과를 숨기고 싶어요.</summary>
+        <p>일정을 만들 때 고급 옵션에서 "다른 응답자에게 결과 숨기기"를 켜면, 생성자만 전체 응답을 볼 수 있습니다.</p>
+      </details>
+      <details class="faq-item">
+        <summary>응답 알림을 받을 수 있나요?</summary>
+        <p>일정을 만들 때 "누군가 응답할 때마다 이메일 알림 받기"를 켜거나, 특정 인원이 응답하면 알림을 받도록 설정할 수 있습니다.</p>
+      </details>
+    </div>
+  </div>
+</section>
+
+{% if not user %}
+{% include "partials/new_event_dialog.html" %}
+{% endif %}
+{% endblock %}
+
+{% block extra_scripts %}
+{% if not user %}
+<script src="{{ asset('js/new-event.js') }}"></script>
+<script>
+  document.getElementById("landing-create-btn").addEventListener("click", () => {
+    NewEventDialog.open({ mode: "create" });
+  });
+</script>
+{% endif %}
+{% endblock %}
