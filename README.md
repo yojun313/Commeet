@@ -1,4 +1,4 @@
-# PCTS
+# Commeet
 
 **POSTECH CSE Time Scheduler** - 그룹 일정 조율 서비스. [timeful.app](https://timeful.app) (구 schej.it)의 핵심 스케줄링 기능을
 FastAPI + MongoDB + Jinja2로 재구현한 프로젝트입니다.

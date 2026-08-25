@@ -4,6 +4,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
 from app.config import GOOGLE_CALENDAR_ENABLED
+from app.core.serialize import jsonable
 from app.core.templates import templates
 from app.services import event_service
 from app.services.auth_service import get_optional_user, public_profile
@@ -58,6 +59,38 @@ async def contacts(request: Request):
         return RedirectResponse("/sign-in")
     return templates.TemplateResponse(
         request=request, name="contacts.html", context={"user": user}
+    )
+
+
+@router.get("/admin")
+async def admin_page(request: Request):
+    user = await get_optional_user(request)
+    if not user:
+        return RedirectResponse("/sign-in?next=/admin")
+    if not user.get("isAdmin"):
+        return templates.TemplateResponse(
+            request=request,
+            name="errors/404.html",
+            context={"user": user},
+            status_code=404,
+        )
+    return templates.TemplateResponse(
+        request=request, name="admin.html", context={"user": user}
+    )
+
+
+@router.get("/calendar")
+async def calendar_page(request: Request):
+    user = await get_optional_user(request)
+    if not user:
+        return RedirectResponse("/sign-in?next=/calendar")
+    return templates.TemplateResponse(
+        request=request,
+        name="calendar.html",
+        context={
+            "user": user,
+            "config_json": json.dumps({"userId": str(user["_id"])}),
+        },
     )
 
 
@@ -117,6 +150,43 @@ async def event_page(event_id: str, request: Request):
             "event_name": event.get("name", ""),
             "is_group": False,
             "config_json": _event_config_json(event_id_str, False, user),
+        },
+    )
+
+
+@router.get("/e/{event_id}/finalize")
+async def finalize_page(event_id: str, request: Request):
+    user = await get_optional_user(request)
+    event = await event_service.get_event_by_either_id(event_id)
+    if event is None:
+        return templates.TemplateResponse(
+            request=request,
+            name="errors/404.html",
+            context={"user": user},
+            status_code=404,
+        )
+    if not user or event.get("ownerId") != user["_id"]:
+        return RedirectResponse(f"/e/{event.get('shortId') or event['_id']}")
+
+    event_id_str = event.get("shortId") or str(event["_id"])
+    return templates.TemplateResponse(
+        request=request,
+        name="event/finalize.html",
+        context={
+            "user": user,
+            "event_id": event_id_str,
+            "event_name": event.get("name", ""),
+            "time_increment": int(event.get("timeIncrement") or 15),
+            "duration_hours": float(event.get("duration") or 0),
+            "config_json": json.dumps(
+                {
+                    "eventId": event_id_str,
+                    "eventName": event.get("name", ""),
+                    "timeIncrement": int(event.get("timeIncrement") or 15),
+                    "durationHours": float(event.get("duration") or 0),
+                    "finalization": jsonable(event.get("finalization")),
+                }
+            ),
         },
     )
 

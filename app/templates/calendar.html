@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}전체 캘린더 - {{ APP_NAME }}{% endblock %}
+{% block content %}
+<div class="container" style="padding-bottom: 60px;">
+  <div class="dashboard-head">
+    <h1 id="cal-label" class="cal-page-label"></h1>
+    <div class="cal-page-toolbar">
+      <button class="btn btn-ghost btn-sm" type="button" id="cal-today">오늘</button>
+      <button class="btn-icon" type="button" id="cal-prev" aria-label="이전">&lsaquo;</button>
+      <button class="btn-icon" type="button" id="cal-next" aria-label="다음">&rsaquo;</button>
+      <div class="toggle-group" id="cal-view-toggle">
+        <button type="button" data-view="day">일</button>
+        <button type="button" data-view="week">주</button>
+        <button type="button" class="active" data-view="month">월</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="cal-legend">
+    <span class="cal-legend-item"><span class="cal-swatch cal-swatch-booked"></span>확정된 일정</span>
+    <span class="cal-legend-item"><span class="cal-swatch cal-swatch-open"></span>미확정 (응답 대기 중)</span>
+  </div>
+
+  <div class="cal-page-weekdays" id="cal-weekdays"></div>
+  <div class="cal-page-grid" id="cal-grid-root">
+    <div class="empty-state"><span class="spinner"></span></div>
+  </div>
+
+  <div class="cal-page-timeview" id="cal-timeview">
+    <div class="cal-page-tv-header" id="cal-tv-header"></div>
+    <div class="cal-page-tv-allday" id="cal-tv-allday"></div>
+    <div class="cal-page-tv-body" id="cal-tv-body">
+      <div class="cal-page-tv-scroll" id="cal-tv-scroll">
+        <div class="cal-page-tv-rows" id="cal-tv-rows"></div>
+        <div class="cal-page-tv-timelabels" id="cal-tv-timelabels"></div>
+        <div class="cal-page-tv-columns" id="cal-tv-columns"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="cal-page-google-row">
+    <button class="btn btn-ghost btn-sm" type="button" id="cal-google-settings-btn">
+      Google Calendar 설정{% if not GOOGLE_CALENDAR_ENABLED %} (서버에 설정되지 않음){% endif %}
+    </button>
+  </div>
+</div>
+
+<div class="dialog-backdrop" id="cal-detail-dialog">
+  <div class="dialog dialog-sm">
+    <div class="dialog-header">
+      <h2 id="cal-detail-title">일정</h2>
+      <button class="btn-icon" type="button" data-dialog-close>&times;</button>
+    </div>
+    <div id="cal-detail-body"></div>
+    <div class="dialog-footer">
+      <a class="btn btn-primary" id="cal-detail-link" href="#">일정 페이지 열기</a>
+    </div>
+  </div>
+</div>
+
+<div class="dialog-backdrop" id="cal-google-dialog">
+  <div class="dialog dialog-md">
+    <div class="dialog-header">
+      <h2>Google Calendar 설정</h2>
+      <button class="btn-icon" type="button" data-dialog-close>&times;</button>
+    </div>
+
+    {% if GOOGLE_CALENDAR_ENABLED %}
+    <p class="hint" style="margin-top: 0;">연결하면 확정된 약속이 전용 "Commeet" 캘린더에 자동으로 추가됩니다.</p>
+    <div id="cal-google-accounts-root" style="margin-bottom: 12px;"></div>
+    <a class="btn btn-secondary btn-sm" href="/calendar/google/connect">+ Google Calendar 연결</a>
+
+    <h3 style="font-size: 14px; margin: 22px 0 6px;">가용시간 자동 계산 옵션</h3>
+    <p class="hint" style="margin-top: 0;">
+      일정 페이지에서 <strong>“캘린더로 자동 채우기”</strong>를 눌렀을 때, 연결된 Google Calendar를 읽어
+      비어 있는 시간을 자동으로 “가능”으로 칠해 주는 기능의 세부 설정입니다.
+      직접 손으로 칠할 때는 적용되지 않습니다.
+    </p>
+
+    <label class="checkbox-row">
+      <input type="checkbox" id="gc-buffer-enabled" />
+      <span class="checkbox-copy">
+        일정 사이 여유 시간 두기
+        <div class="desc">
+          캘린더에 있는 기존 일정의 앞뒤로 이만큼을 비워 둡니다. 예를 들어 30분으로 두면
+          2시에 끝나는 회의가 있을 때 2시 30분부터를 “가능”으로 칠합니다. (이동 시간, 연속 회의 방지용)
+        </div>
+      </span>
+    </label>
+    <input class="input" type="number" id="gc-buffer-time" min="0" style="max-width: 140px; margin-bottom: 12px;" placeholder="분" />
+
+    <label class="checkbox-row">
+      <input type="checkbox" id="gc-workinghours-enabled" />
+      <span class="checkbox-copy">
+        근무 시간 내에서만 가능 시간 계산
+        <div class="desc">
+          캘린더가 비어 있어도 이 시간대 밖은 “가능”으로 칠하지 않습니다.
+          예를 들어 9~18로 두면 새벽이나 늦은 밤에 약속이 잡히지 않습니다. (24시간제로 입력)
+        </div>
+      </span>
+    </label>
+    <div class="input-row" style="max-width: 260px;">
+      <input class="input" type="number" id="gc-workinghours-start" min="0" max="24" placeholder="시작" />
+      <span>~</span>
+      <input class="input" type="number" id="gc-workinghours-end" min="0" max="24" placeholder="종료" />
+    </div>
+    <button class="btn btn-primary btn-sm" id="gc-save-options" style="margin-top: 12px;">가용시간 옵션 저장</button>
+
+    <h3 style="font-size: 14px; margin: 22px 0 8px;">권한 안내</h3>
+    <table class="perm-table">
+      <thead>
+        <tr><th>권한</th><th>목적</th><th>요청 시점</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>캘린더 읽기 (읽기 전용)</td><td>바쁜 시간을 자동으로 계산해 빠르게 응답하기 위함</td><td>Google Calendar 연결 시</td></tr>
+        <tr><td>캘린더 일정 쓰기</td><td>확정된 약속을 캘린더에 자동으로 추가/삭제하기 위함</td><td>Google Calendar 연결 시</td></tr>
+        <tr><td>캘린더 생성/관리</td><td>전용 "Commeet" 캘린더를 만들기 위함</td><td>Google Calendar 연결 시</td></tr>
+        <tr><td>기본 프로필 정보</td><td>연결된 계정을 식별하기 위함</td><td>Google Calendar 연결 시</td></tr>
+      </tbody>
+    </table>
+    {% else %}
+    <p class="hint" style="margin-top: 0;">이 서버에는 Google Calendar 연동이 설정되어 있지 않습니다.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  window.COMMEET_CALENDAR = {{ config_json | safe }};
+  const GOOGLE_CALENDAR_ENABLED = {{ "true" if GOOGLE_CALENDAR_ENABLED else "false" }};
+</script>
+<script src="{{ asset('js/calendar-page.js') }}"></script>
+{% endblock %}

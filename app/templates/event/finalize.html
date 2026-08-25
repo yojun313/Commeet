@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}일정 확정 - {{ event_name }} - {{ APP_NAME }}{% endblock %}
+{% block content %}
+<div class="container" style="padding-bottom: 60px;">
+
+  <div class="event-header">
+    <div>
+      <h1 style="margin-bottom: 4px;">일정 확정</h1>
+      <div class="event-meta">{{ event_name }}</div>
+    </div>
+    <div class="event-header-actions">
+      <a class="btn btn-ghost btn-sm" href="/e/{{ event_id }}">&lsaquo; 일정으로 돌아가기</a>
+    </div>
+  </div>
+
+  <div class="notice" id="confirmed-banner" style="display: none;">
+    <p><b>이 일정은 확정된 상태입니다.</b></p>
+    <p style="font-size: 13px; opacity: 0.8;">
+      확정 중에는 참가자가 가능한 시간을 수정할 수 없습니다.
+      아래에서 배정을 수정한 뒤 다시 확정하면 참가자에게 변경 안내 메일이 발송됩니다.
+    </p>
+  </div>
+
+  <!-- Step 1: settings (compact, full-width bar - the fields are short so a
+       side column would just waste the extra height) -->
+  <div class="card card-pad" style="margin-bottom: 16px;">
+    <h2 style="font-size: 17px;">1. 약속 조건</h2>
+    <div class="finalize-settings">
+      <div class="field" style="margin-bottom: 0;">
+        <label for="fin-capacity">한 약속당 인원</label>
+        <select class="input" id="fin-capacity"></select>
+        <div class="hint">1명이면 1:1 개별 면담, 2명 이상이면 그룹 약속입니다.</div>
+      </div>
+      <div class="field" style="margin-bottom: 0;">
+        <label for="fin-minutes">약속 길이</label>
+        <select class="input" id="fin-minutes"></select>
+        <div class="hint">{{ time_increment }}분 단위로 선택할 수 있습니다.</div>
+      </div>
+      <div class="field" style="margin-bottom: 0;">
+        <label>옵션</label>
+        <label class="checkbox-row" style="margin: 6px 0 0;">
+          <input type="checkbox" id="fin-allow-ifneeded" checked />
+          <span class="checkbox-copy">
+            “가능(선택)” 시간도 사용
+            <div class="desc">더 많은 사람을 배정할 수 있을 때만 사용합니다.</div>
+          </span>
+        </label>
+      </div>
+    </div>
+    <p class="form-error" id="fin-error"></p>
+    <button class="btn btn-primary" id="fin-run-btn">최적 배정 계산하기</button>
+
+    <details class="term-help" style="margin-top: 12px;">
+      <summary>배정은 어떤 기준으로 계산되나요?</summary>
+      <div class="term-help-body-plain">
+        <p>
+          응답한 사람들을 가능한 한 <strong>많이</strong>, 그리고 가능한 한 <strong>좋은 시간에</strong> 넣는
+          조합을 자동으로 찾습니다. 눈으로 고르는 것과 달리 모든 조합을 따져 <strong>수학적으로 가장 좋은 답</strong>을
+          보장합니다.
+        </p>
+        <ol class="finalize-explain-list">
+          <li>
+            <strong>후보 시간대 만들기</strong> — 응답을 받은 각 날짜를 “약속 길이”만큼씩 잘라
+            겹치지 않는 시간 칸으로 나눕니다. 호스트는 모든 약속에 참석하므로, 호스트가 불가능한 칸은 먼저 제외합니다.
+          </li>
+          <li>
+            <strong>1순위: 최대한 많은 사람 배정</strong> — 배정되는 인원수를 가장 크게 만드는 것이
+            항상 최우선입니다. 한 명이라도 더 넣을 수 있으면 그 조합을 택합니다.
+          </li>
+          <li>
+            <strong>2순위: “가능” 시간 우선</strong> — 인원수가 같다면 “가능(선택)”보다 “가능”으로
+            답한 시간에 배정합니다. “가능(선택)”은 그렇게 해야 한 명이라도 더 배정될 때만 사용됩니다.
+          </li>
+          <li>
+            <strong>3순위: 이른 시간 우선</strong> — 위 조건이 모두 같다면 더 이른 시간대로 채워
+            일정이 뒤로 밀리지 않게 합니다.
+          </li>
+          <li>
+            <strong>정원 지키기</strong> — 한 시간 칸에 “한 약속당 인원”을 넘겨 배정하지 않고,
+            한 사람이 두 번 배정되지도 않습니다.
+          </li>
+        </ol>
+        <p class="term-help-note" style="margin-top: 10px;">
+          계산 결과는 <em>제안</em>일 뿐입니다. 아래에서 참가자 카드를 직접 끌어 옮겨 수정한 뒤 확정할 수 있고,
+          아무도 맞출 수 없는 사람은 “미배정”으로 남습니다.
+        </p>
+      </div>
+    </details>
+  </div>
+
+  <!-- Step 2+3: side-by-side once a proposal exists - controls on the left,
+       the calendar (which benefits most from width) on the right. -->
+  <div id="fin-result" class="finalize-layout" style="display: none;">
+    <div class="finalize-col-left">
+      <div class="card card-pad">
+        <h2 style="font-size: 17px;">2. 배정 확인 및 수정</h2>
+        <p id="fin-summary" class="finalize-summary"></p>
+        <p class="hint" style="margin-top: 0;">
+          각 참가자의 시간을 직접 바꿀 수 있습니다. 선택 가능한 시간만 목록에 나타납니다.
+        </p>
+        <div id="fin-assignments"></div>
+      </div>
+
+      <div class="finalize-actions">
+        <button class="btn btn-primary" id="fin-confirm-btn">이 내용으로 확정하고 마감</button>
+        <button class="btn btn-danger" id="fin-cancel-btn" style="display: none;">확정 취소 (마감 해제)</button>
+      </div>
+      <p class="hint" style="margin-top: 10px;">
+        확정하면 배정된 참가자에게 확정 안내 메일이 발송되고, 응답 수정이 잠깁니다.
+      </p>
+    </div>
+
+    <div class="finalize-col-right">
+      <div class="card card-pad">
+        <h2 style="font-size: 17px;">3. 최종 일정</h2>
+        <p class="hint" style="margin-top: 0;">
+          참가자 카드를 눌러서 원하는 시간으로 끌어다 놓으면 배정을 바꿀 수 있습니다.
+          아래 “미배정” 칸으로 끌어다 놓으면 배정이 해제됩니다.
+        </p>
+        <div class="cal-legend">
+          <span class="cal-legend-item"><span class="cal-swatch cal-swatch-booked"></span>배정됨</span>
+          <span class="cal-legend-item"><span class="cal-swatch cal-swatch-open"></span>가능(미배정)</span>
+          <span class="cal-legend-item"><span class="cal-swatch cal-swatch-unavailable"></span>호스트 불가</span>
+        </div>
+        <div class="grid-scroll">
+          <div class="cal-grid" id="fin-calendar"></div>
+        </div>
+
+        <div class="unassigned-tray" id="fin-unassigned-tray">
+          <div class="unassigned-tray-title">미배정 (여기로 끌어다 놓으면 배정 해제)</div>
+          <div class="unassigned-tray-chips" id="fin-unassigned-chips"></div>
+        </div>
+
+        <div id="fin-preview"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="fin-empty" class="empty-state" style="display: none;">
+    <div class="icon">🗓️</div>
+    아직 응답한 참가자가 없어 배정할 수 없습니다.
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>window.COMMEET_FINALIZE = {{ config_json | safe }};</script>
+<script src="{{ asset('js/finalize.js') }}"></script>
+{% endblock %}

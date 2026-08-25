@@ -5,6 +5,8 @@ from app.config import (
     APP_FULL_NAME,
     APP_NAME,
     GOOGLE_CALENDAR_ENABLED,
+    PROFESSOR_EMAIL,
+    RESTRICT_SIGNUP_DOMAIN,
     SUPPORT_EMAIL,
 )
 from app.core.paths import STATIC_DIR, TEMPLATES_DIR
@@ -32,5 +34,7 @@ templates.env.globals["APP_NAME"] = APP_NAME
 templates.env.globals["APP_FULL_NAME"] = APP_FULL_NAME
 templates.env.globals["GOOGLE_CALENDAR_ENABLED"] = GOOGLE_CALENDAR_ENABLED
 templates.env.globals["ALLOWED_EMAIL_DOMAIN"] = ALLOWED_EMAIL_DOMAIN
+templates.env.globals["RESTRICT_SIGNUP_DOMAIN"] = RESTRICT_SIGNUP_DOMAIN
 templates.env.globals["SUPPORT_EMAIL"] = SUPPORT_EMAIL
+templates.env.globals["PROFESSOR_EMAIL"] = PROFESSOR_EMAIL
 templates.env.globals["asset"] = asset

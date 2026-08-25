@@ -1,5 +1,5 @@
 /* ==========================================================================
-   PCTS design system
+   Commeet design system
 
    Palette, typography and component shapes follow the PCSS site
    (POSTECH Computer Scientist Search): crimson primary, slate-navy for
@@ -8,24 +8,45 @@
    ========================================================================== */
 
 :root {
-  /* Brand crimson - rgba(200, 1, 80) */
+  /* Brand crimson, background/button role - rgba(200, 1, 80) */
   --color-primary: #c80150;
   --color-primary-hover: #c2326c;
   --color-primary-dark: #aa003c;
   --color-primary-pale: rgba(200, 1, 80, 0.08);
   --color-primary-pale-2: rgba(200, 1, 80, 0.16);
+  --color-primary-rgb: 200, 1, 80;
 
-  /* Slate navy - headings and secondary buttons */
+  /* Crimson family, text/icon/link role. Equal to --color-primary in light
+     mode; re-tuned independently in dark mode, since a color that reads
+     well as a solid button background rarely also reads well as text on a
+     dark page (opposite contrast requirements). */
+  --color-accent: #c80150;
+
+  /* Slate navy - secondary buttons, and (via the pale variants) selected /
+     hover chrome such as the active nav link or a picked respondent filter.
+     Used more broadly than just headings, so the page doesn't read as
+     "crimson everywhere" - navy carries the UI-chrome / selection states. */
   --color-navy: #34495e;
   --color-navy-hover: #2c3e50;
+  --color-navy-pale: rgba(52, 73, 94, 0.08);
+  --color-navy-pale-2: rgba(52, 73, 94, 0.16);
+
+  /* Slate-navy family, heading/label text role - same split rationale as
+     --color-accent above. */
+  --color-heading: #34495e;
 
   --color-accent-yellow: #f5c344;
-  --color-accent-yellow-pale: #fdf3d9;
+
+  --color-warning-bg: #fdf3d9;
+  --color-warning-border: #f0dfa8;
+  --color-warning-text: #7a5b0a;
 
   --color-danger: #c62828;
   --color-danger-hover: #a91d1d;
   --color-danger-bg: #ffebee;
   --color-danger-border: #ef9a9a;
+  --color-danger-text: #c62828;
+  --color-danger-rgb: 198, 40, 40; /* same in dark mode too - --color-danger doesn't change between themes */
   --color-success: #2e7d32;
 
   --color-bg: #f9f9f9;
@@ -35,14 +56,17 @@
   --color-border: #ddd;
   --color-border-light: #eee;
   --color-input-border: #ccc;
+  --color-grid-faint-border: #f4f4f4;
 
   --color-text: #333;
   --color-text-muted: #666;
   --color-text-faint: #999;
+  --color-text-rgb: 51, 51, 51;
   --color-text-on-primary: #ffffff;
   --color-neutral-text: #495057;
 
-  /* Dark POSTECH footer */
+  /* Dark POSTECH footer - deliberately the same in both site themes: it
+     carries the official POSTECH mark and always stays dark. */
   --color-footer-bg: #2b2b2b;
   --color-footer-text: #aaa;
   --color-footer-muted: #999;
@@ -65,11 +89,136 @@
   /* Availability grid sizing - overridden on small screens so more days fit */
   --grid-label-w: 64px;
   --grid-col-min: 64px;
-  --grid-head-h: 40px;
+  --grid-head-h: 56px;
   --grid-row-h: 16px;
 
   --font-sans: 'Noto Sans KR', 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
 }
+
+/* ==========================================================================
+   Dark mode
+
+   Redefines the tokens above for a dark palette (contrast-checked against
+   WCAG 2.1 AA - see contrast.py used while designing this). Applied
+   automatically when the OS prefers dark, unless the user has explicitly
+   picked "light" via the header toggle; always applied when the user has
+   explicitly picked "dark". See static/js/ui.js for the toggle itself.
+   ========================================================================== */
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+  /* Crimson stays the button/background role - kept close to the light
+     value since white-on-button contrast doesn't depend on page background,
+     just brightened slightly for a bit more pop against the dark page.
+     Hover inverts to *darker* (not lighter, unlike light mode) because the
+     base is already near the ceiling for readable white text on top. */
+  --color-primary: #d4176e;
+  --color-primary-hover: #b8104f;
+  --color-primary-dark: #ffb3cc; /* now a foreground value: badge/chip text on a dark pale wash */
+  --color-primary-pale: rgba(255, 111, 156, 0.14);
+  --color-primary-pale-2: rgba(255, 111, 156, 0.22);
+  --color-primary-rgb: 255, 111, 156;
+
+  --color-accent: #ff6f9c; /* links/icons/text on the dark page - 6.97:1 against --color-bg */
+
+  --color-navy: #4a6178;
+  --color-navy-hover: #5a7288;
+  --color-navy-pale: rgba(148, 178, 204, 0.14);
+  --color-navy-pale-2: rgba(148, 178, 204, 0.22);
+
+  --color-heading: #c3d3e3; /* light steel-blue - headings need to be bright, not navy-dark, on a dark page */
+
+  --color-accent-yellow: #f5c344;
+
+  --color-warning-bg: #3d3116;
+  --color-warning-border: #6b551f;
+  --color-warning-text: #f2c675;
+
+  --color-danger: #c62828;
+  --color-danger-hover: #a91d1d;
+  --color-danger-bg: #3a1a1e;
+  --color-danger-border: #5c2328;
+  --color-danger-text: #ff6b6f;
+  --color-success: #2e7d32;
+
+  --color-bg: #12151b;
+  --color-surface: #1b1f27;
+  --color-surface-2: #242933;
+  --color-surface-3: #2d323d;
+  --color-border: #333944;
+  --color-border-light: #2a2f38;
+  --color-input-border: #3d4450;
+  --color-grid-faint-border: rgba(255, 255, 255, 0.05);
+
+  --color-text: #eef0f3;
+  --color-text-muted: #a8adb8;
+  --color-text-faint: #8b909b;
+  --color-text-rgb: 238, 240, 243;
+  --color-text-on-primary: #ffffff;
+  --color-neutral-text: #c7ccd3;
+
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.28);
+  --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 12px 36px rgba(0, 0, 0, 0.55);
+  }
+}
+
+:root[data-theme="dark"] {
+  /* Crimson stays the button/background role - kept close to the light
+     value since white-on-button contrast doesn't depend on page background,
+     just brightened slightly for a bit more pop against the dark page.
+     Hover inverts to *darker* (not lighter, unlike light mode) because the
+     base is already near the ceiling for readable white text on top. */
+  --color-primary: #d4176e;
+  --color-primary-hover: #b8104f;
+  --color-primary-dark: #ffb3cc; /* now a foreground value: badge/chip text on a dark pale wash */
+  --color-primary-pale: rgba(255, 111, 156, 0.14);
+  --color-primary-pale-2: rgba(255, 111, 156, 0.22);
+  --color-primary-rgb: 255, 111, 156;
+
+  --color-accent: #ff6f9c; /* links/icons/text on the dark page - 6.97:1 against --color-bg */
+
+  --color-navy: #4a6178;
+  --color-navy-hover: #5a7288;
+  --color-navy-pale: rgba(148, 178, 204, 0.14);
+  --color-navy-pale-2: rgba(148, 178, 204, 0.22);
+
+  --color-heading: #c3d3e3; /* light steel-blue - headings need to be bright, not navy-dark, on a dark page */
+
+  --color-accent-yellow: #f5c344;
+
+  --color-warning-bg: #3d3116;
+  --color-warning-border: #6b551f;
+  --color-warning-text: #f2c675;
+
+  --color-danger: #c62828;
+  --color-danger-hover: #a91d1d;
+  --color-danger-bg: #3a1a1e;
+  --color-danger-border: #5c2328;
+  --color-danger-text: #ff6b6f;
+  --color-success: #2e7d32;
+
+  --color-bg: #12151b;
+  --color-surface: #1b1f27;
+  --color-surface-2: #242933;
+  --color-surface-3: #2d323d;
+  --color-border: #333944;
+  --color-border-light: #2a2f38;
+  --color-input-border: #3d4450;
+  --color-grid-faint-border: rgba(255, 255, 255, 0.05);
+
+  --color-text: #eef0f3;
+  --color-text-muted: #a8adb8;
+  --color-text-faint: #8b909b;
+  --color-text-rgb: 238, 240, 243;
+  --color-text-on-primary: #ffffff;
+  --color-neutral-text: #c7ccd3;
+
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.28);
+  --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 12px 36px rgba(0, 0, 0, 0.55);
+}
+
 
 * {
   box-sizing: border-box;
@@ -96,7 +245,7 @@ main {
 }
 
 a {
-  color: var(--color-primary);
+  color: var(--color-accent);
   text-decoration: none;
 }
 a:hover {
@@ -108,7 +257,7 @@ h1, h2, h3, h4 {
   margin: 0 0 10px;
   font-weight: 700;
   line-height: 1.3;
-  color: var(--color-navy);
+  color: var(--color-heading);
 }
 
 p {
@@ -254,7 +403,7 @@ img {
   font-size: 14px;
   font-weight: 700;
   margin-bottom: 6px;
-  color: var(--color-navy);
+  color: var(--color-heading);
 }
 .field .hint {
   font-size: 12px;
@@ -345,7 +494,7 @@ textarea.input {
   transition: background-color 0.2s, color 0.2s;
 }
 .toggle-group button.active {
-  background-color: var(--color-primary);
+  background-color: var(--color-navy);
   color: #fff;
 }
 
@@ -388,6 +537,84 @@ textarea.input {
   padding: 0 2px;
 }
 
+.contact-picker {
+  position: relative;
+  margin-top: 6px;
+}
+.contact-picker-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 20;
+  width: 360px;
+  max-width: 90vw;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: 10px;
+}
+.contact-picker-dropdown .input {
+  margin-bottom: 6px;
+}
+.contact-picker-filters {
+  max-height: 140px;
+  overflow-y: auto;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface-2);
+}
+.contact-picker-filters .contact-filter-group {
+  margin-bottom: 6px;
+}
+.contact-picker-filters .checkbox-row {
+  margin: 0 10px 4px 0 !important;
+}
+.contact-picker-filters .checkbox-copy {
+  font-size: 12px;
+}
+.contact-picker-list {
+  max-height: 300px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.contact-picker-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  padding: 7px 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.contact-picker-row:hover {
+  background-color: var(--color-primary-pale);
+}
+.contact-picker-name {
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.contact-picker-email {
+  color: var(--color-text-faint);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .dow-toggle-row {
   display: flex;
   gap: 6px;
@@ -412,7 +639,7 @@ textarea.input {
 }
 
 .form-error {
-  color: var(--color-danger);
+  color: var(--color-danger-text);
   font-size: 13px;
   margin: -4px 0 12px;
   min-height: 1em;
@@ -428,7 +655,7 @@ textarea.input {
   cursor: pointer;
   font-weight: 700;
   font-size: 14px;
-  color: var(--color-navy);
+  color: var(--color-heading);
   list-style: none;
   display: flex;
   align-items: center;
@@ -439,7 +666,7 @@ textarea.input {
 }
 .expandable summary::before {
   content: '▸';
-  color: var(--color-primary);
+  color: var(--color-accent);
   transition: transform 0.2s;
 }
 .expandable[open] summary::before {
@@ -476,16 +703,70 @@ textarea.input {
   gap: 16px;
   min-width: 0;
 }
+/* Sized so the crimson wordmark (the top ~60% of the signature; the rest is
+   the university line) sits comfortably against the "Commeet" title next to it,
+   rather than towering over it. */
 .header-logo-left img {
-  height: 34px;
+  height: 26px;
   width: auto;
   display: block;
+  /* Without this the flex row squeezes the image horizontally on narrow
+     screens, distorting the wordmark instead of just letting it be small. */
+  flex-shrink: 0;
+}
+.header-logo-left {
+  flex-shrink: 0;
+  display: flex;
+}
+/* Two versions of the POSTECH signature: the crimson wordmark is identical
+   in both, only the neutral "Pohang University of Science and Technology"
+   line differs - dark ink on light backgrounds, light ink on dark ones.
+   Swapping the asset keeps the mark itself untouched, which the earlier
+   white-plate workaround could not do. */
+.header-logo-left .logo-dark {
+  display: none;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .header-logo-left .logo-light {
+    display: none;
+  }
+  :root:not([data-theme="light"]) .header-logo-left .logo-dark {
+    display: block;
+  }
+}
+:root[data-theme="dark"] .header-logo-left .logo-light {
+  display: none;
+}
+:root[data-theme="dark"] .header-logo-left .logo-dark {
+  display: block;
+}
+:root[data-theme="light"] .header-logo-left .logo-light {
+  display: block;
+}
+:root[data-theme="light"] .header-logo-left .logo-dark {
+  display: none;
 }
 .header-divider {
   width: 1px;
   height: 28px;
   background-color: var(--color-border);
   flex-shrink: 0;
+}
+
+.theme-toggle-btn {
+  color: var(--color-text-muted);
+}
+.theme-toggle-btn .theme-icon-sun {
+  display: none;
+}
+.theme-toggle-btn .theme-icon-moon {
+  display: block;
+}
+:root[data-theme="dark"] .theme-toggle-btn .theme-icon-sun {
+  display: block;
+}
+:root[data-theme="dark"] .theme-toggle-btn .theme-icon-moon {
+  display: none;
 }
 
 .brand {
@@ -500,7 +781,7 @@ textarea.input {
 .brand-mark {
   font-size: 25px;
   font-weight: 800;
-  color: var(--color-primary);
+  color: var(--color-accent);
   letter-spacing: -0.02em;
   line-height: 1;
 }
@@ -528,14 +809,14 @@ textarea.input {
 .nav-links a {
   padding: 8px 13px;
   border-radius: var(--radius-md);
-  color: var(--color-navy);
+  color: var(--color-heading);
   font-weight: 700;
   font-size: 14px;
 }
 .nav-links a:hover,
 .nav-links a.active {
-  background-color: var(--color-primary-pale);
-  color: var(--color-primary-dark);
+  background-color: var(--color-navy-pale);
+  color: var(--color-heading);
   text-decoration: none;
 }
 
@@ -543,7 +824,7 @@ textarea.input {
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  background-color: var(--color-primary);
+  background-color: var(--color-navy);
   color: #fff;
   display: inline-flex;
   align-items: center;
@@ -578,7 +859,7 @@ textarea.input {
 .user-menu-name {
   font-size: 14px;
   font-weight: 700;
-  color: var(--color-navy);
+  color: var(--color-heading);
   max-width: 130px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -752,7 +1033,7 @@ textarea.input {
 }
 .auth-card h1 {
   text-align: center;
-  color: var(--color-primary);
+  color: var(--color-accent);
   font-size: 24px;
   margin: 6px 0 14px;
 }
@@ -785,7 +1066,7 @@ textarea.input {
 }
 .notice b,
 .notice strong {
-  color: var(--color-primary);
+  color: var(--color-accent);
 }
 .notice p {
   margin: 0;
@@ -797,7 +1078,7 @@ textarea.input {
 
 .error-msg {
   background-color: var(--color-danger-bg);
-  color: var(--color-danger);
+  color: var(--color-danger-text);
   border: 1px solid var(--color-danger-border);
   padding: 14px 18px;
   margin: 0 0 18px;
@@ -854,6 +1135,66 @@ textarea.input {
 }
 .dialog.dialog-sm {
   max-width: 400px;
+}
+.dialog.dialog-md {
+  max-width: 640px;
+}
+.dialog.dialog-lg {
+  max-width: 840px;
+}
+
+/* Fixed-size modal (the event page's "자세히 보기" grid view) - deliberately
+   `height`, not `max-height`, so it's always exactly this size regardless
+   of how much content is inside (short or long respondent lists, few or
+   many time slots) - see .grid-detail-body below for how the reused
+   .event-layout content scrolls *inside* that fixed frame instead. */
+.dialog.dialog-xl {
+  width: 92vw;
+  max-width: 1300px;
+  height: 85vh;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.dialog.dialog-xl .dialog-header {
+  flex-shrink: 0;
+}
+.grid-detail-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+/* The real .event-layout node (calendar + respondents sidebar) gets
+   reparented in here by event-grid.js when the modal opens, and moved back
+   on close - same live DOM, same state, just relocated and enlarged. */
+.grid-detail-body .event-layout {
+  height: 100%;
+  padding-bottom: 0;
+}
+.grid-detail-body .grid-scroll {
+  max-height: 100%;
+  overflow-y: auto;
+}
+
+/* Side-by-side layout for the "새 일정 만들기" dialog, so the date-picker
+   calendar (tall) sits next to the invite/advanced-options fields instead
+   of stacking everything into one long scroll. Collapses back to a single
+   column below the breakpoint - guests, without the right column's fields,
+   naturally end up narrower there anyway, which is fine unstacked. */
+.ne-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 28px;
+  align-items: start;
+}
+.ne-col {
+  min-width: 0;
+}
+@media (max-width: 700px) {
+  .ne-columns {
+    grid-template-columns: 1fr;
+  }
 }
 .dialog-header {
   display: flex;
@@ -931,7 +1272,7 @@ textarea.input {
   font-size: 40px;
   max-width: 720px;
   margin: 0 auto 16px;
-  color: var(--color-navy);
+  color: var(--color-heading);
   line-height: 1.35;
 }
 .hero .subtitle {
@@ -1014,7 +1355,7 @@ textarea.input {
   padding: 16px 0;
   font-weight: 700;
   font-size: 15px;
-  color: var(--color-navy);
+  color: var(--color-heading);
   list-style: none;
   display: flex;
   justify-content: space-between;
@@ -1026,7 +1367,7 @@ textarea.input {
 }
 .faq-item summary::after {
   content: '+';
-  color: var(--color-primary);
+  color: var(--color-accent);
   font-size: 20px;
   flex-shrink: 0;
 }
@@ -1090,7 +1431,7 @@ textarea.input {
   padding: 5px 12px;
   border-radius: var(--radius-sm);
   font-size: 14px;
-  color: var(--color-navy);
+  color: var(--color-heading);
   min-width: 0;
 }
 .folder-chip .dot {
@@ -1142,25 +1483,149 @@ textarea.input {
   align-items: flex-start;
   gap: 8px;
 }
+/* Clamped to two lines so a long name can't make one card taller than its
+   neighbours; the full name is still the link's text (and its tooltip). */
 .event-card-title {
   font-weight: 700;
   font-size: 15px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .event-card-title a {
-  color: var(--color-navy);
+  color: var(--color-heading);
 }
 .event-card-title a:hover {
-  color: var(--color-primary);
+  color: var(--color-accent);
 }
 .event-card-meta {
   font-size: 13px;
   color: var(--color-text-faint);
 }
+.event-card-created {
+  font-size: 12px;
+  color: var(--color-text-faint);
+  margin-top: 2px;
+}
+/* `margin-top: auto` pushes the buttons to the card's bottom edge. Cards are
+   grid items stretched to a shared row height, so this lines the action rows
+   up across the row no matter how many lines each title takes. */
 .event-card-actions {
   display: flex;
   gap: 5px;
-  margin-top: 10px;
+  margin-top: auto;
+  padding-top: 10px;
   flex-wrap: wrap;
+}
+
+/* List view: one compact full-width row per event instead of the default
+   grid of cards. Toggled from the dashboard header; the choice is
+   remembered in localStorage (see dashboard.js). */
+.folder-body.view-list {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+.folder-body.view-list .event-card {
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+}
+.folder-body.view-list .event-card-top {
+  flex: 1;
+  min-width: 0;
+}
+.folder-body.view-list .event-card-actions {
+  margin-top: 0;
+  padding-top: 0;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+}
+/* Drag handle leads the row, so the grips line up down the left edge. */
+.folder-body.view-list .event-card-grip {
+  flex-shrink: 0;
+  margin-right: 2px;
+}
+
+@media (max-width: 700px) {
+  /* Too narrow to keep the row layout readable - fall back to stacked. */
+  .folder-body.view-list .event-card {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+  .folder-body.view-list .event-card-actions {
+    margin-top: 8px;
+    flex-wrap: wrap;
+  }
+}
+
+.event-card-top-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* Dedicated drag handle for moving a card between folders - deliberately
+   separate from the rest of the card so grabbing it never fights with the
+   title link, action buttons or the folder <select> underneath. */
+.event-card-grip {
+  display: grid;
+  grid-template-columns: repeat(2, 3px);
+  grid-template-rows: repeat(3, 3px);
+  gap: 2px;
+  width: 12px;
+  height: 15px;
+  padding: 4px;
+  cursor: grab;
+  touch-action: none;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+.event-card-grip i {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background-color: var(--color-text-faint);
+  font-style: normal;
+}
+.event-card-grip:hover {
+  background-color: var(--color-surface-2);
+}
+.event-card-grip:hover i {
+  background-color: var(--color-text-muted);
+}
+.event-card-grip:active {
+  cursor: grabbing;
+}
+
+.folder-drag-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  transform: translate(-50%, -50%);
+  background-color: var(--color-navy);
+  color: #fff;
+  padding: 7px 16px;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: var(--shadow-lg);
+  pointer-events: none;
+  z-index: 500;
+  white-space: nowrap;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.folder-block.drop-target {
+  outline: 2px solid var(--color-primary-dark);
+  outline-offset: -2px;
+  background-color: var(--color-primary-pale);
 }
 
 .speed-dial {
@@ -1203,11 +1668,74 @@ textarea.input {
   align-items: center;
 }
 
+/* The host's single most important action on this page - deliberately
+   bigger and louder than the utility buttons (link/invite/edit/delete)
+   next to it, with a slow breathing glow to draw the eye without being
+   obnoxious. Its own class (not .btn/.btn-primary) so its size and motion
+   don't leak onto any other button. */
+.btn-finalize {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 13px 22px;
+  border-radius: var(--radius-pill);
+  background-color: var(--color-primary);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 800;
+  text-decoration: none;
+  white-space: nowrap;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(var(--color-primary-rgb), 0.4);
+  transition: background-color 0.15s, transform 0.15s, box-shadow 0.15s;
+  animation: finalize-pulse 2.6s ease-in-out infinite;
+}
+/* The label swaps between "일정 확정하기" and "확정 내용 보기/수정" once an
+   event is confirmed. Reserving the wider of the two keeps the button - and
+   every header button to its left - from jumping when that happens. */
+#finalize-link-label {
+  display: inline-block;
+  min-width: 122px;
+  text-align: center;
+}
+.btn-finalize:hover {
+  background-color: var(--color-primary-hover);
+  color: #fff;
+  text-decoration: none;
+  transform: translateY(-1px);
+  animation-play-state: paused;
+  box-shadow: 0 6px 20px rgba(var(--color-primary-rgb), 0.5);
+}
+.btn-finalize:active {
+  transform: translateY(0);
+}
+.btn-finalize svg {
+  flex-shrink: 0;
+}
+@keyframes finalize-pulse {
+  0%, 100% {
+    box-shadow: 0 4px 14px rgba(var(--color-primary-rgb), 0.4), 0 0 0 0 rgba(var(--color-primary-rgb), 0.45);
+  }
+  50% {
+    box-shadow: 0 4px 14px rgba(var(--color-primary-rgb), 0.4), 0 0 0 8px rgba(var(--color-primary-rgb), 0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn-finalize {
+    animation: none;
+  }
+}
+
 .event-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 300px;
   gap: 20px;
-  align-items: flex-start;
+  /* stretch (not flex-start) so the sidebar column is forced to the same
+     height as the calendar column - that height then bounds the
+     respondents list below, instead of a long respondent list growing the
+     whole page taller than the calendar. */
+  align-items: stretch;
   padding-bottom: 50px;
 }
 
@@ -1277,7 +1805,7 @@ textarea.input {
 .term-help summary {
   cursor: pointer;
   font-weight: 700;
-  color: var(--color-primary);
+  color: var(--color-accent);
   list-style: none;
   display: flex;
   align-items: center;
@@ -1297,13 +1825,33 @@ textarea.input {
   gap: 9px 14px;
   align-items: baseline;
 }
+/* Prose variant of .term-help-body, for explanations that read as
+   paragraphs/steps rather than a term/definition table. */
+.term-help-body-plain {
+  margin-top: 12px;
+  color: var(--color-text-muted);
+  line-height: 1.7;
+}
+.term-help-body-plain > p {
+  margin: 0 0 10px;
+}
+.finalize-explain-list {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.finalize-explain-list strong {
+  color: var(--color-heading);
+}
 .term-help-body dt {
   display: flex;
   align-items: center;
   gap: 6px;
   font-weight: 700;
   white-space: nowrap;
-  color: var(--color-navy);
+  color: var(--color-heading);
 }
 .term-help-body dd {
   margin: 0;
@@ -1319,6 +1867,10 @@ textarea.input {
 }
 
 .grid-scroll {
+  /* Horizontal only: the grid is never height-capped on the page (a longer
+     day just makes a taller page - see syncCalendarHeight). The one place
+     it scrolls vertically is inside the fixed-size "자세히 보기" modal,
+     which opts in via .grid-detail-body .grid-scroll below. */
   overflow-x: auto;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
@@ -1339,12 +1891,20 @@ textarea.input {
 .avail-grid-corner {
   position: sticky;
   left: 0;
+  top: 0;
   background-color: var(--color-surface);
   z-index: 3;
 }
 .day-col-header {
   text-align: center;
-  padding: 8px 4px;
+  /* Centred in the (taller) header row rather than sitting flush against
+     the first time row, so the date has breathing room beneath it. */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 6px 4px 10px;
   border-bottom: 1px solid var(--color-border);
   border-left: 1px solid var(--color-border-light);
   position: sticky;
@@ -1360,7 +1920,7 @@ textarea.input {
 .day-col-header .dnum {
   font-size: 15px;
   font-weight: 700;
-  color: var(--color-navy);
+  color: var(--color-heading);
 }
 .time-row-label {
   font-size: 11px;
@@ -1375,7 +1935,7 @@ textarea.input {
 }
 .grid-cell {
   border-left: 1px solid var(--color-border-light);
-  border-top: 1px solid #f4f4f4;
+  border-top: 1px solid var(--color-grid-faint-border);
   position: relative;
   min-height: 0;
   cursor: pointer;
@@ -1401,8 +1961,20 @@ textarea.input {
   content: '';
   position: absolute;
   inset: 1px;
-  background: repeating-linear-gradient(135deg, rgba(51, 51, 51, 0.18) 0 4px, transparent 4px 8px);
+  background: repeating-linear-gradient(135deg, rgba(var(--color-text-rgb), 0.18) 0 4px, transparent 4px 8px);
   pointer-events: none;
+}
+
+.month-grid-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  margin-bottom: 4px;
+}
+.month-grid-weekdays span {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-text-faint);
 }
 
 .month-grid {
@@ -1431,16 +2003,67 @@ textarea.input {
   color: #fff;
   border-color: var(--color-primary);
 }
+/* Leading/trailing padding cells (days from the previous/next month) need
+   the same aspect-ratio as a real .month-cell - without it, CSS Grid's
+   auto row-sizing collapses any row made up entirely of padding cells
+   (e.g. a wholly-padded 6th row) to near-zero height instead of matching
+   the other rows, which is what let the calendar's total height - and with
+   it the "새 일정 만들기" dialog - still change between months even after
+   padding out to a fixed cell count. */
+.month-cell-empty {
+  aspect-ratio: 1;
+}
 
+/* Right-hand column: the "가능한 시간 입력" call to action sits directly
+   above the respondents card, sharing its full width - close enough to the
+   calendar to read as acting on it, and far more visible than it was as a
+   small button lost among the toolbar's filter toggles. */
+.sidebar-col {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.respond-cta {
+  width: 100%;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-bottom: 10px;
+  padding: 11px 16px;
+  font-size: 15px;
+  font-weight: 700;
+}
 .sidebar-card {
   padding: 16px;
+  display: flex;
+  flex-direction: column;
+  /* Fills whatever the column has left under the CTA. The column itself is
+     stretched to the calendar's height by .event-layout (align-items:
+     stretch), so the card never exceeds the calendar. */
+  flex: 1;
+  min-height: 0;
 }
 .sidebar-card h3 {
   font-size: 13px;
   letter-spacing: 0.03em;
   color: var(--color-text-faint);
-  margin-bottom: 12px;
   text-transform: uppercase;
+}
+.sidebar-heading-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+.sidebar-heading-row .btn {
+  flex-shrink: 0;
+}
+#respondents-list {
+  flex: 1;
+  min-height: 120px;
+  overflow-y: auto;
 }
 .respondent-row {
   display: flex;
@@ -1455,7 +2078,7 @@ textarea.input {
   background-color: var(--color-surface-2);
 }
 .respondent-row.selected {
-  background-color: var(--color-primary-pale);
+  background-color: var(--color-navy-pale);
 }
 .respondent-row .name {
   flex: 1;
@@ -1540,7 +2163,15 @@ textarea.input {
   gap: 6px;
   font-weight: 700;
   font-size: 14px;
-  color: var(--color-navy);
+  color: var(--color-heading);
+}
+/* Same reasoning as .cal-page-label: a fixed slot keeps the ‹ › arrows and
+   the "이번 주" button from shifting as the week range's digits change
+   (e.g. "9/7 - 9/13" vs "12/28 - 1/3"). */
+#week-label {
+  flex: 0 0 96px;
+  text-align: center;
+  white-space: nowrap;
 }
 
 .access-denied {
@@ -1557,9 +2188,9 @@ textarea.input {
 }
 
 .guest-banner {
-  background-color: var(--color-accent-yellow-pale);
-  border: 1px solid #f0dfa8;
-  color: #7a5b0a;
+  background-color: var(--color-warning-bg);
+  border: 1px solid var(--color-warning-border);
+  color: var(--color-warning-text);
   border-radius: var(--radius-lg);
   padding: 11px 15px;
   font-size: 13px;
@@ -1604,7 +2235,7 @@ textarea.input {
 .calendar-account-row .info .email {
   font-weight: 700;
   font-size: 14px;
-  color: var(--color-navy);
+  color: var(--color-heading);
 }
 .sub-calendar-list {
   margin: 10px 0 14px 20px;
@@ -1634,7 +2265,7 @@ textarea.input {
   color: var(--color-text-muted);
 }
 .perm-table th {
-  color: var(--color-navy);
+  color: var(--color-heading);
   font-size: 12px;
   background-color: var(--color-surface-2);
 }
@@ -1643,6 +2274,121 @@ textarea.input {
    Contacts
    ========================================================================== */
 
+/* Two columns: the add/search/filter tools stay in a narrow left rail while
+   the saved contacts fill the rest of the width. Previously everything was
+   stacked in a 640px column, which left wide empty margins and pushed the
+   list far down the page. */
+.contacts-layout {
+  display: grid;
+  grid-template-columns: 330px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.contacts-side {
+  position: sticky;
+  top: 16px;
+  min-width: 0;
+}
+.contacts-main {
+  min-width: 0;
+}
+/* The list itself flows into as many columns as the width allows, so a long
+   roster stays short vertically instead of running one-per-row. */
+#contacts-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+  gap: 8px;
+  align-items: start;
+}
+#contacts-list .empty-state {
+  grid-column: 1 / -1;
+}
+/* Search hits render as .contact-row too but sit in a plain (non-grid)
+   container, so they still need their own spacing. */
+#search-results .contact-row {
+  margin-bottom: 8px;
+}
+/* List view: one full-width row per contact instead of the auto-fill grid. */
+#contacts-list.view-list {
+  grid-template-columns: minmax(0, 1fr);
+}
+#contacts-list.view-list .contact-row {
+  flex-wrap: nowrap;
+}
+#contacts-list.view-list .contact-actions {
+  flex-shrink: 0;
+}
+
+/* Compact inline sort picker used in the dashboard / 연락처 list headers. */
+/* Must out-specify `select.input { width: 100% }` above (element+class beats
+   a lone class), or the picker stretches to fill its row and pushes the
+   view toggle onto the next line. Sized to sit next to .toggle-group as a
+   peer control rather than as a form field. */
+select.list-sort-select {
+  width: auto;
+  min-width: 0;
+  flex: 0 0 auto;
+  /* 9px vertical lands the same 37px box height as .toggle-group beside it. */
+  padding: 9px 30px 9px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  border-color: var(--color-border);
+  border-radius: var(--radius-md);
+}
+/* Heading stays left; the sort picker and view toggle pair up on the right. */
+.contacts-main-head .list-sort-select {
+  margin-left: auto;
+}
+
+/* The card being dragged stays visible but clearly "lifted" while its
+   placeholder position updates live underneath the pointer. */
+.card-dragging {
+  opacity: 0.45;
+  outline: 2px dashed var(--color-primary);
+  outline-offset: -2px;
+}
+
+.contact-grip {
+  flex-shrink: 0;
+}
+
+.contacts-main-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+/* Optional roster fields on the add/edit forms - two per row so the block
+   stays compact instead of becoming a long stack of single inputs. */
+.contact-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 0 12px;
+}
+.contact-memo-row span:last-child {
+  white-space: pre-line;
+  text-align: right;
+}
+
+@media (max-width: 560px) {
+  #contacts-list.view-list .contact-row {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 900px) {
+  .contacts-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .contacts-side {
+    position: static;
+  }
+}
+
 .contact-row {
   display: flex;
   align-items: center;
@@ -1650,9 +2396,17 @@ textarea.input {
   padding: 12px;
   border: 1px solid var(--color-border-light);
   border-radius: var(--radius-lg);
-  margin-bottom: 8px;
   background-color: var(--color-surface);
-  flex-wrap: wrap;
+}
+.contact-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+.contact-main .avatar {
+  flex-shrink: 0;
 }
 .contact-row .info {
   flex: 1;
@@ -1663,23 +2417,78 @@ textarea.input {
   font-size: 14px;
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  color: var(--color-navy);
+  gap: 6px;
+  color: var(--color-heading);
+  min-width: 0;
 }
+/* Name truncates instead of wrapping, so the badge stays on the same line
+   and every card's text block is the same height. */
+.contact-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.contact-row .name .badge {
+  flex-shrink: 0;
+}
+/* Long addresses would otherwise break mid-word ("qwer@postec / h.ac.kr")
+   and blow the card's height out; the full value is in the title tooltip
+   and the 자세히 dialog. */
 .contact-row .email {
   font-size: 12px;
   color: var(--color-text-faint);
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .contact-actions {
   display: flex;
   gap: 6px;
   flex-shrink: 0;
 }
+.contact-row .detail {
+  font-size: 12px;
+  color: var(--color-text-faint);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Grid view stacks the card: identity block on top, actions as a full-width
+   row pinned to the bottom. Cards stretch to a shared row height (they're
+   grid items), so `margin-top: auto` lines every card's buttons up. */
+#contacts-list:not(.view-list) .contact-row {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  padding: 14px;
+}
+#contacts-list:not(.view-list) .contact-actions {
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-border-light);
+}
+#contacts-list:not(.view-list) .contact-actions .btn {
+  flex: 1;
+  justify-content: center;
+}
+
+.contact-filter-group {
+  margin-bottom: 10px;
+}
+.contact-filter-group:last-child {
+  margin-bottom: 0;
+}
+.contact-filter-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-text-faint);
+  margin-bottom: 6px;
+}
 
 .invite-contact-list {
-  max-height: 190px;
+  max-height: 260px;
   overflow-y: auto;
   border: 1px solid var(--color-border-light);
   border-radius: var(--radius-md);
@@ -1708,7 +2517,7 @@ textarea.input {
   font-weight: 700;
 }
 .signup-steps li.active {
-  color: var(--color-primary);
+  color: var(--color-accent);
 }
 .signup-steps li.done {
   color: var(--color-text-muted);
@@ -1734,7 +2543,7 @@ textarea.input {
 .signup-steps li.done .step-dot {
   background-color: var(--color-primary-pale);
   border-color: var(--color-primary-pale-2);
-  color: var(--color-primary);
+  color: var(--color-accent);
 }
 
 .verify-sent {
@@ -1753,6 +2562,697 @@ textarea.input {
   letter-spacing: 0.3em;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   padding: 12px;
+}
+
+/* ==========================================================================
+   Finalize (schedule confirmation)
+   ========================================================================== */
+
+.finalize-settings {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 16px;
+  align-items: start;
+}
+
+/* Side-by-side once a proposal exists: a narrow controls column (editor +
+   actions) and a wide column for the calendar, which is the piece that
+   actually benefits from extra width. Falling back to `display: grid` here
+   (rather than `block`) is what makes finalize.js's `style.display = ""`
+   toggle reveal the two-column layout instead of a plain stack. */
+.finalize-layout {
+  display: grid;
+  grid-template-columns: 360px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.finalize-col-left {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  position: sticky;
+  top: calc(var(--header-height) + 16px);
+}
+.finalize-col-right {
+  min-width: 0;
+}
+
+.finalize-summary {
+  font-size: 14px;
+  color: var(--color-heading);
+  margin-bottom: 10px;
+}
+
+.finalize-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.assign-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-border-light);
+}
+.assign-row:last-child {
+  border-bottom: none;
+}
+.assign-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 160px;
+  flex-shrink: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-heading);
+}
+.assign-row select {
+  flex: 1;
+  min-width: 0;
+}
+
+.meeting-card {
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  background-color: var(--color-surface-2);
+}
+.meeting-card.over {
+  border-color: var(--color-danger-border);
+  background-color: var(--color-danger-bg);
+}
+.meeting-time {
+  font-weight: 700;
+  color: var(--color-heading);
+  font-size: 14px;
+}
+.meeting-people {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  margin-top: 3px;
+}
+.meeting-count {
+  font-size: 12px;
+  color: var(--color-text-faint);
+  margin-top: 3px;
+}
+.meeting-card.over .meeting-count {
+  color: var(--color-danger-text);
+  font-weight: 700;
+}
+
+.unassigned-box {
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+.unassigned-box strong {
+  color: var(--color-heading);
+  display: block;
+  margin-bottom: 4px;
+}
+
+/* Calendar-style visualization of the proposed/confirmed schedule -
+   day columns x time rows, meetings rendered as booked blocks, the way
+   Google Calendar shows a day/week view. */
+.cal-legend {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin-bottom: 10px;
+}
+.cal-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.cal-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.cal-swatch-booked {
+  background-color: var(--color-primary);
+}
+.cal-swatch-open {
+  background-color: var(--color-surface-2);
+  border: 1px dashed var(--color-border);
+}
+.cal-swatch-unavailable {
+  background-image: repeating-linear-gradient(135deg, var(--color-border) 0 3px, var(--color-surface) 3px 7px);
+  border: 1px solid var(--color-border);
+}
+
+.cal-grid {
+  display: grid;
+  min-width: 100%;
+}
+.cal-corner {
+  position: sticky;
+  left: 0;
+  background-color: var(--color-surface);
+  z-index: 3;
+  border-bottom: 1px solid var(--color-border);
+}
+.cal-day-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-heading);
+  border-bottom: 1px solid var(--color-border);
+  border-left: 1px solid var(--color-border-light);
+  position: sticky;
+  top: 0;
+  background-color: var(--color-surface);
+  z-index: 2;
+}
+.cal-time-label {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 3px 8px 0 0;
+  font-size: 11px;
+  color: var(--color-text-faint);
+  position: sticky;
+  left: 0;
+  background-color: var(--color-surface);
+  white-space: nowrap;
+}
+
+.cal-cell {
+  border-left: 1px solid var(--color-border-light);
+  border-top: 1px solid #f4f4f4;
+  padding: 3px 5px;
+  overflow: hidden;
+  font-size: 11px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  transition: outline-color 0.1s, background-color 0.1s;
+}
+.cal-cell-unavailable {
+  background-image: repeating-linear-gradient(135deg, var(--color-surface-2) 0 5px, var(--color-surface) 5px 10px);
+}
+.cal-cell-open {
+  background-color: var(--color-surface-2);
+  color: var(--color-text-faint);
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.cal-cell-empty {
+  background-color: var(--color-surface);
+}
+.cal-cell-booked {
+  background-color: var(--color-primary);
+  color: #fff;
+  border-radius: var(--radius-sm);
+  margin: 1px 2px;
+  box-shadow: var(--shadow-sm);
+}
+.cal-cell-booked.cal-cell-over {
+  background-color: var(--color-danger);
+}
+.cal-block-names {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  line-height: 1.3;
+}
+.cal-block-count {
+  opacity: 0.85;
+  font-size: 10px;
+  margin-top: 2px;
+}
+
+/* Drop-target feedback while a chip is being dragged over a cell */
+.cal-cell.cal-drop-target {
+  outline: 2px solid var(--color-primary-dark);
+  outline-offset: -2px;
+}
+.cal-cell.cal-drop-target.cal-drop-invalid {
+  outline-color: var(--color-danger-text);
+  background-color: var(--color-danger-bg);
+}
+
+/* Drop-target feedback while a chip is dragged over *another participant's
+   card* specifically (as opposed to an empty cell) - a swap/take-over, not
+   a plain re-assignment. Highlighted on the card itself so it's clear which
+   person you're about to trade with. */
+.cal-chip.cal-drop-target {
+  outline: 2px solid var(--color-primary-dark);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(var(--color-primary-rgb), 0.25);
+}
+.cal-chip.cal-drop-target.cal-drop-invalid {
+  outline-color: var(--color-danger-text);
+  box-shadow: 0 0 0 4px rgba(var(--color-danger-rgb), 0.25);
+}
+
+/* Draggable participant card - used both inside booked calendar cells and
+   in the unassigned tray. Pointer Events drive the drag so the same code
+   works for mouse and touch. */
+.cal-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  white-space: nowrap;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background-color 0.12s ease;
+}
+.cal-cell-booked .cal-chip {
+  background-color: rgba(255, 255, 255, 0.22);
+  color: #fff;
+}
+.unassigned-tray-chips .cal-chip {
+  background-color: var(--color-primary-pale);
+  color: var(--color-primary-dark);
+  padding: 5px 12px;
+  font-size: 12px;
+}
+/* Clear "you can grab this" feedback: lift + glow on hover, so the whole
+   card - not just an icon on one edge - reads as draggable at a glance. */
+.cal-chip:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.28);
+}
+.cal-cell-booked .cal-chip:hover {
+  background-color: rgba(255, 255, 255, 0.4);
+}
+.unassigned-tray-chips .cal-chip:hover {
+  background-color: var(--color-primary-pale-2);
+  box-shadow: 0 3px 10px rgba(var(--color-primary-rgb), 0.3);
+}
+.cal-chip:active {
+  cursor: grabbing;
+  transform: translateY(0) scale(0.96);
+  box-shadow: none;
+}
+
+/* Floating card that follows the pointer during a drag */
+.cal-drag-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  transform: translate(-50%, -50%);
+  background-color: var(--color-navy);
+  color: #fff;
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: var(--shadow-lg);
+  pointer-events: none;
+  z-index: 500;
+  white-space: nowrap;
+}
+body.dragging-active {
+  cursor: grabbing;
+}
+body.dragging-active * {
+  cursor: grabbing !important;
+}
+
+.unassigned-tray {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface-2);
+  transition: outline-color 0.1s, background-color 0.1s;
+}
+.unassigned-tray.cal-drop-target {
+  outline: 2px solid var(--color-primary-dark);
+  outline-offset: -2px;
+  background-color: var(--color-primary-pale);
+}
+.unassigned-tray-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  margin-bottom: 8px;
+}
+.unassigned-tray-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* ==========================================================================
+   Full calendar page (/calendar) - month view aggregating every event the
+   user owns/responded to/is invited to. Deliberately its own class prefix
+   (cal-page-*) so it doesn't collide with the small date-picker grid
+   (.month-grid/.month-cell) or the finalize page's day/time grid (.cal-grid).
+   ========================================================================== */
+
+.cal-page-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+/* The current period doubles as the page title, sitting where a static
+   heading used to. Being left-aligned in .dashboard-head's space-between
+   row, its text can grow ("2026년 9월" -> "2026년 9월 22일 - 25일") without
+   nudging the controls on the right, which stay pinned to the right edge. */
+.cal-page-label {
+  margin: 0;
+  white-space: nowrap;
+}
+
+.cal-page-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  margin-bottom: 4px;
+}
+.cal-page-weekday {
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-text-faint);
+  padding: 4px 0;
+}
+
+/* Month grid. Every cell is a CSS grid item, and every pill inside it is a
+   flex item with nowrap text - both grid and flex items default to a
+   content-based min-width/min-height ("min-width: auto"), which lets a long
+   nowrap name silently overflow its box and stretch the whole column/row
+   instead of eliding, breaking the rectangular grid layout. `min-width: 0`
+   (and a hard `height` instead of `min-height`) is what forces the box to
+   respect its assigned track size and clip content instead. */
+.cal-page-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  margin-bottom: 24px;
+}
+.cal-page-cell {
+  height: 108px;
+  min-width: 0;
+  padding: 6px;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow: hidden;
+  transition: box-shadow 0.12s ease, border-color 0.12s ease;
+}
+.cal-page-cell.has-events {
+  cursor: pointer;
+}
+.cal-page-cell.has-events:hover {
+  border-color: var(--color-primary);
+  box-shadow: var(--shadow-sm);
+}
+.cal-page-cell.other-month {
+  background-color: var(--color-surface-2);
+  opacity: 0.6;
+}
+.cal-page-cell.today .cal-page-cell-date {
+  background-color: var(--color-primary);
+  color: #fff;
+}
+.cal-page-cell-date {
+  flex-shrink: 0;
+  align-self: flex-start;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cal-page-pills {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  overflow: hidden;
+}
+.cal-page-pill {
+  min-width: 0;
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cal-page-pill.confirmed {
+  background-color: var(--color-primary);
+  color: #fff;
+}
+.cal-page-pill.tentative {
+  background-color: var(--color-surface-2);
+  color: var(--color-text-muted);
+  border: 1px dashed var(--color-border);
+}
+.cal-page-more {
+  min-width: 0;
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--color-text-faint);
+  padding: 0 2px;
+}
+
+/* Week / day time-grid views - Google Calendar-style absolutely positioned
+   blocks over hour gridlines, so overlapping meetings can sit side by side
+   instead of stacking and breaking cell heights the way the month view's
+   pills would. */
+.cal-page-timeview {
+  display: none;
+  margin-bottom: 24px;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.cal-page-timeview.active {
+  display: block;
+}
+.cal-page-tv-header {
+  display: grid;
+  border-bottom: 1px solid var(--color-border);
+  background-color: var(--color-surface);
+}
+.cal-page-tv-header-cell {
+  padding: 8px 4px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-heading);
+  border-left: 1px solid var(--color-border-light);
+}
+.cal-page-tv-header-cell:first-child {
+  border-left: none;
+}
+.cal-page-tv-header-cell.today {
+  color: var(--color-primary);
+}
+.cal-page-tv-header-cell .cal-page-tv-date-num {
+  display: block;
+  font-size: 15px;
+}
+
+.cal-page-tv-allday {
+  display: grid;
+  border-bottom: 1px solid var(--color-border);
+  background-color: var(--color-surface-2);
+  min-height: 28px;
+}
+.cal-page-tv-allday-cell {
+  padding: 3px 4px;
+  border-left: 1px solid var(--color-border-light);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  overflow: hidden;
+}
+.cal-page-tv-allday-cell:first-child {
+  border-left: none;
+}
+
+/* Everything below the header/all-day rows scrolls together inside a fixed
+   viewport height. `.cal-page-tv-scroll` is sized by its one in-flow child
+   (`.cal-page-tv-rows`, a 24-row grid = 24 * 48px tall); the time labels and
+   day columns are absolutely positioned siblings that stretch to match that
+   same height via `inset: 0`, rather than each computing their own height
+   in JS. */
+.cal-page-tv-body {
+  max-height: 620px;
+  overflow-y: auto;
+}
+.cal-page-tv-scroll {
+  position: relative;
+}
+.cal-page-tv-rows {
+  display: grid;
+  grid-template-rows: repeat(24, 48px);
+  margin-left: 44px;
+}
+.cal-page-tv-hour-row {
+  border-top: 1px solid var(--color-grid-faint-border);
+}
+.cal-page-tv-timelabels {
+  position: absolute;
+  inset: 0;
+  width: 44px;
+  pointer-events: none;
+}
+.cal-page-tv-timelabel {
+  position: absolute;
+  left: 4px;
+  transform: translateY(-50%);
+  font-size: 10px;
+  color: var(--color-text-faint);
+  white-space: nowrap;
+}
+.cal-page-tv-columns {
+  position: absolute;
+  inset: 0;
+  left: 44px;
+  display: grid;
+}
+.cal-page-tv-column {
+  position: relative;
+  border-left: 1px solid var(--color-border-light);
+  min-width: 0;
+}
+.cal-page-tv-column:first-child {
+  border-left: none;
+}
+
+.cal-page-tv-block {
+  position: absolute;
+  min-width: 0;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  line-height: 1.25;
+  overflow: hidden;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+}
+.cal-page-tv-block.confirmed {
+  background-color: var(--color-primary);
+  color: #fff;
+}
+.cal-page-tv-block.confirmed:hover {
+  background-color: var(--color-primary-hover);
+}
+.cal-page-tv-block-time {
+  display: block;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cal-page-tv-block-title,
+.cal-page-tv-block-line {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cal-page-google-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.cal-page-day-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.cal-page-day-list-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface);
+  font-size: 13px;
+  color: var(--color-text);
+  cursor: pointer;
+}
+.cal-page-day-list-item:hover {
+  border-color: var(--color-primary);
+  background-color: var(--color-primary-pale);
+}
+.cal-page-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.cal-page-dot.confirmed {
+  background-color: var(--color-primary);
+}
+.cal-page-dot.tentative {
+  background-color: var(--color-surface-3);
+  border: 1px solid var(--color-border);
+}
+
+.cal-detail-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--color-border-light);
+  font-size: 13px;
+}
+.cal-detail-row:last-child {
+  border-bottom: none;
+}
+.cal-detail-label {
+  color: var(--color-text-faint);
+  font-weight: 600;
+}
+
+@media (max-width: 700px) {
+  .cal-page-cell {
+    min-height: 64px;
+    padding: 4px;
+  }
+  .cal-page-cell-date {
+    font-size: 11px;
+    width: 18px;
+    height: 18px;
+  }
+  .cal-page-pill {
+    font-size: 9px;
+  }
 }
 
 /* ==========================================================================
@@ -1789,7 +3289,7 @@ textarea.input {
 }
 .error-page h1 {
   font-size: 68px;
-  color: var(--color-primary);
+  color: var(--color-accent);
   margin-bottom: 6px;
 }
 
@@ -1801,8 +3301,23 @@ textarea.input {
   .event-layout {
     grid-template-columns: minmax(0, 1fr);
   }
-  .sidebar-card {
+  .sidebar-col {
     order: -1;
+  }
+  .sidebar-card {
+    /* Stacked layout - the two columns no longer share a stretched height,
+       so the respondents list needs its own explicit cap here instead. */
+    max-height: 340px;
+  }
+  #respondents-list {
+    min-height: 0;
+  }
+
+  .finalize-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .finalize-col-left {
+    position: static;
   }
 }
 
@@ -1816,7 +3331,7 @@ textarea.input {
     gap: 10px;
   }
   .header-logo-left img {
-    height: 26px;
+    height: 24px;
   }
   .header-divider,
   .brand-sub {
@@ -1881,6 +3396,12 @@ textarea.input {
     flex: 1;
     min-width: 0;
   }
+  .btn-finalize {
+    width: 100%;
+    justify-content: center;
+    order: -1;
+    margin-bottom: 4px;
+  }
   /* Narrower columns and taller rows: more days on screen, easier to drag */
   :root {
     --grid-label-w: 46px;
@@ -1902,6 +3423,49 @@ textarea.input {
   .term-help-body dd {
     margin-bottom: 10px;
   }
+
+  .finalize-settings {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+  .assign-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+  .assign-name {
+    min-width: 0;
+  }
+  .finalize-actions .btn {
+    flex: 1;
+  }
+
+  .cal-time-label {
+    font-size: 10px;
+    padding-right: 4px;
+  }
+  .cal-day-header {
+    font-size: 11px;
+  }
+  .cal-cell {
+    font-size: 10px;
+    padding: 2px 4px;
+  }
+  .cal-block-count {
+    display: none;
+  }
+  .cal-chip {
+    padding: 1px 5px;
+    font-size: 10px;
+  }
+  .unassigned-tray-chips .cal-chip {
+    padding: 4px 10px;
+    font-size: 11px;
+  }
+  .cal-drag-ghost {
+    font-size: 12px;
+  }
+
   .edit-bar {
     padding: 10px;
     gap: 8px;
@@ -1967,12 +3531,18 @@ textarea.input {
   }
 }
 
+/* Below this the header can't fit the POSTECH signature alongside the app's
+   own mark and the nav without them colliding, so the signature steps aside.
+   It still appears in the footer at every size. */
+@media (max-width: 560px) {
+  .header-logo-left {
+    display: none;
+  }
+}
+
 @media (max-width: 420px) {
   .brand-mark {
     font-size: 19px;
-  }
-  .header-logo-left img {
-    height: 22px;
   }
   .nav-links a {
     padding: 6px 7px;
@@ -1981,4 +3551,338 @@ textarea.input {
   .event-card-actions .btn {
     flex: 1;
   }
+}
+
+/* ==========================================================================
+   Admin dashboard
+   ========================================================================== */
+
+.admin-stat-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+/* The dashboard used to be one full-width card stacked on another, which
+   left a lot of unused width and a very tall page. These rows put the
+   wide-content card beside the narrow ones instead. */
+.admin-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 16px;
+  margin-bottom: 16px;
+  align-items: start;
+}
+.admin-grid-main {
+  /* Chart spans the full height of the two stacked side cards next to it. */
+  grid-row: span 2;
+}
+/* The log table carries more (and wider) columns than the user table, so it
+   gets the larger share rather than an even split. */
+.admin-grid-tables {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+}
+.admin-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.admin-card-head h2 {
+  font-size: 16px;
+  margin: 0;
+}
+
+@media (max-width: 1100px) {
+  .admin-grid,
+  .admin-grid-tables {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .admin-grid-main {
+    grid-row: auto;
+  }
+}
+.admin-stat-card {
+  padding: 16px;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+.admin-stat-value {
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--color-heading);
+}
+.admin-stat-label {
+  font-size: 12px;
+  color: var(--color-text-faint);
+  margin-top: 2px;
+}
+
+.admin-chart-svg {
+  width: 100%;
+  height: 200px;
+  display: block;
+}
+.admin-chart-gridline {
+  stroke: var(--color-grid-faint-border);
+  stroke-width: 1;
+}
+.admin-chart-axis-label {
+  fill: var(--color-text-faint);
+  font-size: 10px;
+}
+.admin-chart-bar {
+  fill: var(--color-primary);
+}
+.admin-chart-bar:hover {
+  fill: var(--color-primary-hover);
+}
+
+.admin-top-paths {
+  max-height: 260px;
+  overflow-y: auto;
+}
+.admin-top-path-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 0;
+  font-size: 13px;
+}
+.admin-top-path-path {
+  font-family: monospace;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.admin-top-path-count {
+  color: var(--color-text-faint);
+  flex-shrink: 0;
+}
+
+/* Capped so a long roster / log scrolls inside its card instead of making
+   the whole page grow. */
+.admin-user-table-wrap,
+.admin-log-table-wrap {
+  overflow: auto;
+  max-height: 420px;
+}
+.admin-user-table thead th {
+  position: sticky;
+  top: 0;
+  background-color: var(--color-surface);
+  z-index: 1;
+}
+.admin-user-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.admin-user-table th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--color-text-faint);
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+.admin-user-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--color-border-light);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.admin-log-path {
+  font-family: monospace;
+  font-size: 12px;
+}
+
+.admin-log-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--color-text-faint);
+}
+/* Fixed slot so the 이전/다음 buttons hold still as the page counter grows
+   from "1 / 3" to "10 / 30". */
+#admin-logs-page-label {
+  min-width: 76px;
+  text-align: center;
+}
+
+.admin-event-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  margin-bottom: 6px;
+}
+.admin-event-name {
+  font-weight: 700;
+  font-size: 13px;
+}
+.admin-event-meta {
+  font-size: 12px;
+  color: var(--color-text-faint);
+  margin-top: 2px;
+}
+
+/* ==========================================================================
+   Event description (plain text or rendered Markdown)
+   ========================================================================== */
+
+.ne-desc-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.event-description {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  padding: 12px 16px;
+  margin-bottom: 14px;
+  font-size: 14px;
+}
+.event-description > summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--color-accent);
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.event-description > summary::-webkit-details-marker {
+  display: none;
+}
+.event-description > summary::before {
+  content: '📄';
+  font-size: 13px;
+}
+.event-description-body {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border-light);
+}
+
+/* Shared typography for anything markdown.js renders. */
+.md-body {
+  color: var(--color-text);
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.md-body > *:first-child {
+  margin-top: 0;
+}
+.md-body > *:last-child {
+  margin-bottom: 0;
+}
+.md-body p {
+  margin: 0 0 10px;
+}
+.md-body h1,
+.md-body h2,
+.md-body h3,
+.md-body h4,
+.md-body h5,
+.md-body h6 {
+  color: var(--color-heading);
+  margin: 16px 0 8px;
+  line-height: 1.35;
+}
+.md-body h1 { font-size: 20px; }
+.md-body h2 { font-size: 18px; }
+.md-body h3 { font-size: 16px; }
+.md-body h4,
+.md-body h5,
+.md-body h6 { font-size: 14px; }
+/* Opts back out of the global `ul { list-style: none }` reset - rendered
+   markdown is prose, so its lists need real bullets/numbers. */
+.md-body ul,
+.md-body ol {
+  margin: 0 0 10px;
+  padding-left: 22px;
+}
+.md-body ul {
+  list-style: disc;
+}
+.md-body ol {
+  list-style: decimal;
+}
+.md-body li {
+  margin-bottom: 4px;
+}
+.md-body a {
+  color: var(--color-accent);
+  text-decoration: underline;
+}
+.md-body code {
+  background-color: var(--color-surface-2);
+  border-radius: var(--radius-sm);
+  padding: 1px 5px;
+  font-size: 0.9em;
+}
+.md-body pre {
+  background-color: var(--color-surface-2);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  overflow-x: auto;
+  margin: 0 0 10px;
+}
+.md-body pre code {
+  background: none;
+  padding: 0;
+}
+.md-body blockquote {
+  margin: 0 0 10px;
+  padding: 4px 12px;
+  border-left: 3px solid var(--color-border);
+  color: var(--color-text-muted);
+}
+.md-body hr {
+  border: none;
+  border-top: 1px solid var(--color-border);
+  margin: 14px 0;
+}
+.md-body del {
+  color: var(--color-text-faint);
+}
+
+/* Live preview under the description textarea in the create/edit dialog. */
+.md-preview {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface-2);
+  font-size: 13px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.md-preview-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-text-faint);
+  margin-bottom: 6px;
 }

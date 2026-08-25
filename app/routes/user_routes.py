@@ -26,7 +26,17 @@ async def get_profile(request: Request):
             "name": user.get("name", ""),
             "picture": user.get("picture", ""),
             "calendarAccounts": {
-                key: {k: v for k, v in account.items() if k != "oauth"}
+                key: {
+                    **{k: v for k, v in account.items() if k != "oauth"},
+                    # Confirmed Commeet meetings only get mirrored onto accounts
+                    # whose granted OAuth scope includes calendar.events -
+                    # accounts connected before that scope was added only
+                    # have read-only access until the user reconnects (a
+                    # token refresh never grants scopes beyond what was
+                    # originally consented to).
+                    "hasWriteScope": "calendar.events"
+                    in ((account.get("oauth") or {}).get("scope") or ""),
+                }
                 for key, account in (user.get("calendarAccounts") or {}).items()
             },
             "calendarOptions": user.get("calendarOptions"),

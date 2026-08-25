@@ -17,6 +17,7 @@ folders_col = db["folders"]
 folder_events_col = db["folder_events"]
 contacts_col = db["contacts"]
 pending_signups_col = db["pending_signups"]
+access_logs_col = db["access_logs"]
 
 
 async def create_indexes() -> None:
@@ -40,3 +41,9 @@ async def create_indexes() -> None:
     # Pending sign-ups expire on their own once the emailed code goes stale.
     await pending_signups_col.create_index("email", unique=True)
     await pending_signups_col.create_index("expiresAt", expireAfterSeconds=0)
+
+    # Admin dashboard traffic log - kept lean (one row per non-static
+    # request, no bodies/headers) and self-pruning via TTL so "log a lot"
+    # doesn't mean "grow forever".
+    await access_logs_col.create_index("ts", expireAfterSeconds=60 * 24 * 3600)
+    await access_logs_col.create_index("userId")

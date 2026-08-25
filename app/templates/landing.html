@@ -90,6 +90,7 @@
 
 {% block extra_scripts %}
 {% if not user %}
+<script src="{{ asset('js/markdown.js') }}"></script>
 <script src="{{ asset('js/new-event.js') }}"></script>
 <script>
   document.getElementById("landing-create-btn").addEventListener("click", () => {

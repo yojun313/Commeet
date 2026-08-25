@@ -15,6 +15,9 @@ class EventPayload(BaseModel):
 
     name: str = Field(min_length=1)
     description: str | None = None
+    # "markdown" renders through the in-app viewer; anything else is shown
+    # as plain text with line breaks preserved.
+    descriptionFormat: str = "text"
     duration: float = Field(gt=0)
     dates: list[datetime] = Field(min_length=1)
     type: EventType

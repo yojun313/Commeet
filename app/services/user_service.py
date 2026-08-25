@@ -1,5 +1,48 @@
+import re
+
+from bson import ObjectId
+
 from app.db import attendees_col, event_responses_col, events_col, users_col
 from app.services.auth_service import default_calendar_options
+
+_OBJECT_ID_RE = re.compile(r"^[0-9a-fA-F]{24}$")
+
+
+async def _attach_participant_names(events: list[dict]) -> None:
+    """Confirmed meetings only store the raw `participants` keys (a Mongo
+    ObjectId hex string for a registered user, or the guest's literal name
+    for a manual invite - see finalize_service._load_people). The calendar
+    page wants real display names front and center, so resolve the
+    registered-user keys here in one batched query rather than making every
+    caller do it."""
+    ids: set[str] = set()
+    for event in events:
+        fin = event.get("finalization")
+        if not fin:
+            continue
+        for meeting in fin.get("meetings") or []:
+            for key in meeting.get("participants") or []:
+                if _OBJECT_ID_RE.match(key):
+                    ids.add(key)
+    if not ids:
+        return
+
+    docs = await users_col.find(
+        {"_id": {"$in": [ObjectId(i) for i in ids]}}, {"name": 1, "email": 1}
+    ).to_list(length=None)
+    name_by_id = {
+        str(doc["_id"]): (doc.get("name") or doc.get("email") or "").strip()
+        for doc in docs
+    }
+
+    for event in events:
+        fin = event.get("finalization")
+        if not fin:
+            continue
+        for meeting in fin.get("meetings") or []:
+            meeting["participantNames"] = [
+                name_by_id.get(key, key) for key in (meeting.get("participants") or [])
+            ]
 
 
 async def get_dashboard_events(user: dict) -> list[dict]:
@@ -36,6 +79,7 @@ async def get_dashboard_events(user: dict) -> list[dict]:
     )
     for event in events:
         event["hasResponded"] = event["_id"] in responded_event_ids
+    await _attach_participant_names(events)
     return events
 
 

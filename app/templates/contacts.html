@@ -1,11 +1,13 @@
 {% extends "base.html" %}
 {% block title %}연락처 - {{ APP_NAME }}{% endblock %}
 {% block content %}
-<div class="container" style="max-width: 640px; padding-bottom: 60px;">
-  <h1 style="margin-top: 32px;">연락처</h1>
+<div class="container" style="padding-bottom: 60px;">
+  <h1 style="margin-top: 32px; margin-bottom: 4px;">연락처</h1>
   <p>일정에 자주 초대하는 사람을 저장해 두세요. 가입하지 않은 사람도 추가할 수 있습니다.</p>
 
-  <div class="card card-pad" style="margin-bottom: 24px;">
+  <div class="contacts-layout">
+  <div class="contacts-side">
+  <div class="card card-pad" style="margin-bottom: 16px;">
     <div class="field" style="margin-bottom: 8px;">
       <label for="contact-search">이름 또는 이메일로 검색</label>
       <input class="input" id="contact-search" placeholder="예: 홍길동 또는 gildong@{{ ALLOWED_EMAIL_DOMAIN }}"
@@ -27,21 +29,193 @@
           <div class="field">
             <label for="manual-email">이메일</label>
             <input class="input" type="email" id="manual-email"
-                   placeholder="someone@{{ ALLOWED_EMAIL_DOMAIN }}" required />
-            <div class="hint">@{{ ALLOWED_EMAIL_DOMAIN }} 주소만 추가할 수 있습니다.</div>
+                   placeholder="someone@example.com" required />
           </div>
+
+          <details class="expandable" id="manual-details">
+            <summary>세부 정보 추가 (선택)</summary>
+            <div class="expandable-body">
+              <div class="contact-form-grid">
+                <div class="field">
+                  <label for="manual-relation">구분</label>
+                  <select class="input" id="manual-relation"></select>
+                </div>
+                <div class="field">
+                  <label for="manual-degree">과정</label>
+                  <select class="input" id="manual-degree"></select>
+                </div>
+                <div class="field">
+                  <label for="manual-status">학적상태</label>
+                  <select class="input" id="manual-status"></select>
+                </div>
+                <div class="field">
+                  <label for="manual-gradschool">대학원</label>
+                  <input class="input" id="manual-gradschool" placeholder="예: 일반대학원" />
+                </div>
+                <div class="field">
+                  <label for="manual-department">학과</label>
+                  <input class="input" id="manual-department" placeholder="예: 컴공" />
+                </div>
+                <div class="field">
+                  <label for="manual-studentid">학번</label>
+                  <input class="input" id="manual-studentid" />
+                </div>
+                <div class="field">
+                  <label for="manual-year">학년</label>
+                  <input class="input" id="manual-year" />
+                </div>
+                <div class="field">
+                  <label for="manual-semester">학기</label>
+                  <input class="input" id="manual-semester" />
+                </div>
+                <div class="field">
+                  <label for="manual-phone">전화번호</label>
+                  <input class="input" id="manual-phone" placeholder="010-0000-0000" />
+                </div>
+              </div>
+              <div class="field" style="margin-bottom: 0;">
+                <label for="manual-memo">메모</label>
+                <textarea class="input" id="manual-memo" rows="2"
+                          placeholder="이 사람에 대해 기억해 둘 내용"></textarea>
+              </div>
+            </div>
+          </details>
+
           <p class="form-error" id="manual-error"></p>
-          <button class="btn btn-primary" type="submit">연락처에 추가</button>
+          <button class="btn btn-primary" type="submit" style="margin-top: 10px;">연락처에 추가</button>
         </form>
+      </div>
+    </details>
+
+    <details class="expandable" id="bulk-add" style="margin-top: 4px;">
+      <summary>여러 명 한 번에 붙여넣기</summary>
+      <div class="expandable-body">
+        <p class="hint" style="margin-top: 0;">
+          POVIS 등에서 복사한 표를 그대로 붙여넣으면 한 번에 등록됩니다. 한 줄에 한 명씩,
+          구분 · 과정 · 대학원 · 학과 · 학년 · 학기 · 학번 · 이름 · 학적상태 · 이메일 · 전화번호 순서(탭 구분)면
+          세부 정보까지 저장되고, 이름과 이메일만 있어도 괜찮습니다.
+        </p>
+        <p class="hint" style="margin-top: 6px;">
+          <strong>이메일이 같으면 같은 사람으로 인식합니다.</strong> 이미 연락처에 있는 이메일이면
+          새로 추가하지 않고 기존 정보를 <strong>덮어씁니다</strong>. 붙여넣은 항목만 갱신되고,
+          메모처럼 표에 없는 정보는 그대로 유지되므로 명단이 바뀔 때마다 다시 붙여넣어도 됩니다.
+        </p>
+        <textarea class="input" id="bulk-add-textarea" rows="8" style="font-family: monospace; font-size: 12px;"
+                  placeholder="여기에 표를 붙여넣으세요"></textarea>
+        <p class="form-error" id="bulk-add-error" style="white-space: pre-line;"></p>
+        <p class="hint" id="bulk-add-preview" style="margin: 6px 0 0;"></p>
+        <button class="btn btn-primary" type="button" id="bulk-add-submit" style="margin-top: 8px;">연락처에 추가</button>
       </div>
     </details>
   </div>
 
-  <h2 style="font-size: 15px;">저장된 연락처 (<span id="contact-count">0</span>)</h2>
-  <div id="contacts-list"><div class="empty-state"><span class="spinner"></span></div></div>
+  <div class="card card-pad" id="contact-filters" style="display: none;"></div>
+  </div>
+
+  <div class="contacts-main">
+    <div class="contacts-main-head">
+      <h2 style="font-size: 15px; margin: 0;">저장된 연락처 (<span id="contact-count">0</span>)</h2>
+      <select class="input list-sort-select" id="contact-sort-select" aria-label="정렬"></select>
+      <div class="toggle-group" id="contact-view-toggle" aria-label="보기 방식">
+        <button type="button" data-view="grid">그리드</button>
+        <button type="button" data-view="list">리스트</button>
+      </div>
+    </div>
+    <div id="contacts-list"><div class="empty-state"><span class="spinner"></span></div></div>
+  </div>
+  </div>
+</div>
+
+<div class="dialog-backdrop" id="contact-detail-dialog">
+  <div class="dialog dialog-sm">
+    <div class="dialog-header">
+      <h2 id="cd-title">연락처 정보</h2>
+      <button class="btn-icon" type="button" data-dialog-close>&times;</button>
+    </div>
+    <div id="cd-body"></div>
+    <div class="dialog-footer">
+      <button type="button" class="btn btn-ghost" data-dialog-close>닫기</button>
+      <button type="button" class="btn btn-primary" id="cd-edit-btn">수정</button>
+    </div>
+  </div>
+</div>
+
+<div class="dialog-backdrop" id="edit-contact-dialog">
+  <div class="dialog dialog-md">
+    <div class="dialog-header">
+      <h2>연락처 수정</h2>
+      <button class="btn-icon" type="button" data-dialog-close>&times;</button>
+    </div>
+    <form id="edit-contact-form">
+      <div class="field">
+        <label for="ec-name">이름</label>
+        <input class="input" id="ec-name" required />
+      </div>
+      <div class="field">
+        <label for="ec-email">이메일</label>
+        <input class="input" type="email" id="ec-email" required />
+      </div>
+
+      <div class="ne-columns">
+        <div class="ne-col">
+          <div class="field">
+            <label for="ec-relation">구분</label>
+            <input class="input" id="ec-relation" placeholder="예: 지도학생" />
+          </div>
+          <div class="field">
+            <label for="ec-degree">과정</label>
+            <select class="input" id="ec-degree"></select>
+          </div>
+          <div class="field">
+            <label for="ec-gradschool">대학원</label>
+            <input class="input" id="ec-gradschool" placeholder="예: 일반대학원" />
+          </div>
+          <div class="field">
+            <label for="ec-department">학과</label>
+            <input class="input" id="ec-department" placeholder="예: 컴공" />
+          </div>
+        </div>
+        <div class="ne-col">
+          <div class="field">
+            <label for="ec-year">학년</label>
+            <input class="input" id="ec-year" />
+          </div>
+          <div class="field">
+            <label for="ec-semester">학기</label>
+            <input class="input" id="ec-semester" />
+          </div>
+          <div class="field">
+            <label for="ec-studentid">학번</label>
+            <input class="input" id="ec-studentid" />
+          </div>
+          <div class="field">
+            <label for="ec-status">학적상태</label>
+            <select class="input" id="ec-status"></select>
+          </div>
+          <div class="field">
+            <label for="ec-phone">전화번호</label>
+            <input class="input" id="ec-phone" placeholder="010-0000-0000" />
+          </div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="ec-memo">메모</label>
+        <textarea class="input" id="ec-memo" rows="2" placeholder="이 사람에 대해 기억해 둘 내용"></textarea>
+      </div>
+
+      <p class="form-error" id="edit-contact-error"></p>
+      <div class="dialog-footer">
+        <button type="button" class="btn btn-ghost" data-dialog-close>취소</button>
+        <button type="submit" class="btn btn-primary">저장</button>
+      </div>
+    </form>
+  </div>
 </div>
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="{{ asset('js/card-sort.js') }}"></script>
+<script src="{{ asset('js/contact-filters.js') }}"></script>
 <script src="{{ asset('js/contacts.js') }}"></script>
 {% endblock %}

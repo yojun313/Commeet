@@ -1,6 +1,6 @@
 /* The core scheduling screen: an availability heatmap grid, shared by
  * /e/{id} (plain events) and /g/{id} (groups - same grid + weekly paging +
- * calendar overlay). Config comes from window.PCTS_EVENT_CONFIG, rendered
+ * calendar overlay). Config comes from window.COMMEET_EVENT_CONFIG, rendered
  * server-side by app/routes/page_routes.py. */
 
 const REF_SUNDAY = new Date(2024, 0, 7); // must match static/js/new-event.js
@@ -101,7 +101,7 @@ function escapeHtml(s) {
 /* ---------------------------------------------------------------------- */
 
 async function init() {
-  const cfg = window.PCTS_EVENT_CONFIG;
+  const cfg = window.COMMEET_EVENT_CONFIG;
   ST.eventId = cfg.eventId;
   ST.isGroup = cfg.isGroup;
   ST.currentUser = cfg.currentUser;
@@ -153,10 +153,11 @@ async function loadEvent() {
   ST.isOwner = !!event.isOwner;
 
   document.getElementById("ev-title").textContent = event.name;
-  document.title = `${event.name} - PCTS`;
+  document.title = `${event.name} - Commeet`;
 
   computeDayColumns();
   renderMeta();
+  renderEventDescription();
   renderSkeleton();
   wireDynamicButtons();
 
@@ -169,11 +170,41 @@ async function loadEvent() {
     document.getElementById("guest-owner-banner").innerHTML = `
       <div class="guest-banner">이 일정은 로그인하지 않은 상태에서 만들어져서, 링크를 가진 누구나 수정할 수 있어요.</div>
     `;
+  } else if (event.isClosed) {
+    const link = `/e/${ST.eventId}/finalize`;
+    document.getElementById("guest-owner-banner").innerHTML = `
+      <div class="notice">
+        <p><b>이 일정은 확정되어 마감되었습니다.</b></p>
+        <p style="font-size: 13px; opacity: 0.8;">
+          더 이상 가능한 시간을 추가하거나 수정할 수 없습니다.
+          ${ST.isOwner ? `<a href="${link}">확정 내용 보기</a>에서 배정을 조정하거나 확정을 취소할 수 있습니다.` : ""}
+        </p>
+      </div>
+    `;
   }
 
   await refreshResponses();
   renderRespondents();
   renderGridCells();
+
+  updateRespondBtnVisibility();
+  if (event.isClosed) {
+    // Availability is frozen once the schedule is confirmed - the server
+    // rejects writes too (409), but hiding the controls avoids a round trip.
+    document.getElementById("delete-response-btn").style.display = "none";
+  }
+}
+
+// respond-btn ("가능한 시간 입력"/"가능한 시간 수정") sits in the toolbar
+// directly above the calendar, since that's what it acts on. The host sees
+// it too - they need to enter their own availability like everyone else
+// (their separate "초대 보내기" action lives in the sidebar). Hidden only
+// while already editing, or once the schedule is confirmed and frozen.
+function updateRespondBtnVisibility() {
+  const btn = document.getElementById("respond-btn");
+  if (!btn) return;
+  const hidden = ST.editing || (ST.event && ST.event.isClosed);
+  btn.style.display = hidden ? "none" : "";
 }
 
 function computeDayColumns() {
@@ -194,6 +225,26 @@ function renderMeta() {
   const fmt = (d) => `${d.getMonth() + 1}/${d.getDate()}`;
   const respCount = Object.keys(ST.event.responses || {}).length;
   document.getElementById("ev-meta").textContent = `${fmt(first)} ~ ${fmt(last)} · 응답 ${respCount}명`;
+}
+
+// Collapsed by default so a long description never pushes the grid off
+// screen; markdown goes through the in-app viewer (see markdown.js, which
+// escapes everything before rendering), plain text keeps its line breaks.
+function renderEventDescription() {
+  const wrap = document.getElementById("ev-description");
+  const body = document.getElementById("ev-description-body");
+  if (!wrap || !body) return;
+
+  // renderDescription() comes from markdown.js - deliberately not reusing
+  // that name here, since a same-named function declaration would shadow it.
+  const html = renderDescription(ST.event.description, ST.event.descriptionFormat);
+  if (!html) {
+    wrap.style.display = "none";
+    body.innerHTML = "";
+    return;
+  }
+  wrap.style.display = "";
+  body.innerHTML = html;
 }
 
 function renderWeekLabel() {
@@ -272,16 +323,22 @@ function renderSkeleton() {
         </div>
       </div>
 
-      <div class="card sidebar-card">
-        <h3>응답자 (<span id="respondent-count">0</span>)</h3>
-        <div id="respondents-list"></div>
-        <button class="btn btn-primary btn-block" id="respond-btn" style="margin-top: 14px;">가능한 시간 추가</button>
-        <button class="btn btn-ghost btn-block" id="delete-response-btn" style="display: none; margin-top: 8px; color: var(--color-danger);">
-          ${ST.isGroup ? "그룹 나가기" : "내 응답 삭제"}
-        </button>
-        <button class="btn btn-ghost btn-block" id="decline-invite-btn" style="display: none; margin-top: 8px; color: var(--color-danger);">
-          초대 거절
-        </button>
+      <div class="sidebar-col">
+        <button class="btn btn-primary respond-cta" id="respond-btn">가능한 시간 입력</button>
+        <div class="card sidebar-card">
+          <div class="sidebar-heading-row">
+            <h3>응답자 (<span id="respondent-count">0</span>)</h3>
+            <button type="button" class="btn btn-ghost btn-sm" id="open-grid-detail-btn">자세히 보기</button>
+          </div>
+          <div id="respondents-list"></div>
+          <button class="btn btn-primary btn-block" id="invite-btn" style="display: none; margin-top: 14px;">초대 보내기</button>
+          <button class="btn btn-ghost btn-block" id="delete-response-btn" style="display: none; margin-top: 8px; color: var(--color-danger);">
+            ${ST.isGroup ? "그룹 나가기" : "내 응답 삭제"}
+          </button>
+          <button class="btn btn-ghost btn-block" id="decline-invite-btn" style="display: none; margin-top: 8px; color: var(--color-danger);">
+            초대 거절
+          </button>
+        </div>
       </div>
     </div>
   `;
@@ -361,7 +418,7 @@ async function refreshResponses() {
 
   if (ST.viewerKey && ST.responsesFull[ST.viewerKey]) {
     document.getElementById("delete-response-btn").style.display = "";
-    document.getElementById("respond-btn").textContent = "가용시간 수정";
+    document.getElementById("respond-btn").textContent = "가능한 시간 수정";
   }
 }
 
@@ -445,6 +502,9 @@ function renderRespondents() {
 
   if (!keys.length) {
     list.innerHTML = `<p class="hint">아직 응답이 없습니다. 첫 응답자가 되어보세요!</p>`;
+    // Still size the calendar - it has to fit the viewport whether or not
+    // anyone has answered yet.
+    syncLayoutHeights();
     return;
   }
 
@@ -455,7 +515,7 @@ function renderRespondents() {
     const displayName = isGuestEntry
       ? resp.name || (resp.user ? resp.user.name : "")
       : (resp.user.name || "").trim() || resp.user.email;
-    const canEditAsGuest = isGuestEntry && ST.isOwner;
+    const canEditAsGuest = isGuestEntry && ST.isOwner && !ST.event.isClosed;
 
     const row = document.createElement("div");
     row.className = "respondent-row" + (ST.selectedRespondents.has(key) ? " selected" : "");
@@ -477,6 +537,128 @@ function renderRespondents() {
     });
     list.appendChild(row);
   });
+
+  syncLayoutHeights();
+}
+
+// Caps #respondents-list to whatever's left of the calendar's own
+// (content-driven) height once the sidebar's other chrome (heading, action
+// buttons, padding) is subtracted, so a long respondent list scrolls inside
+// that fixed budget instead of growing past the calendar - re-measured
+// after every render since respondent count changes it.
+//
+// CSS alone can't express this: `.event-layout` stretches both grid columns
+// to a shared row height, but that row height is itself computed from BOTH
+// columns' natural (unconstrained) content size - so before this ran, a
+// long respondent list would inflate the row height, which then stretched
+// the *calendar column wrapper* taller too (even though its actual content,
+// .grid-scroll, stayed its own short natural height - the wrapper just
+// gained empty space at the bottom). That's why this measures .grid-scroll
+// and .edit-bar directly instead of the stretched wrapper itself: the
+// wrapper's rendered height already echoes back whatever the sidebar
+// demanded, not the calendar's true size.
+function syncRespondentListHeight() {
+  const calCol = document.querySelector(".event-layout > div:first-child");
+  const sidebar = document.querySelector(".sidebar-card");
+  const list = document.getElementById("respondents-list");
+  if (!calCol || !sidebar || !list) return;
+
+  // Inside the "자세히 보기" modal, .event-layout already fills a fixed
+  // (never-changes-size) modal height via CSS (see .grid-detail-body rules) -
+  // there's no risk of a long list growing anything past that, so the list
+  // should just fill whatever generous space the fixed modal gives it
+  // instead of being shrunk down to match the calendar's own (possibly much
+  // shorter) natural content height, which is what the page-embedded case
+  // below is protecting against.
+  if (list.closest(".grid-detail-body")) {
+    list.style.maxHeight = "";
+    return;
+  }
+
+  // Below the layout's stacking breakpoint (see CSS @media max-width:1024px)
+  // the sidebar sits above the calendar instead of beside it, so there's no
+  // sibling height to match - the CSS max-height fallback there applies.
+  if (window.innerWidth <= 1024) {
+    list.style.maxHeight = "";
+    return;
+  }
+
+  let calHeight = 0;
+  [...calCol.children].forEach((child) => {
+    const style = getComputedStyle(child);
+    if (style.display === "none") return;
+    calHeight += child.getBoundingClientRect().height + parseFloat(style.marginTop) + parseFloat(style.marginBottom);
+  });
+
+  // Everything sharing the right column with the list eats into its budget:
+  // the "가능한 시간 입력" CTA stacked above the card, plus the card's own
+  // padding, heading row and action buttons.
+  const cardStyle = getComputedStyle(sidebar);
+  let chromeHeight = parseFloat(cardStyle.paddingTop) + parseFloat(cardStyle.paddingBottom);
+
+  const addBox = (child) => {
+    const style = getComputedStyle(child);
+    if (style.display === "none") return;
+    chromeHeight +=
+      child.getBoundingClientRect().height +
+      parseFloat(style.marginTop) +
+      parseFloat(style.marginBottom);
+  };
+
+  const sidebarCol = sidebar.parentElement;
+  if (sidebarCol && sidebarCol.classList.contains("sidebar-col")) {
+    [...sidebarCol.children].forEach((child) => {
+      if (child !== sidebar) addBox(child);
+    });
+  }
+  [...sidebar.children].forEach((child) => {
+    if (child.id !== "respondents-list") addBox(child);
+  });
+
+  list.style.maxHeight = `${Math.max(120, calHeight - chromeHeight)}px`;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Calendar vertical sizing                                                */
+/* ---------------------------------------------------------------------- */
+
+// An hour always occupies the same height regardless of the event's time
+// increment - the model timeful.app uses (60px/hour, so a 15-min row is
+// 15px and a 60-min row is 60px). That keeps the grid readable as a clock
+// rather than as N equal-height slots: the old flat 16px-per-row made an
+// 8-hour day at 30-min increments only half as tall as the same day at
+// 15-min increments.
+//
+// The calendar is the page's priority, so nothing constrains it: a longer
+// day simply makes a taller grid and a taller page, never an inner scroll
+// area. The respondents sidebar then follows the calendar's height (see
+// syncRespondentListHeight), scrolling internally if the roster outgrows it.
+const HOUR_HEIGHT = 60;
+// Phones get a denser hour so a full day doesn't turn into an endless scroll
+// on a small screen.
+const HOUR_HEIGHT_MOBILE = 44;
+const MOBILE_GRID_BREAKPOINT = 768;
+
+function syncCalendarHeight() {
+  const grid = document.getElementById("avail-grid");
+  if (!grid || !ST.slotCount || !ST.event) return;
+  const scroll = grid.closest(".grid-scroll");
+  if (!scroll) return;
+
+  const increment = ST.event.timeIncrement || 15;
+  const hourH = window.innerWidth <= MOBILE_GRID_BREAKPOINT ? HOUR_HEIGHT_MOBILE : HOUR_HEIGHT;
+  grid.style.setProperty("--grid-row-h", `${(hourH * increment) / 60}px`);
+
+  // Only the fixed-size "자세히 보기" modal caps the grid (its own CSS gives
+  // it an inner scroll); on the page itself the grid is never height-capped.
+  scroll.style.maxHeight = "";
+}
+
+// Calendar first: the sidebar's height follows the calendar's, so the
+// respondent list can only be measured once the calendar has settled.
+function syncLayoutHeights() {
+  syncCalendarHeight();
+  syncRespondentListHeight();
 }
 
 /* ---------------------------------------------------------------------- */
@@ -581,7 +763,7 @@ function startEditing(prefillFromSelf) {
   }
 
   document.getElementById("edit-bar").style.display = "flex";
-  document.getElementById("respond-btn").style.display = "none";
+  updateRespondBtnVisibility();
   document.getElementById("avail-grid").classList.add("editing");
   document.getElementById("edit-tool-hint").textContent = TOOL_HINTS[ST.editTool];
   const autofillBtn = document.getElementById("autofill-btn");
@@ -589,6 +771,8 @@ function startEditing(prefillFromSelf) {
     autofillBtn.style.display = ST.googleCalendarEnabled && ST.currentUser ? "" : "none";
   }
   renderGridCells();
+  // The edit bar that just appeared below the grid eats into its height budget.
+  syncLayoutHeights();
 }
 
 function stopEditing() {
@@ -598,9 +782,10 @@ function stopEditing() {
   ST.dragAnchor = null;
   ST.dragBase = null;
   document.getElementById("edit-bar").style.display = "none";
-  document.getElementById("respond-btn").style.display = "";
+  updateRespondBtnVisibility();
   document.getElementById("avail-grid").classList.remove("editing");
   renderGridCells();
+  syncLayoutHeights();
 }
 
 function startEditingAs(guestKey, displayName) {
@@ -622,15 +807,19 @@ async function saveEditing() {
   const editingGuestKey = ST.editingAsGuestKey;
 
   if (editingGuestKey) {
-    await api.post(`/api/events/${ST.eventId}/response`, {
-      availability,
-      ifNeeded,
-      guest: true,
-      name: editingGuestKey,
-    });
-    stopEditing();
-    await refreshAll();
-    showSnackbar("저장되었습니다.", "success");
+    try {
+      await api.post(`/api/events/${ST.eventId}/response`, {
+        availability,
+        ifNeeded,
+        guest: true,
+        name: editingGuestKey,
+      });
+      stopEditing();
+      await refreshAll();
+      showSnackbar("저장되었습니다.", "success");
+    } catch (err) {
+      showSnackbar(err.message, "error");
+    }
     return;
   }
 
@@ -738,31 +927,70 @@ function addInviteChip(value) {
   container.insertBefore(chip, input);
 }
 
+let inviteContactsCache = [];
+let inviteContactFilterPredicate = () => true;
+
+function renderInviteContactList() {
+  const root = document.getElementById("invite-contacts");
+  // Filter toggles re-render this list from scratch - keep whatever the
+  // user had already checked so narrowing the filter doesn't silently
+  // un-select someone they picked before.
+  const previouslyChecked = new Set(
+    [...root.querySelectorAll("input[type=checkbox]:checked")].map((cb) => cb.value)
+  );
+  const visible = inviteContactsCache.filter(inviteContactFilterPredicate);
+
+  root.innerHTML = "";
+  if (!inviteContactsCache.length) {
+    root.innerHTML = `<p class="hint" style="margin:0;">저장된 연락처가 없습니다. <a href="/contacts">연락처 추가하기</a></p>`;
+    return;
+  }
+  if (!visible.length) {
+    root.innerHTML = `<p class="hint" style="margin:0;">필터 조건에 맞는 연락처가 없습니다.</p>`;
+    return;
+  }
+  visible.forEach((c) => {
+    const label = document.createElement("label");
+    label.className = "checkbox-row";
+    label.style.marginBottom = "6px";
+    label.innerHTML = `
+      <input type="checkbox" value="${escapeHtml(c.email)}" ${previouslyChecked.has(c.email) ? "checked" : ""} />
+      <span class="checkbox-copy">
+        ${escapeHtml(c.name)}
+        <div class="desc">${escapeHtml(c.email)}</div>
+      </span>
+    `;
+    root.appendChild(label);
+  });
+}
+
 async function openInviteDialog() {
   document.getElementById("invite-error").textContent = "";
+
+  // Both dialogs are full-screen backdrops at the same stacking level, so
+  // opening the invite dialog on top of an already-open "자세히 보기" modal
+  // would just visually bury it behind the invite dialog's own backdrop.
+  // Hide (not close - the reparented .event-layout stays put inside it)
+  // the detail modal for now; watchGridDetailRestore() below brings it back
+  // as soon as the invite dialog closes, however that happens.
+  const gridDetail = document.getElementById("grid-detail-dialog");
+  if (gridDetail.classList.contains("open")) {
+    gridDetail.classList.remove("open");
+    gridDetail.dataset.pendingRestore = "1";
+  }
+
   openDialog("invite-dialog");
 
   const root = document.getElementById("invite-contacts");
+  root.innerHTML = `<p class="hint" style="margin:0;">불러오는 중...</p>`;
   try {
-    const contacts = await api.get("/api/contacts");
-    root.innerHTML = "";
-    if (!contacts.length) {
-      root.innerHTML = `<p class="hint" style="margin:0;">저장된 연락처가 없습니다. <a href="/contacts">연락처 추가하기</a></p>`;
-      return;
-    }
-    contacts.forEach((c) => {
-      const label = document.createElement("label");
-      label.className = "checkbox-row";
-      label.style.marginBottom = "6px";
-      label.innerHTML = `
-        <input type="checkbox" value="${escapeHtml(c.email)}" />
-        <span class="checkbox-copy">
-          ${escapeHtml(c.name)}
-          <div class="desc">${escapeHtml(c.email)}</div>
-        </span>
-      `;
-      root.appendChild(label);
-    });
+    inviteContactsCache = await api.get("/api/contacts");
+    inviteContactFilterPredicate = setupContactFilterBar(
+      document.getElementById("invite-contacts-filters"),
+      inviteContactsCache,
+      renderInviteContactList
+    );
+    renderInviteContactList();
   } catch (err) {
     root.innerHTML = `<p class="hint" style="margin:0;">연락처를 불러오지 못했습니다.</p>`;
   }
@@ -793,14 +1021,14 @@ async function sendInvites() {
       message: document.getElementById("invite-message").value.trim(),
     });
     closeDialog("invite-dialog");
-    showSnackbar(`${result.sent}명에게 초대 메일을 보냈습니다.`, "success");
+    showSnackbar(`${result.sent}명에게 초대를 보냈습니다.`, "success");
 
     inviteTypedEmails.length = 0;
     document.querySelectorAll("#invite-email-chips .chip").forEach((c) => c.remove());
     document.getElementById("invite-message").value = "";
     if (ST.isGroup) await refreshAll();
   } catch (err) {
-    errorEl.textContent = err.message || "초대 메일을 보내지 못했습니다.";
+    errorEl.textContent = err.message || "초대를 보내지 못했습니다.";
   } finally {
     btn.disabled = false;
   }
@@ -812,7 +1040,29 @@ function wireStaticButtons() {
     showSnackbar("링크가 복사되었습니다.", "success");
   });
 
-  document.getElementById("invite-btn").addEventListener("click", openInviteDialog);
+  const gridDetailDialog = document.getElementById("grid-detail-dialog");
+  gridDetailDialog.addEventListener("click", (e) => {
+    // Mirrors ui.js's own "click the backdrop itself, or a [data-dialog-close]"
+    // conditions for closing a dialog - this fires alongside that generic
+    // handler so the reparented grid gets moved back to the page at the
+    // same moment the modal actually closes.
+    if (e.target === gridDetailDialog || e.target.closest("[data-dialog-close]")) {
+      restoreGridFromDetailView();
+    }
+  });
+
+  // Watches for the invite dialog actually closing - by class change rather
+  // than hooking every place that can close it (X button, backdrop click,
+  // a successful send finishing) - and un-hides the detail modal it was
+  // covering, if openInviteDialog() hid one on the way in.
+  const inviteDialogEl = document.getElementById("invite-dialog");
+  new MutationObserver(() => {
+    if (!inviteDialogEl.classList.contains("open") && gridDetailDialog.dataset.pendingRestore) {
+      delete gridDetailDialog.dataset.pendingRestore;
+      gridDetailDialog.classList.add("open");
+    }
+  }).observe(inviteDialogEl, { attributes: true, attributeFilter: ["class"] });
+
   document.getElementById("invite-send-btn").addEventListener("click", sendInvites);
   document.getElementById("invite-email-input").addEventListener("keydown", (e) => {
     if (e.key === "Enter" || e.key === "," || e.key === " ") {
@@ -851,6 +1101,8 @@ function wireStaticButtons() {
 }
 
 function wireDynamicButtons() {
+  document.getElementById("open-grid-detail-btn").addEventListener("click", openGridDetail);
+
   document.getElementById("toggle-best-times").addEventListener("click", (e) => {
     ST.showBestTimes = !ST.showBestTimes;
     e.target.classList.toggle("active", ST.showBestTimes);
@@ -885,14 +1137,24 @@ function wireDynamicButtons() {
     const payload = ST.currentUser ? { guest: false, userId: ST.currentUser._id } : { guest: true, name: ST.guestName };
     await api.del(`/api/events/${ST.eventId}/response`, payload);
     document.getElementById("delete-response-btn").style.display = "none";
-    document.getElementById("respond-btn").textContent = "가능한 시간 추가";
+    document.getElementById("respond-btn").textContent = "가능한 시간 입력";
     await refreshAll();
     showSnackbar("삭제되었습니다.", "success");
   });
 
   if (ST.isOwner) {
-    // Only the host can mail the link out (server enforces this too).
-    document.getElementById("invite-btn").style.display = "";
+    // Only the host can mail the link out (server enforces this too), so
+    // this pinned-to-the-bottom sidebar action only exists for them.
+    const inviteBtn = document.getElementById("invite-btn");
+    inviteBtn.style.display = "";
+    inviteBtn.addEventListener("click", openInviteDialog);
+    document.getElementById("finalize-link-btn").style.display = "";
+    // Only swap the label span's text, not the whole button - the button
+    // also contains an SVG icon that a plain .textContent assignment here
+    // would silently wipe out.
+    document.getElementById("finalize-link-label").textContent = ST.event.isClosed
+      ? "확정 내용 보기/수정"
+      : "일정 확정하기";
 
     const editBtn = document.getElementById("edit-event-btn");
     editBtn.style.display = "";
@@ -940,4 +1202,46 @@ async function changeWeek(delta, absolute) {
   renderGridCells();
 }
 
+/* ---------------------------------------------------------------------- */
+/* "자세히 보기" - a bigger, fixed-size modal for the same live grid          */
+/* ---------------------------------------------------------------------- */
+
+// Reparents the real .event-layout node (not a copy) into the modal, so
+// every existing behavior - clicking a respondent to see just their marked
+// times, editing, drag-select - keeps working unmodified, just at a bigger
+// size. Remembers exactly where it came from so it can go back untouched.
+let gridDetailOriginalParent = null;
+let gridDetailOriginalNextSibling = null;
+
+function openGridDetail() {
+  const layout = document.querySelector(".event-layout");
+  const modalBody = document.getElementById("grid-detail-body");
+  if (!layout || !modalBody || gridDetailOriginalParent) return;
+
+  gridDetailOriginalParent = layout.parentElement;
+  gridDetailOriginalNextSibling = layout.nextElementSibling;
+  modalBody.appendChild(layout);
+
+  openDialog("grid-detail-dialog");
+  // The modal's fixed size is only established once it's actually visible -
+  // wait a frame so the height measurement below reads the real numbers.
+  requestAnimationFrame(() => syncLayoutHeights());
+}
+
+function restoreGridFromDetailView() {
+  const layout = document.querySelector(".grid-detail-body .event-layout");
+  if (layout && gridDetailOriginalParent) {
+    gridDetailOriginalParent.insertBefore(layout, gridDetailOriginalNextSibling);
+  }
+  gridDetailOriginalParent = null;
+  gridDetailOriginalNextSibling = null;
+  requestAnimationFrame(() => syncLayoutHeights());
+}
+
 document.addEventListener("DOMContentLoaded", init);
+
+let resizeSyncTimer = null;
+window.addEventListener("resize", () => {
+  clearTimeout(resizeSyncTimer);
+  resizeSyncTimer = setTimeout(syncLayoutHeights, 150);
+});

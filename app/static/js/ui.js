@@ -51,4 +51,18 @@ document.addEventListener("DOMContentLoaded", () => {
       window.location.href = "/";
     });
   }
+
+  const themeToggleBtn = document.getElementById("theme-toggle-btn");
+  if (themeToggleBtn) {
+    themeToggleBtn.addEventListener("click", () => {
+      const current = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
+      const next = current === "dark" ? "light" : "dark";
+      document.documentElement.setAttribute("data-theme", next);
+      try {
+        localStorage.setItem("pcts_theme", next);
+      } catch (e) {
+        /* localStorage unavailable - theme still applies for this page view */
+      }
+    });
+  }
 });

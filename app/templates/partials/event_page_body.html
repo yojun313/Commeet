@@ -14,11 +14,22 @@
       </div>
       {% endif %}
       <button class="btn btn-secondary btn-sm" type="button" id="copy-link-btn">링크 복사</button>
-      <button class="btn btn-primary btn-sm" type="button" id="invite-btn" style="display: none;">초대 메일 보내기</button>
-      <button class="btn btn-secondary btn-sm" type="button" id="edit-event-btn" style="display: none;">수정</button>
-      <button class="btn btn-ghost btn-sm" type="button" id="delete-event-btn" style="display: none; color: var(--color-danger);">삭제</button>
+      <button class="btn btn-secondary btn-sm" type="button" id="edit-event-btn" style="display: none;">{{ "그룹" if is_group else "일정" }} 정보 수정</button>
+      <button class="btn btn-ghost btn-sm" type="button" id="delete-event-btn" style="display: none; color: var(--color-danger);">{{ "그룹" if is_group else "일정" }} 삭제</button>
+      <a class="btn-finalize" id="finalize-link-btn" style="display: none;" href="/e/{{ event_id }}/finalize">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M8 2v3M16 2v3M3.5 9h17M5 5h14a1.5 1.5 0 011.5 1.5V19a1.5 1.5 0 01-1.5 1.5H5A1.5 1.5 0 013.5 19V6.5A1.5 1.5 0 015 5z"></path>
+          <path d="M8.5 14.2l2.3 2.3 4.7-4.9"></path>
+        </svg>
+        <span id="finalize-link-label">일정 확정하기</span>
+      </a>
     </div>
   </div>
+
+  <details class="event-description" id="ev-description" style="display: none;">
+    <summary>일정 설명 보기</summary>
+    <div class="event-description-body md-body" id="ev-description-body"></div>
+  </details>
 
   <div id="guest-owner-banner"></div>
   <div id="event-body-root">
@@ -30,13 +41,23 @@
 {% include "partials/guest_name_dialog.html" %}
 {% include "partials/invite_dialog.html" %}
 
+<div class="dialog-backdrop" id="grid-detail-dialog">
+  <div class="dialog dialog-xl">
+    <div class="dialog-header">
+      <h2>전체 보기</h2>
+      <button class="btn-icon" type="button" data-dialog-close>&times;</button>
+    </div>
+    <div class="grid-detail-body" id="grid-detail-body"></div>
+  </div>
+</div>
+
 <div class="dialog-backdrop" id="delete-event-page-dialog">
   <div class="dialog dialog-sm">
     <div class="dialog-header">
-      <h2>삭제</h2>
+      <h2>{{ "그룹" if is_group else "일정" }} 삭제</h2>
       <button class="btn-icon" type="button" data-dialog-close>&times;</button>
     </div>
-    <p>정말 삭제하시겠어요?</p>
+    <p>이 {{ "그룹을" if is_group else "일정을" }} 정말 삭제하시겠어요? 참여자들의 응답도 함께 사라집니다.</p>
     <div class="dialog-footer">
       <button type="button" class="btn btn-ghost" data-dialog-close>취소</button>
       <button type="button" class="btn btn-danger" id="confirm-delete-event-page-btn">삭제</button>
@@ -45,5 +66,5 @@
 </div>
 
 <script>
-  window.PCTS_EVENT_CONFIG = {{ config_json | safe }};
+  window.COMMEET_EVENT_CONFIG = {{ config_json | safe }};
 </script>

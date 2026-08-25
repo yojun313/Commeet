@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}관리자 대시보드 - {{ APP_NAME }}{% endblock %}
+{% block content %}
+<div class="container" style="padding-bottom: 60px;">
+  <h1 style="margin-top: 32px;">관리자 대시보드</h1>
+
+  <div class="admin-stat-cards" id="admin-stat-cards">
+    <div class="empty-state"><span class="spinner"></span></div>
+  </div>
+
+  <div class="admin-grid">
+    <div class="card card-pad admin-grid-main">
+      <div class="admin-card-head">
+        <h2>일별 트래픽</h2>
+        <div class="toggle-group" id="admin-traffic-range">
+          <button type="button" data-days="7">7일</button>
+          <button type="button" class="active" data-days="30">30일</button>
+          <button type="button" data-days="90">90일</button>
+        </div>
+      </div>
+      <div id="admin-traffic-chart"></div>
+    </div>
+
+    <div class="card card-pad admin-grid-side">
+      <div class="admin-card-head"><h2>많이 호출된 경로</h2></div>
+      <div class="admin-top-paths" id="admin-top-paths"></div>
+    </div>
+
+    <div class="card card-pad admin-grid-side">
+      <div class="admin-card-head"><h2>메일 발송 테스트</h2></div>
+      <p class="hint" id="admin-mail-config" style="margin-top: 0;"></p>
+      <div class="field" style="margin-bottom: 8px;">
+        <label for="admin-mail-to">받는 주소</label>
+        <input class="input" type="email" id="admin-mail-to" placeholder="me@postech.ac.kr" />
+      </div>
+      <button class="btn btn-primary btn-sm" type="button" id="admin-mail-send">테스트 메일 보내기</button>
+      <p class="form-error" id="admin-mail-error" style="white-space: pre-line;"></p>
+      <p class="hint" id="admin-mail-result" style="margin: 6px 0 0;"></p>
+    </div>
+  </div>
+
+  <div class="admin-grid admin-grid-tables">
+  <div class="card card-pad">
+    <div class="admin-card-head">
+      <h2>사용자 (<span id="admin-user-count">0</span>)</h2>
+      <input class="input" id="admin-user-search" style="max-width: 220px;" placeholder="이름 또는 이메일로 검색" />
+    </div>
+    <div class="admin-user-table-wrap">
+      <table class="admin-user-table" id="admin-user-table">
+        <thead>
+          <tr>
+            <th>이름</th>
+            <th>이메일</th>
+            <th>가입일</th>
+            <th>보유 방</th>
+            <th>관리자</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="admin-user-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card card-pad">
+    <div class="admin-card-head">
+      <h2>최근 활동 로그</h2>
+      <button class="btn btn-ghost btn-sm" type="button" id="admin-logs-refresh">새로고침</button>
+    </div>
+    <div class="admin-log-table-wrap">
+      <table class="admin-user-table" id="admin-log-table">
+        <thead>
+          <tr>
+            <th>시간</th>
+            <th>사용자</th>
+            <th>메서드</th>
+            <th>경로</th>
+            <th>상태</th>
+            <th>응답시간</th>
+          </tr>
+        </thead>
+        <tbody id="admin-log-tbody"></tbody>
+      </table>
+    </div>
+    <div class="admin-log-pager">
+      <button class="btn btn-ghost btn-sm" type="button" id="admin-logs-prev">&lsaquo; 이전</button>
+      <span id="admin-logs-page-label"></span>
+      <button class="btn btn-ghost btn-sm" type="button" id="admin-logs-next">다음 &rsaquo;</button>
+    </div>
+  </div>
+  </div>
+</div>
+
+<div class="dialog-backdrop" id="admin-user-detail-dialog">
+  <div class="dialog dialog-md">
+    <div class="dialog-header">
+      <h2 id="admin-detail-title">사용자 정보</h2>
+      <button class="btn-icon" type="button" data-dialog-close>&times;</button>
+    </div>
+    <div id="admin-detail-body"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ asset('js/admin.js') }}"></script>
+{% endblock %}

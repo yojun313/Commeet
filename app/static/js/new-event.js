@@ -46,7 +46,9 @@ const NewEventDialog = (() => {
     const daysInMonth = new Date(y, m + 1, 0).getDate();
 
     for (let i = 0; i < firstDay; i++) {
-      grid.appendChild(document.createElement("div"));
+      const pad = document.createElement("div");
+      pad.className = "month-cell-empty";
+      grid.appendChild(pad);
     }
     for (let day = 1; day <= daysInMonth; day++) {
       const d = new Date(y, m, day);
@@ -65,6 +67,18 @@ const NewEventDialog = (() => {
       });
       grid.appendChild(cell);
     }
+    // Always pad out to a fixed 6 rows (42 cells) - a month only needing 4
+    // or 5 rows would otherwise leave a shorter grid, and since the dialog's
+    // height follows its content, that made the whole "방 생성" window
+    // resize every time you paged to a month with a different row count.
+    // These trailing pads use the same .month-cell-empty class as the
+    // leading ones (see CSS) so a row made up entirely of padding still
+    // reserves a real cell's height in the grid instead of collapsing.
+    while (grid.children.length < 42) {
+      const pad = document.createElement("div");
+      pad.className = "month-cell-empty";
+      grid.appendChild(pad);
+    }
   }
 
   function renderDowRow() {
@@ -82,6 +96,32 @@ const NewEventDialog = (() => {
       });
       row.appendChild(btn);
     });
+  }
+
+  // Markdown mode swaps the helper text for a live preview, so the author
+  // can see exactly what participants will get before saving.
+  function setDescriptionFormat(format) {
+    state.descriptionFormat = format === "markdown" ? "markdown" : "text";
+    document.querySelectorAll("#ne-desc-format button").forEach((b) => {
+      b.classList.toggle("active", b.dataset.format === state.descriptionFormat);
+    });
+    document.getElementById("ne-desc-hint").textContent =
+      state.descriptionFormat === "markdown"
+        ? "# 제목, **굵게**, - 목록, [링크](https://…) 등을 쓸 수 있습니다."
+        : "줄바꿈이 그대로 표시됩니다.";
+    renderDescriptionPreview();
+  }
+
+  function renderDescriptionPreview() {
+    const preview = document.getElementById("ne-desc-preview");
+    const src = document.getElementById("ne-description").value;
+    if (state.descriptionFormat !== "markdown" || !src.trim()) {
+      preview.style.display = "none";
+      preview.innerHTML = "";
+      return;
+    }
+    preview.style.display = "";
+    preview.innerHTML = `<div class="md-preview-label">미리보기</div>${renderMarkdown(src)}`;
   }
 
   function setDateMode(mode) {
@@ -152,6 +192,96 @@ const NewEventDialog = (() => {
     });
   }
 
+  let contactsCache = null;
+  async function loadContacts() {
+    if (contactsCache) return contactsCache;
+    try {
+      contactsCache = await api.get("/api/contacts");
+    } catch (e) {
+      contactsCache = [];
+    }
+    return contactsCache;
+  }
+
+  // Lets a signed-in host pick from their saved 연락처 instead of typing
+  // every email by hand - adds straight into the same chip array/input the
+  // manual "이메일 입력 후 Enter" flow uses, so both paths stay in sync.
+  // Also offers the same 과정/학적상태 filter bar as the 연락처 page and the
+  // invite-by-email dialog, for contacts that have that roster detail.
+  function wireContactPicker(fieldId, inputId, chipsId, stateKey) {
+    const field = document.getElementById(fieldId);
+    const btn = field && field.querySelector('[data-role="pick-contact-btn"]');
+    const dropdown = field && field.querySelector(".contact-picker-dropdown");
+    if (!field || !btn || !dropdown) return;
+
+    const search = dropdown.querySelector('[data-role="pick-contact-search"]');
+    const filtersRoot = dropdown.querySelector('[data-role="pick-contact-filters"]');
+    const list = dropdown.querySelector('[data-role="pick-contact-list"]');
+    const input = document.getElementById(inputId);
+    const chipsEl = document.getElementById(chipsId);
+
+    let filterPredicate = () => true;
+
+    function renderList() {
+      const contacts = contactsCache || [];
+      const q = search.value.trim().toLowerCase();
+      const arr = state[stateKey];
+      const items = contacts.filter(
+        (c) =>
+          !arr.includes(c.email) &&
+          filterPredicate(c) &&
+          (!q || c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q))
+      );
+
+      list.innerHTML = "";
+      if (!items.length) {
+        const empty = document.createElement("div");
+        empty.className = "hint";
+        empty.style.padding = "8px";
+        empty.textContent = contacts.length ? "표시할 연락처가 없습니다" : "저장된 연락처가 없습니다";
+        list.appendChild(empty);
+        return;
+      }
+      items.forEach((c) => {
+        const row = document.createElement("button");
+        row.type = "button";
+        row.className = "contact-picker-row";
+        const name = document.createElement("span");
+        name.className = "contact-picker-name";
+        name.textContent = c.name;
+        const email = document.createElement("span");
+        email.className = "contact-picker-email";
+        email.textContent = c.email;
+        row.appendChild(name);
+        row.appendChild(email);
+        row.addEventListener("click", () => {
+          addChip(input, chipsEl, arr, c.email);
+          renderList();
+        });
+        list.appendChild(row);
+      });
+    }
+
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const opening = dropdown.style.display === "none";
+      document.querySelectorAll(".contact-picker-dropdown").forEach((d) => (d.style.display = "none"));
+      if (opening) {
+        dropdown.style.display = "";
+        search.value = "";
+        const contacts = await loadContacts();
+        filterPredicate = setupContactFilterBar(filtersRoot, contacts, renderList);
+        renderList();
+        search.focus();
+      }
+    });
+    search.addEventListener("input", renderList);
+    dropdown.addEventListener("click", (e) => e.stopPropagation());
+    document.addEventListener("click", () => {
+      dropdown.style.display = "none";
+    });
+  }
+
   function resetChips(containerId, arr) {
     const container = document.getElementById(containerId);
     if (container) container.querySelectorAll(".chip").forEach((c) => c.remove());
@@ -205,6 +335,7 @@ const NewEventDialog = (() => {
       mode,
       event,
       dateMode: "specific_dates",
+      descriptionFormat: "text",
       tab: defaultTab,
       calMonth: new Date(),
       selectedDates: new Set(),
@@ -219,6 +350,8 @@ const NewEventDialog = (() => {
     showError("");
 
     document.getElementById("ne-name").value = event ? event.name : "";
+    document.getElementById("ne-description").value = (event && event.description) || "";
+    setDescriptionFormat((event && event.descriptionFormat) === "markdown" ? "markdown" : "text");
     populateTimeSelect(document.getElementById("ne-start-time"), 9);
     populateTimeSelect(document.getElementById("ne-end-time"), 17);
     document.getElementById("ne-time-increment").value = event ? String(event.timeIncrement || 15) : "15";
@@ -306,6 +439,12 @@ const NewEventDialog = (() => {
       if (btn) setDateMode(btn.dataset.mode);
     });
 
+    document.getElementById("ne-desc-format").addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-format]");
+      if (btn) setDescriptionFormat(btn.dataset.format);
+    });
+    document.getElementById("ne-description").addEventListener("input", renderDescriptionPreview);
+
     const tabsEl = document.getElementById("ne-tabs");
     if (tabsEl) {
       tabsEl.addEventListener("click", (e) => {
@@ -325,6 +464,8 @@ const NewEventDialog = (() => {
 
     wireChipInput("ne-remindees-input", "ne-remindees-chips", "remindees");
     wireChipInput("ne-attendees-input", "ne-attendees-chips", "attendees");
+    wireContactPicker("ne-remindees-field", "ne-remindees-input", "ne-remindees-chips", "remindees");
+    wireContactPicker("ne-attendees-field", "ne-attendees-input", "ne-attendees-chips", "attendees");
     document.getElementById("new-event-form").addEventListener("submit", async (e) => {
       e.preventDefault();
       showError("");
@@ -344,6 +485,8 @@ const NewEventDialog = (() => {
       const isGroup = state.tab === "group";
       const payload = {
         name,
+        description: document.getElementById("ne-description").value.trim(),
+        descriptionFormat: state.descriptionFormat,
         duration: computeDuration(),
         dates,
         type: isGroup ? "group" : state.dateMode,

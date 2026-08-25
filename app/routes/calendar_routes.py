@@ -38,7 +38,7 @@ async def google_callback(
 ):
     user = await require_user(request)
     expected_state = request.cookies.get(STATE_COOKIE)
-    failure = RedirectResponse(f"{BASE_URL}/settings?calendar_error=1")
+    failure = RedirectResponse(f"{BASE_URL}/calendar?calendar_error=1")
 
     if error or not code or not state or state != expected_state:
         return failure
@@ -49,7 +49,7 @@ async def google_callback(
     except Exception:
         return failure
 
-    response = RedirectResponse(f"{BASE_URL}/settings?calendar_connected=1")
+    response = RedirectResponse(f"{BASE_URL}/calendar?calendar_connected=1")
     response.delete_cookie(STATE_COOKIE)
     return response
 

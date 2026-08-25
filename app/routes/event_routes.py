@@ -86,6 +86,7 @@ async def get_event(event_id: str, request: Request, guestName: str | None = Non
         event, responses_map, viewer=viewer, is_owner=is_owner, guest_name=guestName
     )
     result["isOwner"] = is_owner
+    result["isClosed"] = bool(event.get("isClosed"))
 
     if event["type"] == "group":
         result["attendees"] = await event_service.get_attendees(event["_id"])
@@ -144,6 +145,10 @@ async def update_event_response(
             status_code=403,
             detail="비공개 모드에서는 게스트 응답을 대신 등록할 수 없습니다",
         ) from exc
+    except event_service.EventClosed as exc:
+        raise HTTPException(
+            status_code=409, detail="일정이 확정되어 더 이상 응답을 수정할 수 없습니다"
+        ) from exc
     except event_service.NotSignedIn as exc:
         raise HTTPException(status_code=401, detail="로그인이 필요합니다") from exc
     except ValueError as exc:
@@ -185,6 +190,10 @@ async def delete_event_response(
     requester = await get_optional_user(request)
     try:
         await event_service.delete_response(event, payload, requester)
+    except event_service.EventClosed as exc:
+        raise HTTPException(
+            status_code=409, detail="일정이 확정되어 더 이상 응답을 수정할 수 없습니다"
+        ) from exc
     except event_service.NotSignedIn as exc:
         raise HTTPException(status_code=401, detail="로그인이 필요합니다") from exc
     except event_service.NotEventOwner as exc:
@@ -271,7 +280,7 @@ async def send_invites(event_id: str, payload: SendInvitePayload, request: Reque
     # from them would turn the app into an open relay.
     if event.get("ownerId") != user["_id"]:
         raise HTTPException(
-            status_code=403, detail="일정을 만든 사람만 초대 메일을 보낼 수 있습니다"
+            status_code=403, detail="일정을 만든 사람만 초대를 보낼 수 있습니다"
         )
 
     is_group = event["type"] == "group"

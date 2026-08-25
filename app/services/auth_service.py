@@ -7,6 +7,7 @@ from app.config import (
     ALLOWED_EMAIL_DOMAIN,
     OTP_MAX_TRIES,
     OTP_TTL_MINUTES,
+    RESTRICT_SIGNUP_DOMAIN,
     SESSION_COOKIE_NAME,
     SESSION_MAX_AGE,
 )
@@ -47,6 +48,10 @@ def normalize_email(email: str) -> str:
 
 
 def is_allowed_email(email: str) -> bool:
+    """Whether this address may register. With RESTRICT_SIGNUP_DOMAIN off,
+    any address can - OTP email verification still applies either way."""
+    if not RESTRICT_SIGNUP_DOMAIN:
+        return True
     return normalize_email(email).endswith(f"@{ALLOWED_EMAIL_DOMAIN}")
 
 
@@ -202,6 +207,13 @@ async def require_user(request: Request) -> dict:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Not signed in"
         )
+    return user
+
+
+async def require_admin(request: Request) -> dict:
+    user = await require_user(request)
+    if not user.get("isAdmin"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admins only")
     return user
 
 

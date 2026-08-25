@@ -20,7 +20,7 @@ from app.db import (
     users_col,
 )
 from app.schemas.event import EventPayload, EventType
-from app.services import email_service
+from app.services import calendar_service, email_service
 
 
 class NotEventOwner(Exception):
@@ -33,6 +33,15 @@ class NotSignedIn(Exception):
 
 class BlindAvailabilityViolation(Exception):
     pass
+
+
+class EventClosed(Exception):
+    pass
+
+
+def is_closed(event: dict) -> bool:
+    """A confirmed schedule freezes responses until the host cancels it."""
+    return bool(event.get("isClosed"))
 
 
 # ---------------------------------------------------------------------------
@@ -102,6 +111,7 @@ async def create_event(payload: EventPayload, owner: dict | None) -> dict:
         "ownerId": owner["_id"] if owner else None,
         "name": payload.name,
         "description": payload.description,
+        "descriptionFormat": payload.descriptionFormat,
         "isArchived": False,
         "isDeleted": False,
         "duration": payload.duration,
@@ -165,6 +175,7 @@ async def update_event(
     updates = {
         "name": payload.name,
         "description": payload.description,
+        "descriptionFormat": payload.descriptionFormat,
         "duration": payload.duration,
         "dates": payload.dates,
         "startOnMonday": payload.startOnMonday,
@@ -231,12 +242,24 @@ async def delete_event(event: dict, requester: dict) -> None:
     responses = await get_event_responses(event["_id"])
     has_other_responses = any(r["userId"] != str(requester["_id"]) for r in responses)
 
+    # A confirmed schedule may have mirrored meetings onto people's real
+    # Google Calendars (see finalize_service.confirm) - those live outside
+    # this DB entirely, so deleting/hiding the event doesn't clean them up
+    # on its own. A meeting that already happened is left alone (it's real
+    # history at that point); only meetings still in the future are removed,
+    # since deleting the room means they're no longer actually happening.
+    synced = (event.get("finalization") or {}).get("googleSyncedEvents")
+
     if has_other_responses:
         # Someone else already responded - keep their data, just hide the event.
-        await events_col.update_one(
-            {"_id": event["_id"]}, {"$set": {"isDeleted": True}}
-        )
+        update: dict = {"isDeleted": True}
+        if synced is not None:
+            update["finalization.googleSyncedEvents"] = (
+                calendar_service.clear_synced_events_detached(synced, only_future=True)
+            )
+        await events_col.update_one({"_id": event["_id"]}, {"$set": update})
     else:
+        calendar_service.clear_synced_events_detached(synced, only_future=True)
         await events_col.delete_one({"_id": event["_id"]})
         await event_responses_col.delete_many({"eventId": event["_id"]})
         await attendees_col.delete_many({"eventId": event["_id"]})
@@ -339,6 +362,8 @@ async def upsert_response(
     event: dict, payload, requester: dict | None
 ) -> tuple[bool, str]:
     """Returns (is_new_response, user_key)."""
+    if is_closed(event):
+        raise EventClosed()
     if event.get("blindAvailabilityEnabled") and requester and payload.guest:
         owner_id = event.get("ownerId")
         if owner_id != requester["_id"]:
@@ -401,6 +426,8 @@ async def upsert_response(
 
 
 async def delete_response(event: dict, payload, requester: dict | None) -> None:
+    if is_closed(event):
+        raise EventClosed()
     if payload.guest:
         if not payload.name:
             raise ValueError("Guest name required")

@@ -4,7 +4,12 @@
 <div class="container">
   <div class="dashboard-head">
     <h1 style="margin: 0;">대시보드</h1>
-    <div style="display: flex; gap: 8px;">
+    <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+      <select class="input list-sort-select" id="sort-select" aria-label="정렬"></select>
+      <div class="toggle-group" id="view-toggle" aria-label="보기 방식">
+        <button type="button" data-view="grid">그리드</button>
+        <button type="button" data-view="list">리스트</button>
+      </div>
       <button class="btn btn-secondary" id="new-folder-btn">+ 폴더</button>
       <button class="btn btn-primary" id="new-event-btn">+ 새 일정</button>
     </div>
@@ -60,6 +65,9 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="{{ asset('js/markdown.js') }}"></script>
+<script src="{{ asset('js/card-sort.js') }}"></script>
+<script src="{{ asset('js/contact-filters.js') }}"></script>
 <script src="{{ asset('js/new-event.js') }}"></script>
 <script src="{{ asset('js/dashboard.js') }}"></script>
 {% endblock %}
