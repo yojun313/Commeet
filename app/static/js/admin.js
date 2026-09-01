@@ -211,7 +211,10 @@ async function openUserDetail(userId) {
       `<div class="cal-detail-row"><span class="cal-detail-label">이메일</span><span>${esc(detail.email)}</span></div>`,
       `<div class="cal-detail-row"><span class="cal-detail-label">가입일</span><span>${fmtDate(detail.createdAt)}</span></div>`,
       `<div class="cal-detail-row"><span class="cal-detail-label">만든 방 수</span><span>${detail.numEventsCreated}</span></div>`,
-      `<div class="cal-detail-row"><span class="cal-detail-label">Google Calendar</span><span>${detail.hasGoogleCalendar ? "연결됨" : "-"}</span></div>`,
+      // 연동을 꺼 둔 서버에서는 이 줄 자체가 의미가 없으므로 빼 둡니다.
+      GOOGLE_CALENDAR_ENABLED
+        ? `<div class="cal-detail-row"><span class="cal-detail-label">Google Calendar</span><span>${detail.hasGoogleCalendar ? "연결됨" : "-"}</span></div>`
+        : "",
     ];
 
     const eventsHtml = detail.events.length
@@ -221,9 +224,9 @@ async function openUserDetail(userId) {
         <div class="admin-event-row">
           <div>
             <div class="admin-event-name">${esc(e.name)}</div>
-            <div class="admin-event-meta">${e.type === "group" ? "그룹" : "일정"} &middot; 응답 ${e.numResponses}명${e.isClosed ? " &middot; 확정됨" : ""}${e.isArchived ? " &middot; 보관됨" : ""}</div>
+            <div class="admin-event-meta">일정 &middot; 응답 ${e.numResponses}명${e.isClosed ? " &middot; 확정됨" : ""}${e.isArchived ? " &middot; 보관됨" : ""}</div>
           </div>
-          <a class="btn btn-sm btn-ghost" href="/${e.type === "group" ? "g" : "e"}/${esc(e.shortId || e._id)}" target="_blank" rel="noopener">열기</a>
+          <a class="btn btn-sm btn-ghost" href="/e/${esc(e.shortId || e._id)}" target="_blank" rel="noopener">열기</a>
         </div>`
           )
           .join("")

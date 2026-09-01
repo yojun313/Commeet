@@ -1,0 +1,106 @@
+{# 연락처를 추가하는 세 가지 방법 - 가입자 검색 / 직접 입력 / 붙여넣기.
+
+   연락처 페이지와 일정 화면의 "초대 보내기 > 연락처 추가" 창이 **같은 마크업**을
+   씁니다. 한쪽에만 항목을 더하는 일이 없도록 하기 위한 것이고, 동작은
+   contact-add.js가 담당합니다 (추가된 뒤 무엇을 새로 고칠지는 부르는 쪽이 정합니다).
+
+   두 화면에 동시에 놓이지 않으므로 id가 겹치지 않습니다. #}
+<div class="field" style="margin-bottom: 8px;">
+  <label for="contact-search">이름 또는 이메일로 검색</label>
+  <input class="input" id="contact-search" placeholder="예: 홍길동 또는 gildong@{{ ALLOWED_EMAIL_DOMAIN }}"
+         autocomplete="off" />
+</div>
+<div id="search-results"></div>
+
+<details class="expandable" id="manual-add" style="margin-top: 4px;">
+  <summary>직접 입력해서 추가하기</summary>
+  <div class="expandable-body">
+    <p class="hint" style="margin-top: 0;">
+      아직 {{ APP_NAME }}에 가입하지 않은 사람도 이메일만 있으면 연락처에 추가할 수 있습니다.
+    </p>
+    <form id="manual-add-form">
+      <div class="field">
+        <label for="manual-name">이름</label>
+        <input class="input" id="manual-name" required />
+      </div>
+      <div class="field">
+        <label for="manual-email">이메일</label>
+        <input class="input" type="email" id="manual-email"
+               placeholder="someone@example.com" required />
+      </div>
+
+      <details class="expandable" id="manual-details">
+        <summary>세부 정보 추가 (선택)</summary>
+        <div class="expandable-body">
+          <div class="contact-form-grid">
+            <div class="field">
+              <label for="manual-relation">구분</label>
+              <select class="input" id="manual-relation"></select>
+            </div>
+            <div class="field">
+              <label for="manual-degree">과정</label>
+              <select class="input" id="manual-degree"></select>
+            </div>
+            <div class="field">
+              <label for="manual-status">학적상태</label>
+              <select class="input" id="manual-status"></select>
+            </div>
+            <div class="field">
+              <label for="manual-gradschool">대학원</label>
+              <input class="input" id="manual-gradschool" placeholder="예: 일반대학원" />
+            </div>
+            <div class="field">
+              <label for="manual-department">학과</label>
+              <input class="input" id="manual-department" placeholder="예: 컴공" />
+            </div>
+            <div class="field">
+              <label for="manual-studentid">학번</label>
+              <input class="input" id="manual-studentid" />
+            </div>
+            <div class="field">
+              <label for="manual-year">학년</label>
+              <input class="input" id="manual-year" />
+            </div>
+            <div class="field">
+              <label for="manual-semester">학기</label>
+              <input class="input" id="manual-semester" />
+            </div>
+            <div class="field">
+              <label for="manual-phone">전화번호</label>
+              <input class="input" id="manual-phone" placeholder="010-0000-0000" />
+            </div>
+          </div>
+          <div class="field" style="margin-bottom: 0;">
+            <label for="manual-memo">메모</label>
+            <textarea class="input" id="manual-memo" rows="2"
+                      placeholder="이 사람에 대해 기억해 둘 내용"></textarea>
+          </div>
+        </div>
+      </details>
+
+      <p class="form-error" id="manual-error"></p>
+      <button class="btn btn-primary" type="submit" style="margin-top: 10px;">연락처에 추가</button>
+    </form>
+  </div>
+</details>
+
+<details class="expandable" id="bulk-add" style="margin-top: 4px;">
+  <summary>여러 명 한 번에 붙여넣기</summary>
+  <div class="expandable-body">
+    <p class="hint" style="margin-top: 0;">
+      POVIS 등에서 복사한 표를 그대로 붙여넣으면 한 번에 등록됩니다. 한 줄에 한 명씩,
+      구분 · 과정 · 대학원 · 학과 · 학년 · 학기 · 학번 · 이름 · 학적상태 · 이메일 · 전화번호 순서(탭 구분)면
+      세부 정보까지 저장되고, 이름과 이메일만 있어도 괜찮습니다.
+    </p>
+    <p class="hint" style="margin-top: 6px;">
+      <strong>이메일이 같으면 같은 사람으로 인식합니다.</strong> 이미 연락처에 있는 이메일이면
+      새로 추가하지 않고 기존 정보를 <strong>덮어씁니다</strong>. 붙여넣은 항목만 갱신되고,
+      메모처럼 표에 없는 정보는 그대로 유지되므로 명단이 바뀔 때마다 다시 붙여넣어도 됩니다.
+    </p>
+    <textarea class="input" id="bulk-add-textarea" rows="8" style="font-family: monospace; font-size: 12px;"
+              placeholder="여기에 표를 붙여넣으세요"></textarea>
+    <p class="form-error" id="bulk-add-error" style="white-space: pre-line;"></p>
+    <p class="hint" id="bulk-add-preview" style="margin: 6px 0 0;"></p>
+    <button class="btn btn-primary" type="button" id="bulk-add-submit" style="margin-top: 8px;">연락처에 추가</button>
+  </div>
+</details>

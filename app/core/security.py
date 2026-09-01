@@ -15,7 +15,7 @@ from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from app.config import SESSION_MAX_AGE, SESSION_SECRET
 
-_serializer = URLSafeTimedSerializer(SESSION_SECRET, salt="pcts-session")
+_serializer = URLSafeTimedSerializer(SESSION_SECRET, salt="commeet-session")
 
 
 def hash_password(password: str) -> str:

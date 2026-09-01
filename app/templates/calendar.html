@@ -38,11 +38,13 @@
     </div>
   </div>
 
+  {% if GOOGLE_CALENDAR_ENABLED %}
   <div class="cal-page-google-row">
     <button class="btn btn-ghost btn-sm" type="button" id="cal-google-settings-btn">
-      Google Calendar 설정{% if not GOOGLE_CALENDAR_ENABLED %} (서버에 설정되지 않음){% endif %}
+      Google Calendar 설정
     </button>
   </div>
+  {% endif %}
 </div>
 
 <div class="dialog-backdrop" id="cal-detail-dialog">
@@ -58,6 +60,7 @@
   </div>
 </div>
 
+{% if GOOGLE_CALENDAR_ENABLED %}
 <div class="dialog-backdrop" id="cal-google-dialog">
   <div class="dialog dialog-md">
     <div class="dialog-header">
@@ -65,7 +68,6 @@
       <button class="btn-icon" type="button" data-dialog-close>&times;</button>
     </div>
 
-    {% if GOOGLE_CALENDAR_ENABLED %}
     <p class="hint" style="margin-top: 0;">연결하면 확정된 약속이 전용 "Commeet" 캘린더에 자동으로 추가됩니다.</p>
     <div id="cal-google-accounts-root" style="margin-bottom: 12px;"></div>
     <a class="btn btn-secondary btn-sm" href="/calendar/google/connect">+ Google Calendar 연결</a>
@@ -118,11 +120,9 @@
         <tr><td>기본 프로필 정보</td><td>연결된 계정을 식별하기 위함</td><td>Google Calendar 연결 시</td></tr>
       </tbody>
     </table>
-    {% else %}
-    <p class="hint" style="margin-top: 0;">이 서버에는 Google Calendar 연동이 설정되어 있지 않습니다.</p>
-    {% endif %}
   </div>
 </div>
+{% endif %}
 {% endblock %}
 
 {% block extra_scripts %}

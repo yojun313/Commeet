@@ -27,6 +27,23 @@ class InvalidMeeting(Exception):
     pass
 
 
+def _booking_by_key(finalization: dict | None) -> dict[str, tuple]:
+    """참가자별 예약 상태를 (시작시각, 같은 약속의 다른 사람들)로 뽑습니다.
+
+    두 확정본을 이 형태로 비교하면 "누구의 예약이 실제로 바뀌었는지"를
+    알 수 있습니다. 같이 오는 사람 목록까지 넣는 이유는, 시간이 그대로여도
+    1:1이던 약속에 다른 사람이 들어오면 그 사람에게도 달라진 약속이기
+    때문입니다.
+    """
+    out: dict[str, tuple] = {}
+    for meeting in (finalization or {}).get("meetings") or []:
+        members = list(meeting.get("participants") or [])
+        for key in members:
+            others = tuple(sorted(k for k in members if k != key))
+            out[key] = (meeting["start"], others)
+    return out
+
+
 def is_confirmed(event: dict) -> bool:
     return bool((event.get("finalization") or {}).get("status") == "confirmed")
 
@@ -133,6 +150,46 @@ async def build_proposal(
     )
 
     by_key = {p["key"]: p for p in participants}
+
+    def _unassigned_reason(key: str) -> dict:
+        """왜 배정되지 못했는지. 이유마다 호스트가 할 수 있는 일이 다릅니다 -
+        정원을 늘릴지, 옵션을 켤지, 본인에게 다시 물어볼지."""
+        person = by_key[key]
+        both = person["availability"] | person["ifNeeded"]
+
+        if not both:
+            return {
+                "code": "no_response",
+                "text": "가능한 시간을 표시하지 않았습니다.",
+            }
+
+        if available[key] or if_needed[key]:
+            # 갈 수 있는 칸은 있는데 최적화가 못 넣음 = 그 칸들이 이미 찼다는 뜻.
+            return {
+                "code": "capacity",
+                "text": "맞는 시간이 있지만 그 시간들이 이미 정원까지 찼습니다. "
+                "정원을 늘리거나 다른 사람의 배정을 옮겨 보세요.",
+            }
+
+        # 후보 블록 어디에도 못 들어감. 원인을 좁혀 봅니다.
+        fits_usable = any(covers_slot(both, s, e, increment) for s, e in usable)
+        if fits_usable and not allow_if_needed:
+            return {
+                "code": "if_needed_off",
+                "text": "“가능(비선호)” 시간만 맞습니다. 위 옵션을 켜면 배정할 수 있습니다.",
+            }
+
+        if any(covers_slot(both, s, e, increment) for s, e in all_slots):
+            return {
+                "code": "host_busy",
+                "text": "가능하다고 답한 시간에 호스트가 참석할 수 없습니다.",
+            }
+
+        return {
+            "code": "too_short",
+            "text": f"연속으로 {meeting_minutes}분을 비울 수 있는 시간이 없습니다.",
+        }
+
     meetings = []
     for index in sorted(assignment):
         start, end = usable[index]
@@ -151,7 +208,14 @@ async def build_proposal(
         "meetingMinutes": meeting_minutes,
         "allowIfNeeded": allow_if_needed,
         "meetings": meetings,
-        "unassigned": [{"key": k, "name": by_key[k]["name"]} for k in unassigned],
+        "unassigned": [
+            {
+                "key": k,
+                "name": by_key[k]["name"],
+                "reason": _unassigned_reason(k),
+            }
+            for k in unassigned
+        ],
         "slots": [
             {
                 "start": start,
@@ -258,6 +322,7 @@ async def confirm(
             )
 
     was_confirmed = is_confirmed(event)
+    previous_finalization = event.get("finalization") if was_confirmed else None
     finalization = {
         "status": "confirmed",
         "capacity": capacity,
@@ -283,7 +348,23 @@ async def confirm(
         {"$set": {"finalization": finalization, "isClosed": True}},
     )
 
-    await _notify(event, host, finalization, by_key, updated=was_confirmed)
+    # 메일은 요청과 분리해 보냅니다 - 수십 명이면 확정 버튼이 그만큼 붙잡힙니다.
+    # 화면은 "이 페이지를 나가도 계속 전송됩니다"라고 안내합니다.
+    #
+    # notifiedCount는 위 update_one 뒤에 붙이므로 DB에는 저장되지 않습니다.
+    # 저장할 이유도 없습니다 - 방금 몇 통을 발송에 넘겼는지는 이번 응답에서만
+    # 쓰는 값이고, 다음에 이 문서를 읽을 때는 의미가 없습니다.
+    # 바뀐 사람에게만 보냅니다. 한 명의 시간을 옮겼는데 전원에게 "일정이
+    # 변경되었습니다" 메일이 가면, 받는 사람은 자기 일정이 바뀐 줄 알고
+    # 다시 확인해야 합니다.
+    finalization["notifiedCount"] = _notify(
+        event,
+        host,
+        finalization,
+        by_key,
+        previous=previous_finalization,
+        updated=was_confirmed,
+    )
     return finalization
 
 
@@ -296,45 +377,101 @@ async def cancel(event: dict, host: dict) -> None:
     _host_response, participants = await _load_people(event)
     by_key = {p["key"]: p for p in participants}
 
-    calendar_service.clear_synced_events_detached(finalization.get("googleSyncedEvents"))
+    calendar_service.clear_synced_events_detached(
+        finalization.get("googleSyncedEvents")
+    )
 
     await events_col.update_one(
         {"_id": event["_id"]},
         {"$set": {"isClosed": False}, "$unset": {"finalization": ""}},
     )
 
-    for meeting in finalization.get("meetings") or []:
-        for key in meeting.get("participants") or []:
-            person = by_key.get(key)
-            if person and person["email"]:
-                await email_service.send_meeting_cancelled_email(
-                    person["email"], host, event, meeting["start"]
-                )
+    # 확정과 같은 이유로 요청과 분리해 보냅니다.
+    email_service.send_many_detached(
+        [
+            email_service.build_meeting_cancelled_mail(
+                by_key[key]["email"], host, event, meeting["start"]
+            )
+            for meeting in finalization.get("meetings") or []
+            for key in meeting.get("participants") or []
+            if by_key.get(key) and by_key[key]["email"]
+        ]
+    )
 
 
-async def _notify(
-    event: dict, host: dict, finalization: dict, by_key: dict, *, updated: bool
-) -> None:
+def _notify(
+    event: dict,
+    host: dict,
+    finalization: dict,
+    by_key: dict,
+    *,
+    previous: dict | None = None,
+    updated: bool = False,
+) -> int:
+    """예약이 달라진 사람에게만 안내를 보냅니다. 발송에 넘긴 통수를 반환합니다.
+
+    `previous`가 있으면(=재확정) 이전 확정본과 비교해 **바뀐 사람만** 고릅니다.
+    처음 확정할 때는 previous가 없으므로 전원에게 갑니다.
+
+    메일 본문은 사람마다 다르므로(자기 시간, 같이 오는 사람) 한 통에 묶을 수는
+    없습니다. 대신 send_many_detached()가 연결 몇 개로 나눠 동시에, 그리고
+    요청과 분리해 보냅니다.
+    """
+    before = _booking_by_key(previous)
+    after = _booking_by_key(finalization)
+    mails = []
+
+    # 확정된 전체 명단 (시간 순). 각자 자기 시간과 같은 자리에 오는 사람만
+    # 알아서는 서로 시간을 바꾸기 어려워, 안내에 전체를 함께 싣습니다.
+    #
+    # 비공개(blind) 모드는 예외입니다 - 그 모드는 참가자끼리 서로의 응답을
+    # 감추자는 것이라, 메일로 명단을 돌리면 화면에서 감춘 것이 무의미해집니다.
+    roster = None
+    if not event.get("blindAvailabilityEnabled"):
+        roster = [
+            (
+                meeting["start"],
+                meeting["end"],
+                [by_key[k]["name"] for k in meeting["participants"] if k in by_key],
+            )
+            for meeting in sorted(finalization["meetings"], key=lambda m: m["start"])
+        ]
+        roster = [item for item in roster if item[2]]
+
     for meeting in finalization["meetings"]:
-        others = [by_key[k]["name"] for k in meeting["participants"] if k in by_key]
+        names = [by_key[k]["name"] for k in meeting["participants"] if k in by_key]
         for key in meeting["participants"]:
             person = by_key.get(key)
             if not person or not person["email"]:
                 continue
-            await email_service.send_meeting_confirmed_email(
-                person["email"],
-                host,
-                event,
-                meeting["start"],
-                meeting["end"],
-                [n for n in others if n != person["name"]],
-                updated=updated,
+            # 재확정인데 이 사람의 예약이 그대로면 보내지 않습니다.
+            if previous is not None and before.get(key) == after.get(key):
+                continue
+            mails.append(
+                email_service.build_meeting_confirmed_mail(
+                    person["email"],
+                    host,
+                    event,
+                    meeting["start"],
+                    meeting["end"],
+                    [n for n in names if n != person["name"]],
+                    # 원래 배정이 있던 사람에게만 "변경"이라고 알립니다.
+                    # 새로 들어온 사람에게는 첫 확정 안내가 맞습니다.
+                    updated=updated and key in before,
+                    roster=roster,
+                )
             )
 
     # People the optimizer could not place still deserve to hear the outcome.
     for key in finalization["unassigned"]:
         person = by_key.get(key)
-        if person and person["email"]:
-            await email_service.send_meeting_unassigned_email(
-                person["email"], host, event
-            )
+        if not person or not person["email"]:
+            continue
+        # 원래도 미배정이었다면 달라진 것이 없습니다.
+        if previous is not None and key not in before:
+            continue
+        mails.append(
+            email_service.build_meeting_unassigned_mail(person["email"], host, event)
+        )
+
+    return email_service.send_many_detached(mails)

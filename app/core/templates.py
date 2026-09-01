@@ -10,6 +10,7 @@ from app.config import (
     SUPPORT_EMAIL,
 )
 from app.core.paths import STATIC_DIR, TEMPLATES_DIR
+from app.core.redirects import sign_in_url, sign_up_url
 
 
 def asset(path: str) -> str:
@@ -38,3 +39,6 @@ templates.env.globals["RESTRICT_SIGNUP_DOMAIN"] = RESTRICT_SIGNUP_DOMAIN
 templates.env.globals["SUPPORT_EMAIL"] = SUPPORT_EMAIL
 templates.env.globals["PROFESSOR_EMAIL"] = PROFESSOR_EMAIL
 templates.env.globals["asset"] = asset
+# 헤더의 로그인/시작하기 버튼이 "보던 페이지"로 돌아오게 하려면 필요합니다.
+templates.env.globals["sign_in_url"] = sign_in_url
+templates.env.globals["sign_up_url"] = sign_up_url

@@ -24,3 +24,9 @@ class AddContactRequest(ContactDetailsMixin):
 class UpdateContactRequest(ContactDetailsMixin):
     name: str = Field(min_length=1)
     email: EmailStr
+
+
+class DeleteContactsRequest(BaseModel):
+    # 선택 삭제. 한 번에 지울 수 있는 양을 제한해 실수로 전체를 날리는 요청이
+    # 무한정 커지지 않게 합니다.
+    ids: list[str] = Field(min_length=1, max_length=500)

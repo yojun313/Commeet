@@ -1143,11 +1143,9 @@ textarea.input {
   max-width: 840px;
 }
 
-/* Fixed-size modal (the event page's "자세히 보기" grid view) - deliberately
-   `height`, not `max-height`, so it's always exactly this size regardless
-   of how much content is inside (short or long respondent lists, few or
-   many time slots) - see .grid-detail-body below for how the reused
-   .event-layout content scrolls *inside* that fixed frame instead. */
+/* 크게 쓰는 창 (면담 기록 폼). `max-height`가 아니라 `height`인 것은 의도적입니다 -
+   내용이 많든 적든 항상 같은 크기여서, 참석자가 늘거나 줄어도 창이 출렁이지
+   않고 안쪽이 스크롤됩니다 (.rec-form-body 참고). */
 .dialog.dialog-xl {
   width: 92vw;
   max-width: 1300px;
@@ -1159,22 +1157,6 @@ textarea.input {
 }
 .dialog.dialog-xl .dialog-header {
   flex-shrink: 0;
-}
-.grid-detail-body {
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-}
-/* The real .event-layout node (calendar + respondents sidebar) gets
-   reparented in here by event-grid.js when the modal opens, and moved back
-   on close - same live DOM, same state, just relocated and enlarged. */
-.grid-detail-body .event-layout {
-  height: 100%;
-  padding-bottom: 0;
-}
-.grid-detail-body .grid-scroll {
-  max-height: 100%;
-  overflow-y: auto;
 }
 
 /* Side-by-side layout for the "새 일정 만들기" dialog, so the date-picker
@@ -1691,12 +1673,12 @@ textarea.input {
   transition: background-color 0.15s, transform 0.15s, box-shadow 0.15s;
   animation: finalize-pulse 2.6s ease-in-out infinite;
 }
-/* The label swaps between "일정 확정하기" and "확정 내용 보기/수정" once an
-   event is confirmed. Reserving the wider of the two keeps the button - and
-   every header button to its left - from jumping when that happens. */
+/* 라벨이 "최적 배정 계산하기"(122px)와 "확정 내용 보기/수정"(126px) 사이를
+   오갑니다. 넓은 쪽을 미리 잡아 두어야 확정 전후로 이 버튼과 왼쪽 버튼들이
+   흔들리지 않습니다. 문구를 바꾸면 이 값도 다시 재야 합니다. */
 #finalize-link-label {
   display: inline-block;
-  min-width: 122px;
+  min-width: 126px;
   text-align: center;
 }
 .btn-finalize:hover {
@@ -1736,7 +1718,9 @@ textarea.input {
      respondents list below, instead of a long respondent list growing the
      whole page taller than the calendar. */
   align-items: stretch;
-  padding-bottom: 50px;
+  /* 페이지 하단 여백은 컨테이너가 담당합니다. 여기에 두면 아래에 오는
+     면담 기록 카드까지 밀어내 캘린더와 사이가 벌어집니다. */
+  padding-bottom: 0;
 }
 
 .grid-toolbar {
@@ -1867,10 +1851,8 @@ textarea.input {
 }
 
 .grid-scroll {
-  /* Horizontal only: the grid is never height-capped on the page (a longer
-     day just makes a taller page - see syncCalendarHeight). The one place
-     it scrolls vertically is inside the fixed-size "자세히 보기" modal,
-     which opts in via .grid-detail-body .grid-scroll below. */
+  /* Horizontal only: the grid is never height-capped on the page - a longer
+     day just makes a taller page (see syncCalendarHeight). */
   overflow-x: auto;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
@@ -1998,10 +1980,32 @@ textarea.input {
 .month-cell:hover {
   border-color: var(--color-primary);
 }
+/* 지난 날짜. 이미 선택된 날짜는 지났어도 눌러서 뺄 수 있어야 하므로
+   (new-event.js renderCalendar) disabled가 붙지 않습니다. */
+.month-cell:disabled {
+  cursor: not-allowed;
+  color: var(--color-text-faint);
+  background-color: var(--color-surface-2);
+  border-color: var(--color-border-light);
+}
+.month-cell:disabled:hover {
+  border-color: var(--color-border-light);
+}
 .month-cell.available {
   background-color: var(--color-primary);
   color: #fff;
   border-color: var(--color-primary);
+}
+/* 오늘 날짜. 테두리(border)가 아니라 안쪽 링을 쓰는 이유는, 선택된 칸은
+   이미 크림슨으로 꽉 차 있어 테두리 색이 묻히기 때문입니다. 선택 여부와
+   상관없이 항상 보이게 링 색만 바꿔 줍니다. 칸 크기는 그대로라 달을
+   넘겨도 격자가 흔들리지 않습니다. */
+.month-cell.today {
+  font-weight: 800;
+  box-shadow: inset 0 0 0 2px var(--color-primary);
+}
+.month-cell.available.today {
+  box-shadow: inset 0 0 0 2px #fff;
 }
 /* Leading/trailing padding cells (days from the previous/next month) need
    the same aspect-ratio as a real .month-cell - without it, CSS Grid's
@@ -2065,6 +2069,14 @@ textarea.input {
   min-height: 120px;
   overflow-y: auto;
 }
+/* 응답자 목록에서 내 줄 표시. 이름과 붙되 이름 자체보다는 흐리게 - 찾기 위한
+   표지이지 이름의 일부가 아닙니다. */
+.respondent-me {
+  margin-left: 3px;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
 .respondent-row {
   display: flex;
   align-items: center;
@@ -2134,6 +2146,14 @@ textarea.input {
 .edit-bar {
   position: sticky;
   bottom: 0;
+  /* 격자가 화면보다 길면 아래쪽 행들이 이 막대 **밑으로** 지나갑니다.
+     그런데 시간 라벨 열(.time-row-label, z-index 1)과 날짜 머리글
+     (.day-col-header, z-index 2)은 자기 z-index를 갖는 반면 이 막대는
+     z-index가 auto라, 스크롤하면 흰 배경의 라벨 열이 막대 위에 덧그려져
+     "가능" 버튼 왼쪽이 잘려 보였습니다. 격자에서 가장 높은 값(모서리 칸
+     z-index 3)보다 위로 올리되, 헤더(40)와 다이얼로그(100 이상) 아래에
+     둡니다. */
+  z-index: 5;
   background-color: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
@@ -2487,6 +2507,15 @@ select.list-sort-select {
   margin-bottom: 6px;
 }
 
+/* "연락처에서 선택" 라벨과 "+ 연락처 추가" 버튼을 한 줄에. */
+.invite-contacts-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
 .invite-contact-list {
   max-height: 260px;
   overflow-y: auto;
@@ -2782,6 +2811,13 @@ select.list-sort-select {
   border-radius: var(--radius-sm);
   margin: 1px 2px;
   box-shadow: var(--shadow-sm);
+  /* 카드 바탕을 잡으면 그 시간의 참가자 전원이 함께 움직입니다
+     (finalize.js startGroupDrag). 이름 칩은 자기 몫만 움직입니다. */
+  cursor: grab;
+  touch-action: none;
+}
+.cal-cell-booked:active {
+  cursor: grabbing;
 }
 .cal-cell-booked.cal-cell-over {
   background-color: var(--color-danger);
@@ -2883,6 +2919,13 @@ select.list-sort-select {
   pointer-events: none;
   z-index: 500;
   white-space: nowrap;
+}
+/* 여러 명을 함께 옮기는 중 - 이름이 늘어나므로 한 줄로 두지 않습니다. */
+.cal-drag-ghost-group {
+  max-width: 320px;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.4;
 }
 body.dragging-active {
   cursor: grabbing;
@@ -3291,6 +3334,24 @@ body.dragging-active * {
   font-size: 68px;
   color: var(--color-accent);
   margin-bottom: 6px;
+}
+.fin-stale {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.error-hint {
+  max-width: 460px;
+  margin: 10px auto 0;
+  color: var(--color-text-muted);
+  font-size: 14px;
+  line-height: 1.7;
+}
+.error-page .btn {
+  margin-top: 24px;
 }
 
 /* ==========================================================================
@@ -3885,4 +3946,789 @@ body.dragging-active * {
   font-weight: 700;
   color: var(--color-text-faint);
   margin-bottom: 6px;
+}
+
+/* ==========================================================================
+   면담 기록 / 학생지도비 신청서 폼 다이얼로그
+   (일정 페이지의 시간대별 기록에서 열립니다 - record-form.js)
+   ========================================================================== */
+
+/* --- form dialog --- */
+
+/* Kept to one line: the meeting title is arbitrary user text, and letting it
+   wrap would make the header - and the body below it - a different height
+   from one record to the next. */
+#rec-form-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Scrolls inside the fixed .dialog-xl frame, so the modal itself never
+   changes size as attendees or notes are added. */
+.rec-form-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.rec-form-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 26px;
+  align-items: start;
+}
+.rec-form-col {
+  min-width: 0;
+}
+.rec-section {
+  margin-bottom: 22px;
+}
+.rec-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.rec-section-title {
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0 0 8px;
+}
+.rec-section-head .rec-section-title {
+  margin-bottom: 0;
+}
+.rec-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 12px;
+}
+.rec-form-footer {
+  flex-shrink: 0;
+}
+.rec-footer-spacer {
+  flex: 1;
+}
+.rec-danger {
+  color: var(--color-danger);
+}
+
+.rec-attendee-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+/* Fixed column widths, so a long name can never widen the 학번 or 소속
+   controls out of alignment with the rows above and below. */
+.rec-attendee {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) 92px 118px 28px;
+  align-items: center;
+  gap: 6px;
+}
+.rec-attendee.is-absent {
+  opacity: 0.5;
+}
+.rec-attendee .input {
+  padding: 7px 9px;
+  font-size: 13px;
+  min-width: 0;
+}
+.rec-attendee-check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.rec-attendee-remove {
+  font-size: 18px;
+  line-height: 1;
+  color: var(--color-text-faint);
+}
+
+/* Must be written as element+class to out-specify `textarea.input`'s
+   `min-height: 72px` above, the same trap as .list-sort-select. */
+textarea.rec-textarea {
+  width: 100%;
+  /* Tall by default so the fixed-height dialog isn't half empty for a short
+     meeting; it scrolls internally rather than growing the frame. */
+  min-height: 220px;
+  resize: vertical;
+  line-height: 1.6;
+  font-family: inherit;
+}
+textarea.rec-textarea-sm {
+  min-height: 76px;
+}
+/* 면담 내용 네 항목(학업/생활/진로/기타). 공통 칸과 참석자별 칸이 같은
+   묶음을 쓰므로 (record-form.js buildNoteFields) 규칙도 하나입니다.
+   넷을 세로로 쌓으면 다이얼로그가 너무 길어져 2열로 접습니다. */
+.rec-note-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.rec-note-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.rec-note-field-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+@media (max-width: 900px) {
+  .rec-note-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.rec-note-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+/* display를 지정한 클래스 규칙은 브라우저 기본 [hidden] { display: none }
+   보다 강합니다 - 이 줄이 없으면 "동일 내용"으로 돌아와도 참석자별 입력칸이
+   그대로 보입니다. */
+.rec-note-list[hidden] {
+  display: none;
+}
+.rec-note-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  margin-bottom: 4px;
+}
+
+.rec-settlement-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.rec-settlement {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 12px;
+}
+.rec-settlement-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.rec-settlement-aff {
+  font-size: 13px;
+  font-weight: 700;
+}
+.rec-settlement-amount {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--color-primary);
+  /* Tabular figures keep the amount from shifting as digits change. */
+  font-variant-numeric: tabular-nums;
+}
+.rec-settlement-calc {
+  font-size: 12px;
+  color: var(--color-text-faint);
+  margin-bottom: 8px;
+}
+.rec-settlement-fields {
+  display: grid;
+  grid-template-columns: 130px minmax(0, 1fr);
+  gap: 0 12px;
+}
+.rec-settlement-fields .field label {
+  font-size: 11px;
+}
+.rec-file-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.rec-file-name {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rec-signature-canvas {
+  display: block;
+  width: 100%;
+  height: 130px;
+  background-color: #fff;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  /* Without this, dragging to sign scrolls the dialog on touch devices. */
+  touch-action: none;
+  cursor: crosshair;
+}
+.rec-signature-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 6px;
+}
+.rec-signature-actions .hint {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .rec-form-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  /* Stacks name over the smaller fields so nothing gets squeezed to a few
+     characters wide on a phone. */
+  .rec-attendee {
+    grid-template-columns: 24px minmax(0, 1fr) 28px;
+    grid-template-areas:
+      "check name remove"
+      ". sid  ."
+      ". aff  .";
+    gap: 4px 6px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--color-border-light);
+  }
+  .rec-attendee-check {
+    grid-area: check;
+  }
+  .rec-attendee-name {
+    grid-area: name;
+  }
+  .rec-attendee-sid {
+    grid-area: sid;
+  }
+  .rec-attendee-aff {
+    grid-area: aff;
+  }
+  .rec-attendee-remove {
+    grid-area: remove;
+  }
+  .rec-settlement-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  /* Four footer buttons wrap to two rows on a phone; keeping them compact
+     stops the footer from eating the fixed dialog's body height. */
+  .rec-form-footer .btn {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+  textarea.rec-textarea {
+    min-height: 160px;
+  }
+}
+
+/* --- 확정 화면의 시간대별 면담 기록 (/e/{id}/finalize 4번 섹션) --------- */
+
+.fin-records-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+.fin-records-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+/* 고정 폭 컬럼: 참석자 이름 길이가 달라도 상태·버튼 열이 흔들리지 않습니다. */
+.fin-record-row {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr) 150px 168px;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-border-light);
+}
+.fin-record-row:last-child {
+  border-bottom: none;
+}
+.fin-record-when {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.fin-record-time {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-heading);
+  white-space: nowrap;
+}
+/* 참석자가 많아도 한 줄로 - 행 높이가 들쭉날쭉해지지 않게 합니다. */
+.fin-record-people {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fin-record-state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.fin-record-amount {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-primary);
+  font-variant-numeric: tabular-nums;
+}
+.fin-record-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.fin-record-row.is-done .fin-record-time {
+  color: var(--color-text-muted);
+}
+
+@media (max-width: 900px) {
+  /* 좁은 화면에서는 시간/참석자 위, 상태/버튼 아래로 접습니다. */
+  .fin-record-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "when   state"
+      "people actions";
+    gap: 6px 10px;
+  }
+  .fin-record-when { grid-area: when; }
+  .fin-record-people { grid-area: people; }
+  .fin-record-state { grid-area: state; justify-content: flex-end; }
+  .fin-record-actions { grid-area: actions; }
+}
+
+/* 확정/취소 버튼을 페이지 맨 위 헤더로 올렸습니다. 페이지가 길어서 아래쪽에
+   두면 배정을 훑고 나서 다시 스크롤해 내려가야 했습니다. */
+.finalize-top-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+@media (max-width: 700px) {
+  /* 좁은 화면에서는 헤더 액션이 줄바꿈되므로 두 버튼이 한 줄을 채우게 둡니다. */
+  .finalize-top-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
+/* 연락처 선택 드롭다운을 체크박스 목록으로 바꾸면서 - 한 번에 여러 명을
+   고르고, 이미 고른 사람도 체크된 채로 남아 되돌리기 쉽습니다. */
+.contact-picker-row.checkbox-row {
+  display: flex;
+  align-items: center;
+  /* .contact-picker-row의 space-between을 되돌립니다. 그 값은 "이름 왼쪽 /
+     이메일 오른쪽" 한 줄 배치용이었는데, 체크박스 + 텍스트 두 덩어리가 되면서
+     텍스트를 행 오른쪽 끝까지 밀어냈습니다. */
+  justify-content: flex-start;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  margin: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.contact-picker-row.checkbox-row:hover {
+  background-color: var(--color-surface-2);
+}
+/* 이름과 이메일을 두 줄로 - 이름 길이가 달라도 이메일 위치가 흔들리지
+   않도록 각자 한 줄을 차지합니다. */
+.contact-picker-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  /* 남은 폭을 채워야 긴 이메일이 말줄임될 자리가 생깁니다. */
+  flex: 1;
+  min-width: 0;
+  gap: 1px;
+  text-align: left;
+}
+.contact-picker-copy .contact-picker-name,
+.contact-picker-copy .contact-picker-email {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 참가자 카드를 끌 때, 그 사람이 참석할 수 있는 칸을 전부 표시합니다.
+   어디로 옮길 수 있는지 보이지 않으면 유효한 칸을 하나씩 찍어 봐야 합니다. */
+.cal-grid.cal-picking .cal-cell {
+  /* 후보가 아닌 칸은 눌러 두어 가능한 칸이 도드라지게 합니다. */
+  opacity: 0.35;
+  transition: opacity 0.12s;
+}
+.cal-grid.cal-picking .cal-cell-eligible {
+  opacity: 1;
+  box-shadow: inset 0 0 0 2px var(--color-navy);
+}
+/* 이미 배정된 칸은 원래 색이 진해서, 후보 표시가 묻히지 않도록
+   테두리를 안쪽으로 한 겹 더 줍니다. */
+.cal-grid.cal-picking .cal-cell-booked.cal-cell-eligible {
+  box-shadow: inset 0 0 0 2px var(--color-navy), inset 0 0 0 4px rgba(255, 255, 255, 0.5);
+}
+/* 드롭 대상 표시는 후보 표시보다 우선합니다. */
+.cal-grid.cal-picking .cal-cell.cal-drop-target {
+  opacity: 1;
+}
+
+/* 미배정 사유 - 같은 사유끼리 묶어 보여 줍니다. */
+.unassigned-reason-row {
+  padding: 8px 0;
+  border-top: 1px solid var(--color-border-light);
+}
+.unassigned-reason-row:first-of-type {
+  border-top: none;
+}
+.unassigned-reason-names {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-heading);
+}
+.unassigned-reason-text {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+  line-height: 1.5;
+}
+/* 배정 목록에서 그 사람 줄에 붙는 사유 표시. 크기가 고정이라 이름 길이나
+   사유 유무로 줄 높이가 달라지지 않습니다. */
+.assign-reason {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background-color: var(--color-warning-bg);
+  color: var(--color-warning-text);
+  border: 1px solid var(--color-warning-border);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: help;
+}
+
+/* 서명 칸 아래 버튼 두 개 (직접 긋기 / 이미지 올리기). 안내 문구 길이가
+   파일명에 따라 달라지므로, 버튼 묶음은 줄어들지 않게 고정합니다. */
+.rec-signature-buttons {
+  display: inline-flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* 연락처 일괄 선택/삭제 바 */
+.contacts-select-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+  padding: 0 2px;
+}
+.contacts-select-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  margin: 0;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+/* 선택 수가 바뀌어도 삭제 버튼이 좌우로 흔들리지 않도록 폭을 잡아 둡니다. */
+#contact-selected-count {
+  min-width: 82px;
+  font-size: 12px;
+}
+.contacts-delete-selected {
+  margin-left: auto;
+  /* "선택 삭제"와 "선택 삭제 (12)" 중 넓은 쪽을 미리 확보 */
+  min-width: 104px;
+  color: var(--color-danger);
+}
+.contacts-delete-selected:disabled {
+  color: var(--color-text-faint);
+  cursor: default;
+}
+
+/* 카드의 체크박스 - 그립 왼쪽에 붙되 카드 높이에 영향을 주지 않습니다. */
+.contact-check {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  margin: 0;
+  cursor: pointer;
+}
+.contact-row.is-selected {
+  border-color: var(--color-primary);
+  background-color: var(--color-primary-pale);
+}
+
+/* 확정 이후 바뀐 배정 목록 (확정 화면 상단) */
+.fin-changes-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.fin-changes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+/* 고정 폭 컬럼 - 이름이나 시각 길이가 달라도 "변경 종류" 열이 흔들리지
+   않아, 여러 줄을 위아래로 훑어 읽을 수 있습니다. */
+.fin-change-row {
+  display: grid;
+  grid-template-columns: 130px 128px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 5px 0;
+  font-size: 13px;
+}
+.fin-change-name {
+  font-weight: 700;
+  color: var(--color-heading);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fin-change-kind {
+  justify-self: start;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.fin-change-moved,
+.fin-change-party {
+  background-color: var(--color-warning-bg);
+  color: var(--color-warning-text);
+}
+.fin-change-added {
+  background-color: var(--color-primary-pale-2);
+  color: var(--color-primary);
+}
+.fin-change-removed {
+  background-color: var(--color-danger-bg);
+  color: var(--color-danger-text);
+}
+.fin-change-when {
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fin-change-none {
+  color: var(--color-text-faint);
+}
+
+@media (max-width: 700px) {
+  .fin-change-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "name kind"
+      "when when";
+    gap: 2px 8px;
+  }
+  .fin-change-name { grid-area: name; }
+  .fin-change-kind { grid-area: kind; justify-self: end; }
+  .fin-change-when { grid-area: when; }
+}
+
+/* 대시보드 섹션 구분 (내가 만든 일정 / 참여 중인 일정) */
+.dashboard-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--color-heading);
+  margin: 26px 0 10px;
+}
+.dashboard-section-title:first-child {
+  margin-top: 6px;
+}
+.dashboard-section-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background-color: var(--color-surface-3);
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* 참여 중인 일정 카드 - 내 일정과 눈으로 구분되도록 살짝 눌러 둡니다. */
+.event-card-readonly {
+  background-color: var(--color-surface-2);
+}
+/* 액션 줄의 높이를 내 일정 카드와 맞춰, 두 종류가 섞여 보여도 카드 높이가
+   들쭉날쭉해지지 않게 합니다. */
+.event-card-readonly-note {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 4px;
+  font-size: 12px;
+  color: var(--color-text-faint);
+}
+
+/* 휴지통 (/trash) */
+.trash-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.trash-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.trash-main {
+  min-width: 0;
+}
+.trash-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-heading);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.trash-meta {
+  font-size: 12px;
+  color: var(--color-text-faint);
+  margin-top: 2px;
+}
+.trash-counts {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  margin-top: 4px;
+}
+/* 버튼 묶음은 줄어들지 않게 - 일정 이름 길이가 달라도 위치가 고정됩니다. */
+.trash-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.trash-purge {
+  color: var(--color-danger);
+}
+.purge-list {
+  margin: 0 0 4px;
+  padding-left: 20px;
+  list-style: disc;
+  font-size: 13px;
+  color: var(--color-text-muted);
+  line-height: 1.8;
+}
+
+@media (max-width: 700px) {
+  .trash-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .trash-actions {
+    justify-content: flex-end;
+  }
+}
+
+/* 취소/삭제된 일정 링크를 눌렀을 때 나오는 안내 */
+.removed-event {
+  max-width: 520px;
+  margin: 80px auto;
+  text-align: center;
+}
+.removed-event-icon {
+  display: flex;
+  justify-content: center;
+  color: var(--color-text-faint);
+  margin-bottom: 14px;
+}
+.removed-event h1 {
+  font-size: 22px;
+  margin: 0 0 10px;
+}
+.removed-event-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-heading);
+  margin: 0 0 14px;
+  word-break: break-word;
+}
+.removed-event-desc {
+  color: var(--color-text-muted);
+  line-height: 1.7;
+  margin: 0 0 10px;
+}
+.removed-event-host {
+  font-size: 13px;
+  color: var(--color-text-faint);
+  margin: 0;
+}
+.removed-event-actions {
+  margin-top: 24px;
+}
+/* 휴지통에서 "취소됨"은 참가자에게 영향이 있었던 일이라 눈에 띄게 둡니다. */
+.trash-badge-cancelled {
+  background-color: var(--color-warning-bg);
+  color: var(--color-warning-text);
+}
+
+/* 연락처 다중 선택 - Shift+클릭으로 범위를 고를 때 글자가 함께 드래그
+   선택되지 않게 합니다. 다만 이메일은 복사할 일이 많아 그대로 둡니다. */
+/* .contact-row는 위쪽 "가입자 검색" 결과에도 쓰이므로, 선택 규칙은 실제
+   연락처 목록(#contacts-list) 안쪽에만 적용합니다. */
+#contacts-list .contact-row {
+  user-select: none;
+  /* 카드 아무 곳이나 눌러 선택할 수 있다는 걸 커서로 알립니다. */
+  cursor: pointer;
+}
+#contacts-list .contact-row .email {
+  user-select: text;
+}
+#contacts-list .contact-row input {
+  cursor: initial;
+}
+#contacts-list .contact-row .contact-grip {
+  cursor: grab;
+}
+#contacts-list .contact-row button,
+#contacts-list .contact-row a,
+#contacts-list .contact-row label {
+  cursor: pointer;
+}
+/* 사용법 안내는 좁은 화면에서 먼저 숨깁니다 - 없어도 클릭은 동작합니다. */
+.contacts-select-hint {
+  font-size: 12px;
+  color: var(--color-text-faint);
+  white-space: nowrap;
+}
+@media (max-width: 900px) {
+  .contacts-select-hint {
+    display: none;
+  }
 }

@@ -652,7 +652,9 @@ async def _delete_synced_records(records: list[dict]) -> None:
                     await delete_calendar_event(token, calendar_id, event_id)
                 except httpx.HTTPError:
                     logger.warning(
-                        "could not delete Google event %s from %s", event_id, calendar_id
+                        "could not delete Google event %s from %s",
+                        event_id,
+                        calendar_id,
                     )
 
 

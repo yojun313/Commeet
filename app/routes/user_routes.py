@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Request, Response
 
+from app.config import GOOGLE_CALENDAR_ENABLED
 from app.core.ids import to_object_id
 from app.core.serialize import jsonable
 from app.schemas.folder import SetEventFolderRequest
@@ -9,7 +10,7 @@ from app.schemas.user import (
     UpdateCalendarOptionsRequest,
     UpdateNameRequest,
 )
-from app.services import auth_service, folder_service, user_service
+from app.services import auth_service, event_service, folder_service, user_service
 from app.services.auth_service import clear_session_cookie, require_user
 
 router = APIRouter(prefix="/api/user", tags=["user"])
@@ -25,7 +26,12 @@ async def get_profile(request: Request):
             "email": user["email"],
             "name": user.get("name", ""),
             "picture": user.get("picture", ""),
-            "calendarAccounts": {
+            # 연동을 꺼 둔 서버에서는 화면에 쓸 곳이 없으므로 내보내지
+            # 않습니다. 저장된 계정 정보 자체는 지우지 않아, 다시 켜면
+            # 그대로 돌아옵니다.
+            "calendarAccounts": {}
+            if not GOOGLE_CALENDAR_ENABLED
+            else {
                 key: {
                     **{k: v for k, v in account.items() if k != "oauth"},
                     # Confirmed Commeet meetings only get mirrored onto accounts
@@ -77,10 +83,26 @@ async def update_calendar_options(
     return jsonable(options)
 
 
+@router.get("/events/version")
+async def get_my_events_version(request: Request):
+    """대시보드·캘린더가 자동 갱신 여부를 판단할 때 두드리는 엔드포인트.
+    본문은 지문 하나뿐이라, 실제로 바뀌었을 때만 무거운 조회를 합니다."""
+    user = await require_user(request)
+    return {"v": await user_service.get_dashboard_version(user)}
+
+
 @router.get("/events")
 async def get_my_events(request: Request):
     user = await require_user(request)
     return jsonable(await user_service.get_dashboard_events(user))
+
+
+@router.get("/deleted-events")
+async def get_deleted_events(request: Request):
+    """휴지통 페이지용. 남이 응답한 일정을 지우면 숨김 처리되는데,
+    그렇게 숨겨진 내 일정 목록입니다."""
+    user = await require_user(request)
+    return jsonable(await event_service.list_deleted_events(user))
 
 
 @router.post("/events/{event_id}/set-folder")

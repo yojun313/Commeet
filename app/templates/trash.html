@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}휴지통 - {{ APP_NAME }}{% endblock %}
+{% block content %}
+<div class="container" style="padding-bottom: 60px;">
+  <div class="dashboard-head">
+    <div>
+      <h1 style="margin: 0 0 4px;">휴지통</h1>
+      <p class="hint" style="margin: 0;">
+        다른 사람의 응답이 있는 일정을 삭제하면 완전히 지우지 않고 여기에 보관합니다.
+        되돌리거나, 응답까지 함께 완전히 지울 수 있습니다.
+      </p>
+    </div>
+    <a class="btn btn-ghost btn-sm" href="/home">&lsaquo; 대시보드로</a>
+  </div>
+
+  <div id="trash-root">
+    <div class="empty-state"><span class="spinner"></span></div>
+  </div>
+</div>
+
+<div class="dialog-backdrop" id="purge-dialog">
+  <div class="dialog dialog-sm">
+    <div class="dialog-header">
+      <h2>완전히 삭제</h2>
+      <button class="btn-icon" type="button" data-dialog-close>&times;</button>
+    </div>
+    <p id="purge-target" style="font-weight: 700;"></p>
+    <p>아래 데이터가 <b>DB에서 모두 지워집니다.</b> 되돌릴 수 없습니다.</p>
+    <ul class="purge-list" id="purge-list"></ul>
+    <div class="dialog-footer">
+      <button type="button" class="btn btn-ghost" data-dialog-close>취소</button>
+      <button type="button" class="btn btn-danger" id="confirm-purge-btn">완전히 삭제</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ asset('js/trash.js') }}"></script>
+{% endblock %}

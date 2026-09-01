@@ -14,14 +14,23 @@ router = APIRouter(tags=["calendar"])
 STATE_COOKIE = "google_oauth_state"
 
 
-@router.get("/calendar/google/connect")
-async def google_connect(request: Request):
-    await require_user(request)
+def _require_enabled() -> None:
+    """연동이 꺼져 있으면 어떤 경로로도 동작하지 않게 합니다.
+
+    UI에서 감추는 것만으로는 부족합니다 - 주소를 직접 치거나 예전 링크를
+    눌러 들어올 수 있고, 그때 반쯤 동작하면 상태가 어긋납니다.
+    """
     if not GOOGLE_CALENDAR_ENABLED:
         raise HTTPException(
             status_code=501,
-            detail="Google Calendar 연동이 서버에 설정되어 있지 않습니다",
+            detail="이 서버는 Google Calendar 연동을 사용하지 않습니다.",
         )
+
+
+@router.get("/calendar/google/connect")
+async def google_connect(request: Request):
+    await require_user(request)
+    _require_enabled()
 
     state = secrets.token_urlsafe(24)
     response = RedirectResponse(calendar_service.build_authorize_url(state))
@@ -37,6 +46,7 @@ async def google_callback(
     error: str | None = None,
 ):
     user = await require_user(request)
+    _require_enabled()
     expected_state = request.cookies.get(STATE_COOKIE)
     failure = RedirectResponse(f"{BASE_URL}/calendar?calendar_error=1")
 
@@ -57,6 +67,7 @@ async def google_callback(
 @router.delete("/api/user/calendar-accounts")
 async def remove_calendar_account(email: str, request: Request):
     user = await require_user(request)
+    _require_enabled()
     await calendar_service.disconnect_account(user, email)
     return {}
 
@@ -64,6 +75,7 @@ async def remove_calendar_account(email: str, request: Request):
 @router.post("/api/user/calendar-accounts/toggle")
 async def toggle_calendar_account(email: str, enabled: bool, request: Request):
     user = await require_user(request)
+    _require_enabled()
     await calendar_service.toggle_account(user, email, enabled)
     return {}
 
@@ -73,6 +85,7 @@ async def toggle_sub_calendar(
     email: str, subCalendarId: str, enabled: bool, request: Request
 ):
     user = await require_user(request)
+    _require_enabled()
     await calendar_service.toggle_sub_calendar(user, email, subCalendarId, enabled)
     return {}
 
@@ -80,5 +93,6 @@ async def toggle_sub_calendar(
 @router.get("/api/user/calendars")
 async def get_my_calendars(timeMin: datetime, timeMax: datetime, request: Request):
     user = await require_user(request)
+    _require_enabled()
     events = await calendar_service.get_users_calendar_events(user, timeMin, timeMax)
     return jsonable(events)

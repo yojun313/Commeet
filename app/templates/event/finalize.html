@@ -10,6 +10,12 @@
     </div>
     <div class="event-header-actions">
       <a class="btn btn-ghost btn-sm" href="/e/{{ event_id }}">&lsaquo; 일정으로 돌아가기</a>
+      <!-- 배정을 계산하기 전에는 확정할 것이 없으므로, #fin-result와 함께
+           나타났다 사라집니다 (finalize.js setResultVisible). -->
+      <span class="finalize-top-actions" id="fin-top-actions" style="display: none;">
+        <button class="btn btn-primary" id="fin-confirm-btn">이 내용으로 확정하고 마감</button>
+        <button class="btn btn-danger" id="fin-cancel-btn" style="display: none;">확정 취소 (마감 해제)</button>
+      </span>
     </div>
   </div>
 
@@ -19,6 +25,24 @@
       확정 중에는 참가자가 가능한 시간을 수정할 수 없습니다.
       아래에서 배정을 수정한 뒤 다시 확정하면 참가자에게 변경 안내 메일이 발송됩니다.
     </p>
+  </div>
+
+  <!-- 배정을 짜는 동안에도 참가자는 계속 응답할 수 있습니다. 화면을 마음대로
+       다시 계산해 버리면 손으로 끌어다 놓은 배정이 날아가므로, 알리기만 하고
+       다시 계산할지는 주최자가 정합니다 (finalize.js의 자동 갱신). -->
+  <div class="notice fin-stale" id="fin-stale" style="display: none;">
+    <span>참가자의 응답이 바뀌었습니다. 지금 화면은 그 전에 계산된 배정입니다.</span>
+    <button class="btn btn-sm btn-primary" type="button" id="fin-stale-rerun">최신 응답으로 다시 계산</button>
+  </div>
+
+  <!-- 확정된 뒤 배정을 손대면, 확정하기 전에 무엇이 달라졌는지 보여 줍니다.
+       그대로 확정하면 여기 적힌 사람에게만 안내 메일이 나갑니다. -->
+  <div class="notice fin-changes" id="fin-changes" style="display: none;">
+    <div class="fin-changes-head">
+      <b>확정 이후 바뀐 배정</b>
+      <span class="hint" id="fin-changes-count"></span>
+    </div>
+    <div class="fin-changes-list" id="fin-changes-list"></div>
   </div>
 
   <!-- Step 1: settings (compact, full-width bar - the fields are short so a
@@ -41,7 +65,7 @@
         <label class="checkbox-row" style="margin: 6px 0 0;">
           <input type="checkbox" id="fin-allow-ifneeded" checked />
           <span class="checkbox-copy">
-            “가능(선택)” 시간도 사용
+            “가능(비선호)” 시간도 사용
             <div class="desc">더 많은 사람을 배정할 수 있을 때만 사용합니다.</div>
           </span>
         </label>
@@ -68,8 +92,8 @@
             항상 최우선입니다. 한 명이라도 더 넣을 수 있으면 그 조합을 택합니다.
           </li>
           <li>
-            <strong>2순위: “가능” 시간 우선</strong> — 인원수가 같다면 “가능(선택)”보다 “가능”으로
-            답한 시간에 배정합니다. “가능(선택)”은 그렇게 해야 한 명이라도 더 배정될 때만 사용됩니다.
+            <strong>2순위: “가능” 시간 우선</strong> — 인원수가 같다면 “가능(비선호)”보다 “가능”으로
+            답한 시간에 배정합니다. “가능(비선호)”는 그렇게 해야 한 명이라도 더 배정될 때만 사용됩니다.
           </li>
           <li>
             <strong>3순위: 이른 시간 우선</strong> — 위 조건이 모두 같다면 더 이른 시간대로 채워
@@ -101,12 +125,9 @@
         <div id="fin-assignments"></div>
       </div>
 
-      <div class="finalize-actions">
-        <button class="btn btn-primary" id="fin-confirm-btn">이 내용으로 확정하고 마감</button>
-        <button class="btn btn-danger" id="fin-cancel-btn" style="display: none;">확정 취소 (마감 해제)</button>
-      </div>
-      <p class="hint" style="margin-top: 10px;">
+      <p class="hint" style="margin-top: 14px;">
         확정하면 배정된 참가자에게 확정 안내 메일이 발송되고, 응답 수정이 잠깁니다.
+        확정 버튼은 페이지 맨 위에 있습니다.
       </p>
     </div>
 
@@ -114,7 +135,8 @@
       <div class="card card-pad">
         <h2 style="font-size: 17px;">3. 최종 일정</h2>
         <p class="hint" style="margin-top: 0;">
-          참가자 카드를 눌러서 원하는 시간으로 끌어다 놓으면 배정을 바꿀 수 있습니다.
+          <b>이름</b>을 끌면 그 사람만, <b>카드 바탕</b>을 끌면 그 시간의 참가자 전원이 함께 움직입니다.
+          전원이 참석할 수 있는 시간에만 놓을 수 있고, 사람이 있는 시간에 놓으면 정원 안에서 합쳐집니다.
           아래 “미배정” 칸으로 끌어다 놓으면 배정이 해제됩니다.
         </p>
         <div class="cal-legend">
@@ -140,6 +162,7 @@
     <div class="icon">🗓️</div>
     아직 응답한 참가자가 없어 배정할 수 없습니다.
   </div>
+
 </div>
 {% endblock %}
 

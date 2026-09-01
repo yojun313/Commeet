@@ -39,6 +39,7 @@
     </form>
   </section>
 
+  {% if GOOGLE_CALENDAR_ENABLED %}
   <section class="settings-section">
     <h2>캘린더 연동</h2>
     <p class="section-desc">
@@ -46,6 +47,7 @@
       <a href="/calendar">캘린더 페이지</a>의 “Google Calendar 설정”에서 할 수 있습니다.
     </p>
   </section>
+  {% endif %}
 
   <section class="settings-section">
     <h2>문의하기</h2>

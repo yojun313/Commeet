@@ -1,6 +1,10 @@
 from fastapi import APIRouter, HTTPException, Request, status
 
-from app.schemas.contact import AddContactRequest, UpdateContactRequest
+from app.schemas.contact import (
+    AddContactRequest,
+    DeleteContactsRequest,
+    UpdateContactRequest,
+)
 from app.services import contact_service
 from app.services.auth_service import require_user
 
@@ -63,6 +67,17 @@ async def update_contact(
     if not updated:
         raise HTTPException(status_code=404, detail="연락처를 찾을 수 없습니다")
     return {}
+
+
+@router.post("/delete")
+async def delete_contacts(payload: DeleteContactsRequest, request: Request):
+    """선택한 연락처를 한 번에 삭제합니다.
+
+    DELETE로 몸통을 보내는 건 프록시·클라이언트마다 처리가 갈려서 POST를
+    씁니다. 경로도 /{contact_id}와 겹치지 않도록 /delete로 따로 뒀습니다.
+    """
+    user = await require_user(request)
+    return {"deleted": await contact_service.delete_contacts(user, payload.ids)}
 
 
 @router.delete("/{contact_id}")

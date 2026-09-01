@@ -5,13 +5,6 @@
       <button class="btn-icon" type="button" data-dialog-close>&times;</button>
     </div>
 
-    {% if user %}
-    <div class="toggle-group" id="ne-tabs" style="margin-bottom: 16px;">
-      <button type="button" class="active" data-tab="event">일정</button>
-      <button type="button" data-tab="group">그룹</button>
-    </div>
-    {% endif %}
-
     <form id="new-event-form">
       <div class="field">
         <label for="ne-name">이름</label>
@@ -34,14 +27,6 @@
 
       <div class="ne-columns">
         <div class="ne-col">
-          <div class="field" id="ne-date-mode-field">
-            <label>날짜 선택 방식</label>
-            <div class="toggle-group" id="ne-date-mode">
-              <button type="button" class="active" data-mode="specific_dates">특정 날짜</button>
-              <button type="button" data-mode="dow">요일</button>
-            </div>
-          </div>
-
           <div class="field" id="ne-specific-dates-field">
             <label>날짜를 클릭해서 선택하세요 (여러 개 선택 가능)</label>
             <div class="input-row" style="justify-content: space-between; margin-bottom: 8px;">
@@ -53,11 +38,6 @@
               <span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span>
             </div>
             <div class="month-grid" id="ne-calendar"></div>
-          </div>
-
-          <div class="field" id="ne-dow-field" style="display: none;">
-            <label>요일을 선택하세요</label>
-            <div class="dow-toggle-row" id="ne-dow-row"></div>
           </div>
 
           <div class="field">
@@ -72,13 +52,20 @@
 
         <div class="ne-col">
           {% if user %}
+          {# 새로 만들 때는 초대 칸이 보이지 않습니다. 주최자가 가능한 시간을
+             찍기 전에 메일이 나가면 받는 사람은 빈 화면을 보게 되기 때문입니다
+             (event_service.create_event의 주석). 수정할 때만 나타납니다. #}
+          <p class="hint" id="ne-invite-later-hint" style="display: none;">
+            초대는 만든 뒤에 보냅니다. 가능한 시간을 처음 저장하면 그때 물어봅니다.
+          </p>
+
           <div class="field" id="ne-remindees-field">
             <label>이메일로 초대하기 (선택)</label>
             <div class="chip-input" id="ne-remindees-chips">
               <input type="text" id="ne-remindees-input" placeholder="이메일 입력 후 Enter" />
             </div>
             <div class="contact-picker">
-              <button type="button" class="btn btn-ghost btn-sm" data-role="pick-contact-btn">+ 연락처에서 선택</button>
+              <button type="button" class="btn btn-ghost btn-sm" data-role="pick-contact-btn">+ 연락처에서 선택<span data-role="pick-contact-count"></span></button>
               <div class="contact-picker-dropdown" id="ne-remindees-picker" style="display: none;">
                 <input type="text" class="input" data-role="pick-contact-search" placeholder="이름 또는 이메일로 검색" />
                 <div class="contact-picker-filters" data-role="pick-contact-filters" style="display: none;"></div>
@@ -87,20 +74,6 @@
             </div>
           </div>
 
-          <div class="field" id="ne-attendees-field" style="display: none;">
-            <label>참여자 이메일</label>
-            <div class="chip-input" id="ne-attendees-chips">
-              <input type="text" id="ne-attendees-input" placeholder="이메일 입력 후 Enter" />
-            </div>
-            <div class="contact-picker">
-              <button type="button" class="btn btn-ghost btn-sm" data-role="pick-contact-btn">+ 연락처에서 선택</button>
-              <div class="contact-picker-dropdown" id="ne-attendees-picker" style="display: none;">
-                <input type="text" class="input" data-role="pick-contact-search" placeholder="이름 또는 이메일로 검색" />
-                <div class="contact-picker-filters" data-role="pick-contact-filters" style="display: none;"></div>
-                <div class="contact-picker-list" data-role="pick-contact-list"></div>
-              </div>
-            </div>
-          </div>
           {% else %}
           <p class="hint">로그인하면 이메일 알림, 초대, 세부 옵션을 사용할 수 있습니다.</p>
           {% endif %}

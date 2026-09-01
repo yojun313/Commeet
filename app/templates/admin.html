@@ -103,5 +103,6 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script>const GOOGLE_CALENDAR_ENABLED = {{ "true" if GOOGLE_CALENDAR_ENABLED else "false" }};</script>
 <script src="{{ asset('js/admin.js') }}"></script>
 {% endblock %}

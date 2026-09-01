@@ -1,9 +1,7 @@
-/* The core scheduling screen: an availability heatmap grid, shared by
- * /e/{id} (plain events) and /g/{id} (groups - same grid + weekly paging +
- * calendar overlay). Config comes from window.COMMEET_EVENT_CONFIG, rendered
- * server-side by app/routes/page_routes.py. */
+/* The core scheduling screen: an availability heatmap grid for /e/{id}.
+ * Config comes from window.COMMEET_EVENT_CONFIG, rendered server-side by
+ * app/routes/page_routes.py. */
 
-const REF_SUNDAY = new Date(2024, 0, 7); // must match static/js/new-event.js
 const DOW_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
 
 const TOOL_HINTS = {
@@ -34,30 +32,8 @@ function timeLabel(decimalHour) {
   return m === 0 ? `${ampm} ${h12}시` : `${ampm} ${h12}:${pad2(m)}`;
 }
 
-function thisWeekSunday(weekOffset) {
-  const now = new Date();
-  const sunday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay());
-  sunday.setDate(sunday.getDate() + weekOffset * 7);
-  return sunday;
-}
-
-function dayDiffFromRefSunday(refDate) {
-  const refMidnight = new Date(REF_SUNDAY.getFullYear(), REF_SUNDAY.getMonth(), REF_SUNDAY.getDate());
-  const dateMidnight = new Date(refDate.getFullYear(), refDate.getMonth(), refDate.getDate());
-  return Math.round((dateMidnight - refMidnight) / 86400000);
-}
-
-function projectToWeek(refDate, weekOffset) {
-  const sunday = thisWeekSunday(weekOffset);
-  const result = new Date(sunday);
-  result.setDate(result.getDate() + dayDiffFromRefSunday(refDate));
-  result.setHours(refDate.getHours(), refDate.getMinutes(), 0, 0);
-  return result;
-}
-
 const ST = {
   eventId: null,
-  isGroup: false,
   currentUser: null,
   currentUserEmail: null,
   googleCalendarEnabled: false,
@@ -67,7 +43,6 @@ const ST = {
   startHour: 9,
   responsesFull: {}, // userKey -> {availability:[iso], ifNeeded:[iso], user, name}
   responseSets: {}, // userKey -> {available: Set<slotKey>, ifNeeded: Set<slotKey>}
-  weekOffset: 0,
   editing: false,
   editTool: "available",
   ownMarks: {}, // slotKey -> 'available' | 'ifNeeded'
@@ -103,7 +78,6 @@ function escapeHtml(s) {
 async function init() {
   const cfg = window.COMMEET_EVENT_CONFIG;
   ST.eventId = cfg.eventId;
-  ST.isGroup = cfg.isGroup;
   ST.currentUser = cfg.currentUser;
   ST.currentUserEmail = cfg.currentUserEmail;
   ST.googleCalendarEnabled = cfg.googleCalendarEnabled;
@@ -111,39 +85,16 @@ async function init() {
   ST.viewerKey = ST.currentUser ? ST.currentUser._id : ST.guestName;
 
   wireStaticButtons();
+  // `const RecordDialog`은 최상위 선언이라 window의 속성이 되지 않습니다
+  // (var/function 선언과 다릅니다). window.RecordDialog로 확인하면 항상
+  // undefined라 init()이 통째로 건너뛰어집니다.
+  if (typeof RecordDialog !== "undefined") RecordDialog.init();
 
   try {
     await loadEvent();
   } catch (err) {
-    if (err.status === 401) {
-      renderSignInRequired();
-    } else if (err.status === 403) {
-      renderAccessDenied();
-    } else {
-      showSnackbar(err.message || "일정을 불러오지 못했습니다.", "error");
-    }
+    showSnackbar(err.message || "일정을 불러오지 못했습니다.", "error");
   }
-}
-
-function renderSignInRequired() {
-  document.getElementById("event-body-root").innerHTML = `
-    <div class="access-denied">
-      <div class="icon">🔒</div>
-      <h2>로그인이 필요합니다</h2>
-      <p>그룹 일정은 초대받은 사람만 볼 수 있어요.</p>
-      <a class="btn btn-primary" href="/sign-in?next=${encodeURIComponent(window.location.pathname)}">로그인</a>
-    </div>
-  `;
-}
-
-function renderAccessDenied() {
-  document.getElementById("event-body-root").innerHTML = `
-    <div class="access-denied">
-      <div class="icon">🚫</div>
-      <h2>접근 권한이 없습니다</h2>
-      <p>이 그룹에 초대받지 못한 것 같아요. 그룹 생성자에게 문의해 주세요.</p>
-    </div>
-  `;
 }
 
 async function loadEvent() {
@@ -161,12 +112,7 @@ async function loadEvent() {
   renderSkeleton();
   wireDynamicButtons();
 
-  if (ST.isGroup) {
-    document.getElementById("week-nav").style.display = "";
-    renderWeekLabel();
-  }
-
-  if (event.ownerId === null && !ST.isGroup) {
+  if (event.ownerId === null) {
     document.getElementById("guest-owner-banner").innerHTML = `
       <div class="guest-banner">이 일정은 로그인하지 않은 상태에서 만들어져서, 링크를 가진 누구나 수정할 수 있어요.</div>
     `;
@@ -188,6 +134,10 @@ async function loadEvent() {
   renderGridCells();
 
   updateRespondBtnVisibility();
+  loadEventRecords();
+  // 여기서부터는 다른 참가자의 입력이 자동으로 따라 들어옵니다.
+  liveSyncVersion();
+  startLive();
   if (event.isClosed) {
     // Availability is frozen once the schedule is confirmed - the server
     // rejects writes too (409), but hiding the controls avoids a round trip.
@@ -207,11 +157,20 @@ function updateRespondBtnVisibility() {
   btn.style.display = hidden ? "none" : "";
 }
 
+/* 서버 event_service.is_past_event()와 같은 규칙. */
+function isPastEvent(event) {
+  const dates = (event.dates || []).map((d) => new Date(d));
+  if (!dates.length) return false;
+  const last = new Date(Math.max(...dates));
+  last.setHours(last.getHours() + (event.duration || 0));
+  return last < new Date();
+}
+
 function computeDayColumns() {
   const uniqueRefTimes = [...new Set(ST.event.dates)].map((d) => new Date(d)).sort((a, b) => a - b);
   ST.dayColumns = uniqueRefTimes.map((refDate) => ({
     refDate,
-    displayDate: ST.isGroup ? projectToWeek(refDate, ST.weekOffset) : refDate,
+    displayDate: refDate,
   }));
   ST.startHour = uniqueRefTimes.length ? uniqueRefTimes[0].getHours() + uniqueRefTimes[0].getMinutes() / 60 : 9;
   ST.slotCount = Math.max(1, Math.round((ST.event.duration * 60) / (ST.event.timeIncrement || 15)));
@@ -247,14 +206,6 @@ function renderEventDescription() {
   body.innerHTML = html;
 }
 
-function renderWeekLabel() {
-  const sunday = thisWeekSunday(ST.weekOffset);
-  const sat = new Date(sunday);
-  sat.setDate(sat.getDate() + 6);
-  const fmt = (d) => `${d.getMonth() + 1}/${d.getDate()}`;
-  document.getElementById("week-label").textContent = `${fmt(sunday)} - ${fmt(sat)}`;
-}
-
 /* ---------------------------------------------------------------------- */
 /* Skeleton                                                                */
 /* ---------------------------------------------------------------------- */
@@ -275,22 +226,22 @@ function renderSkeleton() {
           </span>
           <span>많음</span>
           <span class="legend-item">
-            <span class="legend-swatch if-needed-swatch"></span>가능(선택)만 있음
+            <span class="legend-swatch if-needed-swatch"></span>가능(비선호)만 있음
           </span>
         </div>
       </div>
       <div class="grid-toolbar-right">
         <button class="btn btn-sm btn-ghost" id="toggle-best-times">최적 시간만 보기</button>
-        <button class="btn btn-sm btn-ghost" id="toggle-hide-ifneeded">가능(선택) 숨기기</button>
+        <button class="btn btn-sm btn-ghost" id="toggle-hide-ifneeded">가능(비선호) 숨기기</button>
       </div>
     </div>
 
     <details class="term-help">
-      <summary>“가능”과 “가능(선택)”은 어떻게 다른가요?</summary>
+      <summary>“가능”과 “가능(비선호)”는 어떻게 다른가요?</summary>
       <dl class="term-help-body">
         <dt><span class="legend-swatch available-swatch"></span>가능</dt>
         <dd>이 시간에 <strong>확실히 참여할 수 있다</strong>는 뜻입니다. 최적의 시간을 고를 때는 이 응답만 집계합니다.</dd>
-        <dt><span class="legend-swatch if-needed-swatch"></span>가능(선택)</dt>
+        <dt><span class="legend-swatch if-needed-swatch"></span>가능(비선호)</dt>
         <dd>
           <strong>꼭 필요하다면 맞출 수 있지만, 다른 시간이 더 좋다</strong>는 뜻입니다.
           차선책으로만 참고하며 <em>최적 시간만 보기</em>에는 포함되지 않습니다.
@@ -298,7 +249,7 @@ function renderSkeleton() {
       </dl>
       <p class="term-help-note">
         칸의 색이 진할수록 “가능”이라고 답한 사람이 많습니다.
-        “가능”인 사람이 아무도 없고 “가능(선택)”만 있는 칸은 노란색으로 표시됩니다.
+        “가능”인 사람이 아무도 없고 “가능(비선호)”만 있는 칸은 노란색으로 표시됩니다.
       </p>
     </details>
 
@@ -311,7 +262,7 @@ function renderSkeleton() {
           <div class="edit-bar-left">
             <div class="toggle-group" id="edit-tool-toggle">
               <button type="button" class="active" data-tool="available">가능</button>
-              <button type="button" data-tool="ifNeeded">가능(선택)</button>
+              <button type="button" data-tool="ifNeeded">가능(비선호)</button>
             </div>
             <span class="edit-hint" id="edit-tool-hint">${TOOL_HINTS.available}</span>
           </div>
@@ -328,15 +279,11 @@ function renderSkeleton() {
         <div class="card sidebar-card">
           <div class="sidebar-heading-row">
             <h3>응답자 (<span id="respondent-count">0</span>)</h3>
-            <button type="button" class="btn btn-ghost btn-sm" id="open-grid-detail-btn">자세히 보기</button>
           </div>
           <div id="respondents-list"></div>
           <button class="btn btn-primary btn-block" id="invite-btn" style="display: none; margin-top: 14px;">초대 보내기</button>
           <button class="btn btn-ghost btn-block" id="delete-response-btn" style="display: none; margin-top: 8px; color: var(--color-danger);">
-            ${ST.isGroup ? "그룹 나가기" : "내 응답 삭제"}
-          </button>
-          <button class="btn btn-ghost btn-block" id="decline-invite-btn" style="display: none; margin-top: 8px; color: var(--color-danger);">
-            초대 거절
+            내 응답 삭제
           </button>
         </div>
       </div>
@@ -515,13 +462,16 @@ function renderRespondents() {
     const displayName = isGuestEntry
       ? resp.name || (resp.user ? resp.user.name : "")
       : (resp.user.name || "").trim() || resp.user.email;
+    // 목록에서 내 줄을 바로 찾을 수 있게 표시합니다. viewerKey는 로그인했으면
+    // 사용자 id, 게스트면 이름이고 응답 목록의 키와 같은 값입니다.
+    const isMe = !!ST.viewerKey && key === ST.viewerKey;
     const canEditAsGuest = isGuestEntry && ST.isOwner && !ST.event.isClosed;
 
     const row = document.createElement("div");
     row.className = "respondent-row" + (ST.selectedRespondents.has(key) ? " selected" : "");
     row.innerHTML = `
       <span class="avatar sm">${(displayName || "?")[0].toUpperCase()}</span>
-      <span class="name">${escapeHtml(displayName)}</span>
+      <span class="name">${escapeHtml(displayName)}${isMe ? '<span class="respondent-me">(나)</span>' : ""}</span>
       <span class="edit-icon">${canEditAsGuest ? "✎" : ""}</span>
     `;
     row.addEventListener("click", (e) => {
@@ -562,18 +512,6 @@ function syncRespondentListHeight() {
   const sidebar = document.querySelector(".sidebar-card");
   const list = document.getElementById("respondents-list");
   if (!calCol || !sidebar || !list) return;
-
-  // Inside the "자세히 보기" modal, .event-layout already fills a fixed
-  // (never-changes-size) modal height via CSS (see .grid-detail-body rules) -
-  // there's no risk of a long list growing anything past that, so the list
-  // should just fill whatever generous space the fixed modal gives it
-  // instead of being shrunk down to match the calendar's own (possibly much
-  // shorter) natural content height, which is what the page-embedded case
-  // below is protecting against.
-  if (list.closest(".grid-detail-body")) {
-    list.style.maxHeight = "";
-    return;
-  }
 
   // Below the layout's stacking breakpoint (see CSS @media max-width:1024px)
   // the sidebar sits above the calendar instead of beside it, so there's no
@@ -616,6 +554,118 @@ function syncRespondentListHeight() {
   });
 
   list.style.maxHeight = `${Math.max(120, calHeight - chromeHeight)}px`;
+}
+
+/* ---------------------------------------------------------------------- */
+/* 면담 기록 · 학생지도비 (호스트 전용, 확정된 뒤에만)                      */
+/* ---------------------------------------------------------------------- */
+
+/* 확정된 시간대마다 한 줄씩 보여 주고, 각 줄에서 기록 폼(RecordDialog)을
+ * 엽니다. 폼 마크업은 partials/record_form_dialog.html, 동작은
+ * record-form.js의 RecordDialog입니다.
+ *
+ * 기준은 저장된 finalization.meetings입니다. 확정 화면의 편집 중인 배정과
+ * 달리 이건 실제로 저장된 약속이라, 기록을 걸 수 있는 유일한 대상입니다. */
+
+let recordsByStart = new Map();
+
+function confirmedMeetings() {
+  const fin = ST.event && ST.event.finalization;
+  if (!fin || fin.status !== "confirmed") return [];
+  return (fin.meetings || []).slice().sort((a, b) => new Date(a.start) - new Date(b.start));
+}
+
+function participantDisplayName(key) {
+  const resp = (ST.event.responses || {})[key];
+  if (!resp) return key; // 게스트 키는 이름 그 자체라 그대로 써도 맞습니다.
+  const user = resp.user || {};
+  return (user.name || "").trim() || resp.name || user.email || key;
+}
+
+function fmtMeetingRange(startIso, endIso) {
+  const s = new Date(startIso);
+  const e = new Date(endIso);
+  const days = ["일", "월", "화", "수", "목", "금", "토"];
+  return `${s.getMonth() + 1}/${s.getDate()}(${days[s.getDay()]}) ${pad2(s.getHours())}:${pad2(
+    s.getMinutes()
+  )} ~ ${pad2(e.getHours())}:${pad2(e.getMinutes())}`;
+}
+
+async function loadEventRecords() {
+  const card = document.getElementById("ev-records-card");
+  if (!card) return;
+  // 남의 일정에서는 기록이 보이면 안 되고, 확정 전에는 걸 약속이 없습니다.
+  if (!ST.isOwner || !confirmedMeetings().length) {
+    card.style.display = "none";
+    return;
+  }
+  card.style.display = "";
+
+  try {
+    const data = await api.get(`/api/records?eventId=${encodeURIComponent(ST.eventId)}`);
+    recordsByStart = new Map((data.records || []).map((r) => [slotKey(r.meetingStart), r]));
+  } catch (err) {
+    recordsByStart = new Map();
+  }
+  renderEventRecordRows();
+}
+
+function renderEventRecordRows() {
+  const root = document.getElementById("ev-records-list");
+  const meetings = confirmedMeetings();
+  const now = Date.now();
+  let done = 0;
+
+  root.innerHTML = "";
+  meetings.forEach((m) => {
+    const record = recordsByStart.get(slotKey(m.start));
+    if (record) done++;
+    const ended = new Date(m.end).getTime() <= now;
+    const names = (m.participants || []).map(participantDisplayName);
+    const amount = record
+      ? (record.settlements || []).reduce((sum, x) => sum + (x.amount || 0), 0)
+      : 0;
+
+    const row = el(`
+      <div class="fin-record-row${record ? " is-done" : ""}">
+        <div class="fin-record-when">
+          <span class="fin-record-time">${escapeHtml(fmtMeetingRange(m.start, m.end))}</span>
+          ${ended ? "" : '<span class="badge badge-muted">예정</span>'}
+        </div>
+        <div class="fin-record-people" title="${escapeHtml(names.join(", "))}">${
+          escapeHtml(names.join(", ")) || "-"
+        }</div>
+        <div class="fin-record-state">
+          ${
+            record
+              ? `<span class="badge badge-muted">작성됨</span><span class="fin-record-amount">${escapeHtml(
+                  amount.toLocaleString("ko-KR")
+                )}원</span>`
+              : '<span class="badge">기록 필요</span>'
+          }
+        </div>
+        <div class="fin-record-actions">
+          <button class="btn btn-ghost btn-sm" type="button" data-write>${
+            record ? "기록 보기" : "기록 작성"
+          }</button>
+          ${
+            record
+              ? `<a class="btn btn-ghost btn-sm" href="/records/${encodeURIComponent(
+                  record._id
+                )}/print" target="_blank" rel="noopener">신청서</a>`
+              : ""
+          }
+        </div>
+      </div>
+    `);
+    row.querySelector("[data-write]").addEventListener("click", () =>
+      RecordDialog.open(ST.eventId, m.start, loadEventRecords)
+    );
+    root.appendChild(row);
+  });
+
+  document.getElementById("ev-records-summary").textContent =
+    `${meetings.length}건 중 ${done}건 작성됨`;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -786,6 +836,8 @@ function stopEditing() {
   document.getElementById("avail-grid").classList.remove("editing");
   renderGridCells();
   syncLayoutHeights();
+  // 편집하는 동안 폴링을 미뤄 두었으니 (live.js의 isBusy) 간격을 되돌립니다.
+  live.wake();
 }
 
 function startEditingAs(guestKey, displayName) {
@@ -824,11 +876,14 @@ async function saveEditing() {
   }
 
   if (ST.currentUser) {
+    // 이번 저장이 "처음"인지는 저장하기 전에만 알 수 있습니다 (아래 초대 권유).
+    const hadResponse = !!(ST.viewerKey && ST.responsesFull[ST.viewerKey]);
     try {
       await api.post(`/api/events/${ST.eventId}/response`, { availability, ifNeeded, guest: false });
       stopEditing();
       await refreshAll();
       showSnackbar("가용시간이 저장되었습니다.", "success");
+      maybeOfferInvite(hadResponse);
     } catch (err) {
       showSnackbar(err.message, "error");
     }
@@ -843,13 +898,116 @@ async function saveEditing() {
   openDialog("guest-name-dialog");
 }
 
+// 격자 자체를 다시 세워야 하는 변화인지 판별합니다. 응답이 하나 늘어난
+// 것뿐이라면 셀 색만 다시 칠하면 되지만, 후보 날짜나 길이가 바뀌었거나
+// 일정이 확정되면 열 개수/안내 문구까지 달라지므로 loadEvent()로 처음부터
+// 다시 그려야 합니다.
+/* 이미 누군가를 초대해 둔 일정인지. */
+function hasInvitedAnyone() {
+  return ((ST.event.remindees || []).length) > 0;
+}
+
+/* 주최자가 **처음** 가능한 시간을 저장한 직후에 초대할지 물어봅니다.
+ *
+ * 일정을 만들 때는 초대 메일을 보내지 않습니다 (event_service.create_event).
+ * 주최자는 보통 일정을 만든 다음에 자기 시간을 찍는데, 그 사이에 메일이
+ * 나가면 받는 사람은 아무도 표시하지 않은 빈 화면을 열게 됩니다. 화면이
+ * 볼 만해진 이 시점이 초대를 권하기에 맞는 자리입니다.
+ *
+ * 두 번째 저장부터는 묻지 않습니다 - 시간을 고칠 때마다 물으면 성가십니다.
+ */
+function maybeOfferInvite(hadResponseBefore) {
+  if (hadResponseBefore) return; // 처음이 아님
+  if (!ST.isOwner || !ST.event || ST.event.isClosed) return;
+  if (hasInvitedAnyone()) return; // 이미 초대해 둔 일정
+
+  const ask = "가능한 시간을 저장했습니다.\n참가자에게 초대 링크를 보낼까요?";
+  if (confirm(ask)) openInviteDialog();
+  else showSnackbar('나중에 사이드바의 "초대 보내기"로 보낼 수 있습니다.');
+}
+
+function structuralKey(event) {
+  if (!event) return "";
+  return JSON.stringify([
+    event.isClosed,
+    event.type,
+    event.duration,
+    event.timeIncrement,
+    event.dates,
+  ]);
+}
+
 async function refreshAll() {
+  // 저장 직후처럼 다른 경로에서 부른 갱신이 도는 동안, 폴링이 같은 조회를
+  // 한 번 더 쏘지 않도록 표시해 둡니다 (live.js가 이 값을 봅니다).
+  live.setBusy(true);
+  try {
+    await refreshAllInner();
+  } finally {
+    live.setBusy(false);
+  }
+}
+
+async function refreshAllInner() {
   const event = await api.get(`/api/events/${ST.eventId}${ST.guestName ? `?guestName=${encodeURIComponent(ST.guestName)}` : ""}`);
+  const before = structuralKey(ST.event);
   ST.event = event;
+  liveSyncVersion();
+
+  if (before && structuralKey(event) !== before) {
+    // 후보 날짜나 길이가 바뀌었거나 일정이 확정됨 - 뼈대부터 다시 그립니다.
+    await loadEvent();
+    return;
+  }
+
+  // 응답자 목록은 통째로 다시 그려지므로, 스크롤을 내려 보고 있었다면
+  // 갱신될 때마다 맨 위로 튑니다.
+  const list = document.getElementById("respondents-list");
+  const scrollTop = list ? list.scrollTop : 0;
+
   renderMeta();
   await refreshResponses();
   renderRespondents();
   renderGridCells();
+
+  if (list) list.scrollTop = scrollTop;
+}
+
+/* ---------------------------------------------------------------------- */
+/* 자동 갱신                                                                */
+/* ---------------------------------------------------------------------- */
+//
+// 다른 참가자가 가능한 시간을 찍거나 주최자가 일정을 확정하면, 이 화면을
+// 열어 둔 사람들에게 새로고침 없이 반영됩니다. 폴링 루프 자체(탭 가시성,
+// 백오프, 중복 요청 방지)는 live.js에 공통으로 있습니다.
+//
+// 확정된 일정도 계속(아주 느리게) 확인합니다 - 주최자가 확정을 취소하면
+// 그것도 보여야 하기 때문입니다. 이미 지난 일정만 아예 멈춥니다.
+
+const live = createLiveRefresh({
+  url: () => `/api/events/${ST.eventId}/version`,
+  // 편집 중에는 건드리지 않습니다 - 다시 그리면 아직 저장하지 않은 드래그
+  // 선택(ST.ownMarks)이 통째로 날아갑니다. 저장이나 취소를 하면 stopEditing이
+  // 곧바로 따라잡습니다.
+  isBusy: () => ST.editing,
+  onChange: () => refreshAllInner(),
+  onGone: () => {
+    // 보고 있는 사이에 일정이 지워졌습니다. 편집 중만 아니면 다시 읽어서
+    // "취소되었습니다" 안내를 띄웁니다 (errors/removed_event.html).
+    if (!ST.editing) window.location.reload();
+  },
+});
+
+// 전체 조회에는 이벤트 문서의 v가 같이 실려 옵니다. 방금 받은 데이터의
+// 버전을 기준점으로 삼아야 첫 차례에 괜히 한 번 더 받지 않습니다.
+function liveSyncVersion() {
+  live.sync(ST.event && ST.event.v ? ST.event.v : 0);
+}
+
+function startLive() {
+  live.stop();
+  if (!ST.event || isPastEvent(ST.event)) return;
+  live.start();
 }
 
 /* ---------------------------------------------------------------------- */
@@ -929,20 +1087,30 @@ function addInviteChip(value) {
 
 let inviteContactsCache = [];
 let inviteContactFilterPredicate = () => true;
+// 방금 추가한 연락처. 목록을 다시 그릴 때 체크된 채로 나타나게 합니다 -
+// 초대하려고 추가한 사람이니 다시 찾아 누르게 할 이유가 없습니다.
+let invitePreChecked = new Set();
 
 function renderInviteContactList() {
   const root = document.getElementById("invite-contacts");
   // Filter toggles re-render this list from scratch - keep whatever the
   // user had already checked so narrowing the filter doesn't silently
   // un-select someone they picked before.
-  const previouslyChecked = new Set(
-    [...root.querySelectorAll("input[type=checkbox]:checked")].map((cb) => cb.value)
-  );
+  const previouslyChecked = new Set([
+    ...[...root.querySelectorAll("input[type=checkbox]:checked")].map((cb) => cb.value),
+    ...invitePreChecked,
+  ]);
   const visible = inviteContactsCache.filter(inviteContactFilterPredicate);
 
   root.innerHTML = "";
   if (!inviteContactsCache.length) {
-    root.innerHTML = `<p class="hint" style="margin:0;">저장된 연락처가 없습니다. <a href="/contacts">연락처 추가하기</a></p>`;
+    // 연락처 페이지로 보내지 않습니다 - 초대하던 흐름이 끊깁니다.
+    root.innerHTML = `
+      <p class="hint" style="margin:0;">저장된 연락처가 없습니다.</p>
+      <button type="button" class="btn btn-secondary btn-sm" style="margin-top:8px;" data-role="add-contact">
+        연락처 추가하기
+      </button>
+    `;
     return;
   }
   if (!visible.length) {
@@ -967,22 +1135,20 @@ function renderInviteContactList() {
 async function openInviteDialog() {
   document.getElementById("invite-error").textContent = "";
 
-  // Both dialogs are full-screen backdrops at the same stacking level, so
-  // opening the invite dialog on top of an already-open "자세히 보기" modal
-  // would just visually bury it behind the invite dialog's own backdrop.
-  // Hide (not close - the reparented .event-layout stays put inside it)
-  // the detail modal for now; watchGridDetailRestore() below brings it back
-  // as soon as the invite dialog closes, however that happens.
-  const gridDetail = document.getElementById("grid-detail-dialog");
-  if (gridDetail.classList.contains("open")) {
-    gridDetail.classList.remove("open");
-    gridDetail.dataset.pendingRestore = "1";
-  }
-
   openDialog("invite-dialog");
 
+  invitePreChecked = new Set();
+  await loadInviteContacts({ showLoading: true });
+}
+
+/* 초대 창의 연락처 목록을 서버에서 다시 받아 그립니다. 창을 열 때와 창 안에서
+   연락처를 추가한 직후 둘 다 이 경로를 씁니다 - 필터 막대도 새 목록으로 다시
+   만들어야 하므로 렌더링만 따로 부르면 안 됩니다. */
+async function loadInviteContacts(options) {
   const root = document.getElementById("invite-contacts");
-  root.innerHTML = `<p class="hint" style="margin:0;">불러오는 중...</p>`;
+  if (options && options.showLoading) {
+    root.innerHTML = `<p class="hint" style="margin:0;">불러오는 중...</p>`;
+  }
   try {
     inviteContactsCache = await api.get("/api/contacts");
     inviteContactFilterPredicate = setupContactFilterBar(
@@ -994,6 +1160,21 @@ async function openInviteDialog() {
   } catch (err) {
     root.innerHTML = `<p class="hint" style="margin:0;">연락처를 불러오지 못했습니다.</p>`;
   }
+}
+
+/* ---------------------------------------------------------------------- */
+/* 초대 창 안에서 연락처 추가                                                */
+/* ---------------------------------------------------------------------- */
+//
+// 연락처 페이지와 같은 패널을 그대로 띄웁니다 (contact-add.js /
+// partials/contact_add_panel.html) - 검색·직접 입력·붙여넣기가 모두 됩니다.
+// 여기서 정할 것은 "추가된 뒤에 무엇을 새로 고칠까" 하나뿐입니다.
+
+function openQuickContactDialog() {
+  ContactAdd.reset();
+  openDialog("quick-contact-dialog");
+  const search = document.getElementById("contact-search");
+  if (search) search.focus();
 }
 
 async function sendInvites() {
@@ -1021,12 +1202,15 @@ async function sendInvites() {
       message: document.getElementById("invite-message").value.trim(),
     });
     closeDialog("invite-dialog");
-    showSnackbar(`${result.sent}명에게 초대를 보냈습니다.`, "success");
+    // 발송은 백그라운드로 넘어갑니다 - "보냈습니다"가 아니라 "보내는 중"입니다.
+    showSnackbar(
+      `${result.sent}명에게 초대 메일을 보내는 중입니다. 이 페이지를 나가도 전송됩니다.`,
+      "success"
+    );
 
     inviteTypedEmails.length = 0;
     document.querySelectorAll("#invite-email-chips .chip").forEach((c) => c.remove());
     document.getElementById("invite-message").value = "";
-    if (ST.isGroup) await refreshAll();
   } catch (err) {
     errorEl.textContent = err.message || "초대를 보내지 못했습니다.";
   } finally {
@@ -1035,33 +1219,26 @@ async function sendInvites() {
 }
 
 function wireStaticButtons() {
+  // "+ 연락처 추가"는 초대 창 머리와 (연락처가 없을 때) 목록 자리 두 군데에
+  // 있고, 목록 쪽은 다시 그려질 때마다 새 노드가 됩니다. 위임으로 한 번만 겁니다.
+  document.addEventListener("click", (e) => {
+    if (e.target.closest('[data-role="add-contact"]')) openQuickContactDialog();
+  });
+  // 추가된 사람은 초대 목록에 바로 나타나고, 초대하려고 넣은 사람이니
+  // 선택까지 되어 있게 합니다.
+  ContactAdd.init({
+    onAdded: async (emails) => {
+      // 서버가 소문자로 정규화해 저장하므로(auth_service.normalize_email)
+      // 체크박스 값과 맞으려면 같은 모양으로 넣어야 합니다.
+      (emails || []).forEach((email) => invitePreChecked.add(email.trim().toLowerCase()));
+      await loadInviteContacts();
+    },
+  });
+
   document.getElementById("copy-link-btn").addEventListener("click", () => {
     navigator.clipboard.writeText(window.location.href);
     showSnackbar("링크가 복사되었습니다.", "success");
   });
-
-  const gridDetailDialog = document.getElementById("grid-detail-dialog");
-  gridDetailDialog.addEventListener("click", (e) => {
-    // Mirrors ui.js's own "click the backdrop itself, or a [data-dialog-close]"
-    // conditions for closing a dialog - this fires alongside that generic
-    // handler so the reparented grid gets moved back to the page at the
-    // same moment the modal actually closes.
-    if (e.target === gridDetailDialog || e.target.closest("[data-dialog-close]")) {
-      restoreGridFromDetailView();
-    }
-  });
-
-  // Watches for the invite dialog actually closing - by class change rather
-  // than hooking every place that can close it (X button, backdrop click,
-  // a successful send finishing) - and un-hides the detail modal it was
-  // covering, if openInviteDialog() hid one on the way in.
-  const inviteDialogEl = document.getElementById("invite-dialog");
-  new MutationObserver(() => {
-    if (!inviteDialogEl.classList.contains("open") && gridDetailDialog.dataset.pendingRestore) {
-      delete gridDetailDialog.dataset.pendingRestore;
-      gridDetailDialog.classList.add("open");
-    }
-  }).observe(inviteDialogEl, { attributes: true, attributeFilter: ["class"] });
 
   document.getElementById("invite-send-btn").addEventListener("click", sendInvites);
   document.getElementById("invite-email-input").addEventListener("keydown", (e) => {
@@ -1101,7 +1278,6 @@ function wireStaticButtons() {
 }
 
 function wireDynamicButtons() {
-  document.getElementById("open-grid-detail-btn").addEventListener("click", openGridDetail);
 
   document.getElementById("toggle-best-times").addEventListener("click", (e) => {
     ST.showBestTimes = !ST.showBestTimes;
@@ -1133,7 +1309,7 @@ function wireDynamicButtons() {
   });
 
   document.getElementById("delete-response-btn").addEventListener("click", async () => {
-    if (!confirm(ST.isGroup ? "그룹에서 나가시겠어요?" : "내 응답을 삭제할까요?")) return;
+    if (!confirm("내 응답을 삭제할까요?")) return;
     const payload = ST.currentUser ? { guest: false, userId: ST.currentUser._id } : { guest: true, name: ST.guestName };
     await api.del(`/api/events/${ST.eventId}/response`, payload);
     document.getElementById("delete-response-btn").style.display = "none";
@@ -1154,7 +1330,7 @@ function wireDynamicButtons() {
     // would silently wipe out.
     document.getElementById("finalize-link-label").textContent = ST.event.isClosed
       ? "확정 내용 보기/수정"
-      : "일정 확정하기";
+      : "최적 배정 계산하기";
 
     const editBtn = document.getElementById("edit-event-btn");
     editBtn.style.display = "";
@@ -1162,81 +1338,38 @@ function wireDynamicButtons() {
 
     const deleteBtn = document.getElementById("delete-event-btn");
     deleteBtn.style.display = "";
-    deleteBtn.addEventListener("click", () => openDialog("delete-event-page-dialog"));
-    document.getElementById("confirm-delete-event-page-btn").addEventListener("click", async () => {
-      await api.del(`/api/events/${ST.event._id}`);
-      window.location.href = "/home";
+    // 앞으로 있을 일정은 참가자에게 "취소", 이미 지난 일정은 기록 "삭제"입니다.
+    const word = isPastEvent(ST.event) ? "삭제" : "취소";
+    document.getElementById("delete-event-btn-word").textContent = word;
+    deleteBtn.addEventListener("click", () => {
+      document.getElementById("delete-page-title").textContent = `일정 ${word}`;
+      document.getElementById("delete-page-notify-label").textContent =
+        `참가자에게 ${word} 안내 메일 보내기`;
+      document.getElementById("confirm-delete-event-page-btn").textContent =
+        word === "삭제" ? "삭제" : "취소하기";
+      openDialog("delete-event-page-dialog");
     });
-  } else if (!ST.event.ownerId && !ST.isGroup) {
+    document.getElementById("confirm-delete-event-page-btn").addEventListener("click", async () => {
+      const notify = document.getElementById("delete-notify-page").checked;
+      try {
+        await api.del(`/api/events/${ST.event._id}?notify=${notify}`);
+        window.location.href = "/home";
+      } catch (err) {
+        showSnackbar(err.message || "삭제하지 못했습니다.", "error");
+      }
+    });
+  } else if (!ST.event.ownerId) {
     // Guest-created event: anyone with the link may edit it.
     const editBtn = document.getElementById("edit-event-btn");
     editBtn.style.display = "";
     editBtn.addEventListener("click", () => NewEventDialog.open({ mode: "edit", event: ST.event }));
   }
-
-  if (ST.isGroup) {
-    document.getElementById("week-prev").addEventListener("click", () => changeWeek(-1));
-    document.getElementById("week-next").addEventListener("click", () => changeWeek(1));
-    document.getElementById("week-today").addEventListener("click", () => changeWeek(0, true));
-
-    const hasResponded = ST.viewerKey && !!ST.event.responses[ST.viewerKey];
-    if (ST.currentUser && !ST.isOwner && !hasResponded) {
-      const declineBtn = document.getElementById("decline-invite-btn");
-      declineBtn.style.display = "";
-      declineBtn.addEventListener("click", async () => {
-        if (!confirm("이 그룹 초대를 거절할까요?")) return;
-        await api.post(`/api/events/${ST.event._id}/decline`);
-        window.location.href = "/home";
-      });
-    }
-  }
 }
 
-async function changeWeek(delta, absolute) {
-  ST.weekOffset = absolute ? 0 : ST.weekOffset + delta;
-  computeDayColumns();
-  renderWeekLabel();
-  renderMeta();
-  buildGridDom();
-  await refreshResponses();
-  renderGridCells();
-}
-
-/* ---------------------------------------------------------------------- */
-/* "자세히 보기" - a bigger, fixed-size modal for the same live grid          */
-/* ---------------------------------------------------------------------- */
-
-// Reparents the real .event-layout node (not a copy) into the modal, so
-// every existing behavior - clicking a respondent to see just their marked
-// times, editing, drag-select - keeps working unmodified, just at a bigger
-// size. Remembers exactly where it came from so it can go back untouched.
-let gridDetailOriginalParent = null;
-let gridDetailOriginalNextSibling = null;
-
-function openGridDetail() {
-  const layout = document.querySelector(".event-layout");
-  const modalBody = document.getElementById("grid-detail-body");
-  if (!layout || !modalBody || gridDetailOriginalParent) return;
-
-  gridDetailOriginalParent = layout.parentElement;
-  gridDetailOriginalNextSibling = layout.nextElementSibling;
-  modalBody.appendChild(layout);
-
-  openDialog("grid-detail-dialog");
-  // The modal's fixed size is only established once it's actually visible -
-  // wait a frame so the height measurement below reads the real numbers.
-  requestAnimationFrame(() => syncLayoutHeights());
-}
-
-function restoreGridFromDetailView() {
-  const layout = document.querySelector(".grid-detail-body .event-layout");
-  if (layout && gridDetailOriginalParent) {
-    gridDetailOriginalParent.insertBefore(layout, gridDetailOriginalNextSibling);
-  }
-  gridDetailOriginalParent = null;
-  gridDetailOriginalNextSibling = null;
-  requestAnimationFrame(() => syncLayoutHeights());
-}
+// 확정 화면에 갔다 돌아오면 배정이 바뀌어 있을 수 있습니다.
+onPageRestore(() => {
+  if (ST.event) refreshAll().catch(() => {});
+});
 
 document.addEventListener("DOMContentLoaded", init);
 

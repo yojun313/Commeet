@@ -1,0 +1,113 @@
+<!-- Fixed-size frame so the modal never resizes as the attendee list or the
+     notes grow; the body scrolls inside instead. -->
+<div class="dialog-backdrop" id="rec-form-dialog">
+  <div class="dialog dialog-xl">
+    <div class="dialog-header">
+      <h2 id="rec-form-title">면담 기록</h2>
+      <button class="btn-icon" type="button" data-dialog-close>&times;</button>
+    </div>
+
+    <div class="rec-form-body">
+      <div class="rec-form-columns">
+        <div class="rec-form-col">
+          <section class="rec-section">
+            <h3 class="rec-section-title">기본 정보</h3>
+            <div class="rec-grid-2">
+              <div class="field">
+                <label for="rec-date">일자</label>
+                <input class="input" type="date" id="rec-date" />
+              </div>
+              <div class="field">
+                <label for="rec-professor">지도교수</label>
+                <input class="input" id="rec-professor" />
+              </div>
+              <div class="field">
+                <label for="rec-start">시작 시간</label>
+                <input class="input" type="time" id="rec-start" />
+                <span class="hint">일정 확정 시각</span>
+              </div>
+              <div class="field">
+                <label for="rec-end">종료 시간</label>
+                <input class="input" type="time" id="rec-end" />
+                <span class="hint">영수증 상의 시각</span>
+              </div>
+            </div>
+            <div class="field">
+              <label for="rec-place">장소</label>
+              <input class="input" id="rec-place" placeholder="예: 교내 카페" />
+            </div>
+          </section>
+
+          <section class="rec-section">
+            <div class="rec-section-head">
+              <h3 class="rec-section-title">참석자</h3>
+              <span class="hint" id="rec-attendee-count"></span>
+            </div>
+            <p class="hint" style="margin-top: 0;">
+              일정 확정 시 배정된 참석자입니다. 실제 참석자가 다르면 체크를 해제하거나
+              아래에서 직접 추가하세요. 소속에 따라 지도비 단가가 달라집니다.
+            </p>
+            <div id="rec-attendees" class="rec-attendee-list"></div>
+            <button class="btn btn-ghost btn-sm" type="button" id="rec-add-attendee">
+              참석자 추가
+            </button>
+          </section>
+        </div>
+
+        <div class="rec-form-col">
+          <section class="rec-section">
+            <div class="rec-section-head">
+              <h3 class="rec-section-title">주요 면담 내용</h3>
+              <div class="toggle-group" id="rec-notes-mode">
+                <button type="button" class="active" data-mode="shared">동일 내용</button>
+                <button type="button" data-mode="individual">개별 입력</button>
+              </div>
+            </div>
+            {# 네 항목은 공통·개별 양쪽에서 같은 모양으로 쓰입니다. 개별 쪽은
+               참석자마다 이 묶음을 하나씩 만들어 주므로(record-form.js
+               buildNoteFields) 여기서는 공통 쪽만 마크업으로 둡니다. #}
+            <div id="rec-note-shared">
+              <p class="hint" style="margin-top: 0;">모든 참석자에게 동일하게 적용됩니다. 해당 없는 항목은 비워 두세요.</p>
+              {# 그리드는 buildNoteFields()가 만들어 넣습니다. 여기에 .rec-note-fields를
+                 같이 주면 그리드가 이중이 되어 안쪽이 2열 중 1열만 차지합니다. #}
+              <div id="rec-shared-note-fields"></div>
+            </div>
+            <div id="rec-note-individual" class="rec-note-list" hidden></div>
+          </section>
+
+          <section class="rec-section">
+            <h3 class="rec-section-title">학생지도비 정산</h3>
+            <p class="hint" style="margin-top: 0;">
+              컴퓨터공학과와 무은재학부는 각각 따로 결재하므로, 영수증도 소속별로 첨부합니다.
+            </p>
+            <div id="rec-settlements" class="rec-settlement-list"></div>
+          </section>
+
+          <section class="rec-section">
+            <h3 class="rec-section-title">서명</h3>
+            <div class="rec-signature">
+              <canvas id="rec-signature-canvas" class="rec-signature-canvas"></canvas>
+              <div class="rec-signature-actions">
+                <span class="hint" id="rec-signature-hint">이 칸에 마우스나 손가락으로 서명하세요.</span>
+                <span class="rec-signature-buttons">
+                  <button class="btn btn-ghost btn-sm" type="button" id="rec-signature-upload">이미지 올리기</button>
+                  <button class="btn btn-ghost btn-sm" type="button" id="rec-signature-clear">지우기</button>
+                </span>
+                <input type="file" id="rec-signature-file"
+                       accept="image/png,image/jpeg,image/webp" hidden />
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <div class="dialog-footer rec-form-footer">
+      <button class="btn btn-ghost btn-sm rec-danger" type="button" id="rec-delete" hidden>삭제</button>
+      <span class="rec-footer-spacer"></span>
+      <button class="btn btn-ghost" type="button" id="rec-copy-povis">POVIS 입력용 복사</button>
+      <button class="btn btn-ghost" type="button" id="rec-print" hidden>신청서 열기</button>
+      <button class="btn btn-primary" type="button" id="rec-save">저장</button>
+    </div>
+  </div>
+</div>

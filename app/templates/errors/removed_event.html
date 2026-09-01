@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}{{ word }}된 일정 - {{ APP_NAME }}{% endblock %}
+{% block content %}
+<div class="container">
+  <div class="removed-event">
+    <div class="removed-event-icon" aria-hidden="true">
+      {# 이모지는 서버·기기 폰트에 따라 네모로 뜨는 경우가 있어 SVG로 그립니다. #}
+      <svg viewBox="0 0 24 24" width="46" height="46" fill="none"
+           stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="9"></circle>
+        {% if word == "삭제" %}<path d="M8 12h8"></path>
+        {% else %}<path d="M5.6 5.6l12.8 12.8"></path>{% endif %}
+      </svg>
+    </div>
+    <h1>이 일정은 {{ word }}되었습니다</h1>
+    <p class="removed-event-name">{{ event_name }}</p>
+
+    {% if word == "취소" %}
+    <p class="removed-event-desc">
+      주최자가 이 일정을 취소했습니다. 확정된 약속이 있었다면 그 약속도 진행되지 않습니다.
+      자세한 사정은 주최자에게 문의해 주세요.
+    </p>
+    {% else %}
+    <p class="removed-event-desc">
+      이미 지난 일정이며, 주최자가 기록을 삭제했습니다.
+    </p>
+    {% endif %}
+
+    {% if host_name %}
+    <p class="removed-event-host">주최: {{ host_name }}</p>
+    {% endif %}
+
+    <div class="removed-event-actions">
+      {% if user %}
+      <a class="btn btn-primary" href="/home">대시보드로</a>
+      {% else %}
+      <a class="btn btn-primary" href="/">{{ APP_NAME }} 홈으로</a>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

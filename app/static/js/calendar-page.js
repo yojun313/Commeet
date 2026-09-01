@@ -53,7 +53,7 @@ function fmtFullRange(start, end) {
 }
 
 function eventUrl(event) {
-  return event.type === "group" ? `/g/${event.shortId || event._id}` : `/e/${event.shortId || event._id}`;
+  return `/e/${event.shortId || event._id}`;
 }
 
 // Meetings only store raw participant keys; the backend resolves registered
@@ -97,11 +97,6 @@ function buildPlacements(events) {
       return;
     }
 
-    // "dow"/"group" polls store a fixed reference week in `dates`, not real
-    // calendar dates, so there's nothing meaningful to place until they're
-    // actually confirmed (handled above).
-    if (event.type === "dow" || event.type === "group") return;
-
     const seen = new Set();
     (event.dates || []).forEach((iso) => {
       const d = new Date(iso);
@@ -125,7 +120,7 @@ function openEventDetail(p) {
 
   const rows = [];
   rows.push(
-    `<div class="cal-detail-row"><span class="cal-detail-label">종류</span><span>${event.type === "group" ? "그룹 약속" : "일정"}</span></div>`
+    `<div class="cal-detail-row"><span class="cal-detail-label">종류</span><span>일정</span></div>`
   );
   if (p.kind === "confirmed") {
     rows.push(
@@ -565,7 +560,14 @@ async function saveCalendarOptions() {
 async function load() {
   let events = [];
   try {
-    events = await api.get("/api/user/events");
+    // 버전 지문을 목록과 함께 받습니다 - 따로 받으면 그 사이의 변경을
+    // 놓치고, 자동 갱신이 첫 차례에 괜히 한 번 더 받습니다.
+    const [list, version] = await Promise.all([
+      api.get("/api/user/events"),
+      api.get("/api/user/events/version").catch(() => null),
+    ]);
+    events = list;
+    if (version) live.sync(version.v);
   } catch (err) {
     showSnackbar(err.message, "error");
   }
@@ -573,9 +575,21 @@ async function load() {
   render();
 }
 
+/* 자동 갱신 - 주최자가 일정을 확정하면 그 약속이 내 캘린더에 바로
+   나타나고, 확정이 취소되면 사라집니다. 폴링 루프는 live.js. */
+const live = createLiveRefresh({
+  url: "/api/user/events/version",
+  // 약속 상세 다이얼로그가 떠 있는 동안에는 그 뒤를 다시 그리지 않습니다.
+  isBusy: () => liveDialogOpen(),
+  onChange: () => load(),
+});
+
+onPageRestore(() => load().catch(() => {}));
+
 document.addEventListener("DOMContentLoaded", () => {
   renderWeekdayHeader();
-  load();
+  // 첫 조회가 끝나 기준점(live.sync)이 잡힌 뒤에 폴링을 시작합니다.
+  load().then(() => live.start());
   loadGoogleAccounts();
 
   const settingsBtn = document.getElementById("cal-google-settings-btn");

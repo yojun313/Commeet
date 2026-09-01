@@ -3,6 +3,8 @@
 **POSTECH CSE Time Scheduler** - 그룹 일정 조율 서비스. [timeful.app](https://timeful.app) (구 schej.it)의 핵심 스케줄링 기능을
 FastAPI + MongoDB + Jinja2로 재구현한 프로젝트입니다.
 
+> 각 기능이 **어떤 파일의 어떤 코드로 동작하는지**는 [IMPLEMENTATION.md](IMPLEMENTATION.md)에 정리되어 있습니다.
+
 ## 기능
 
 - **일정 만들기**: 특정 날짜(specific dates) 또는 요일(day of week) 기준으로 가능한 시간 투표를 생성
@@ -51,7 +53,7 @@ cp .env.example .env   # MONGO_URI 등 채워넣기
 uv run python run.py   # 또는: uv run uvicorn app.main:app --reload
 ```
 
-`http://localhost:8000` 접속. MongoDB는 기본적으로 `mongodb://localhost:27017`, DB 이름은 `pcts`를 사용합니다.
+`http://localhost:8000` 접속. MongoDB는 기본적으로 `mongodb://localhost:27017`, DB 이름은 `commeet`를 사용합니다.
 
 ### 선택 사항
 

@@ -5,9 +5,14 @@ from pydantic import BaseModel, EmailStr, Field
 
 
 class EventType(str, Enum):
+    """일정은 한 종류뿐입니다 - 고른 날짜에 대해 가능한 시간을 모읍니다.
+
+    예전에는 요일 반복("dow")과 초대 전용 그룹("group")이 더 있었는데,
+    반복 일정을 쓸 일이 없어 걷어냈습니다. 값은 그대로 두어 이미 저장된
+    문서를 읽는 데 문제가 없게 합니다 - 새로 만들 때만 이 하나입니다.
+    """
+
     SPECIFIC_DATES = "specific_dates"
-    DOW = "dow"
-    GROUP = "group"
 
 
 class EventPayload(BaseModel):
@@ -29,11 +34,7 @@ class EventPayload(BaseModel):
     timeIncrement: int = 15
     sendEmailAfterXResponses: int | None = None
 
-    # Event type only
     remindees: list[str] = Field(default_factory=list)
-
-    # Group type only
-    attendees: list[str] = Field(default_factory=list)
 
 
 class EventResponsePayload(BaseModel):

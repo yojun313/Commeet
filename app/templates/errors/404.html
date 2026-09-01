@@ -3,7 +3,10 @@
 {% block content %}
 <div class="container error-page">
   <h1>404</h1>
-  <p>요청하신 페이지를 찾을 수 없습니다.</p>
+  {# 링크를 눌러 들어온 사람에게 "왜 없는지"까지 알려 줍니다. 넘겨받은 것이
+     없으면 지금까지처럼 일반적인 안내만 보여 줍니다. #}
+  <p>{{ message or "요청하신 페이지를 찾을 수 없습니다." }}</p>
+  {% if hint %}<p class="error-hint">{{ hint }}</p>{% endif %}
   <a class="btn btn-primary" href="/">홈으로 돌아가기</a>
 </div>
 {% endblock %}

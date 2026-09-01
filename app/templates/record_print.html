@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>학생지도비 신청서 - {{ APP_NAME }}</title>
+    <link rel="stylesheet" href="{{ asset('css/style.css') }}" />
+    <style>
+      /* Print styling lives here rather than in style.css: it only ever
+         applies to this one page, and it deliberately ignores the app's
+         theme tokens - a form goes on paper as black on white. */
+      body {
+        background: #fff;
+        color: #111;
+      }
+      .print-bar {
+        display: flex;
+        gap: 8px;
+        justify-content: flex-end;
+        align-items: center;
+        max-width: 760px;
+        margin: 24px auto 12px;
+        padding: 0 16px;
+      }
+      .print-bar .print-back {
+        margin-right: auto;
+      }
+      .sheet {
+        max-width: 760px;
+        margin: 0 auto 32px;
+        padding: 32px;
+        background: #fff;
+        color: #111;
+        border: 1px solid #d0d0d0;
+      }
+      .sheet-title {
+        text-align: center;
+        font-size: 22px;
+        font-weight: 800;
+        letter-spacing: 6px;
+        margin: 0 0 6px;
+      }
+      .sheet-sub {
+        text-align: center;
+        font-size: 13px;
+        color: #555;
+        margin: 0 0 22px;
+      }
+      .sheet-table {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+        font-size: 14px;
+      }
+      .sheet-table th,
+      .sheet-table td {
+        border: 1px solid #333;
+        padding: 9px 10px;
+        vertical-align: middle;
+        word-break: break-word;
+      }
+      .sheet-table th {
+        width: 110px;
+        background: #f3f3f3;
+        font-weight: 700;
+        text-align: center;
+      }
+      .sheet-table td.notes {
+        height: 150px;
+        vertical-align: top;
+        white-space: pre-wrap;
+        line-height: 1.7;
+      }
+      .amount {
+        font-weight: 700;
+      }
+      .attendee-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+      .attendee-table th,
+      .attendee-table td {
+        border: 1px solid #333;
+        padding: 6px 8px;
+        text-align: center;
+      }
+      .attendee-table th {
+        background: #f3f3f3;
+        width: auto;
+      }
+      .sign-row {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 14px;
+        margin-top: 26px;
+        font-size: 15px;
+      }
+      .sign-img {
+        height: 56px;
+        width: auto;
+      }
+      .sign-box {
+        display: inline-block;
+        width: 120px;
+        border-bottom: 1px solid #333;
+        height: 40px;
+      }
+      .receipt-block {
+        margin-top: 24px;
+      }
+      .receipt-block h3 {
+        font-size: 14px;
+        margin: 0 0 8px;
+      }
+      .receipt-img {
+        max-width: 100%;
+        max-height: 420px;
+        border: 1px solid #ccc;
+      }
+      /* Each 신청서 starts its own sheet of paper. */
+      .sheet + .sheet {
+        page-break-before: always;
+      }
+      @media print {
+        .print-bar {
+          display: none;
+        }
+        .sheet {
+          border: none;
+          margin: 0 auto;
+          padding: 0;
+          max-width: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="print-bar">
+      <a class="btn btn-ghost btn-sm print-back" href="/e/{{ record.eventId }}">&lsaquo; 일정으로 돌아가기</a>
+      <button class="btn btn-primary btn-sm" type="button" onclick="window.print()">인쇄 / PDF 저장</button>
+    </div>
+
+    {% if not forms %}
+    <div class="sheet">
+      <p>정산할 참석자가 없습니다. 면담 기록에서 참석자를 확인해 주세요.</p>
+    </div>
+    {% endif %}
+
+    {% for form in forms %}
+    <div class="sheet">
+      <h1 class="sheet-title">학생지도비 신청서</h1>
+      <p class="sheet-sub">{{ form.affiliationLabel }}{% if forms | length > 1 %} ({{ loop.index }}/{{ forms | length }}){% endif %}</p>
+
+      <table class="sheet-table">
+        <tbody>
+          <tr>
+            <th>지도교수</th>
+            <td colspan="3">{{ record.professorName }}</td>
+          </tr>
+          <tr>
+            <th>일자</th>
+            <td>{{ record.date }}</td>
+            <th>시간</th>
+            <td>{{ record.startTime }} ~ {{ record.endTime }}</td>
+          </tr>
+          <tr>
+            <th>장소</th>
+            <td colspan="3">{{ record.place }}</td>
+          </tr>
+          <tr>
+            <th>집행액</th>
+            <td class="amount">
+              {{ "{:,}".format(form.settlement.amount or 0) }}원
+              <span style="font-weight: 400; color: #555;">
+                ({{ "{:,}".format(form.settlement.unitPrice or 0) }}원 &times; {{ form.settlement.headcount }}명)
+              </span>
+            </td>
+            <th>카드사용</th>
+            <td>{{ form.settlement.receiptTime or record.endTime }}</td>
+          </tr>
+          <tr>
+            <th>참석자</th>
+            <td colspan="3">
+              <table class="attendee-table">
+                <thead>
+                  <tr>
+                    <th>이름</th>
+                    <th>학번</th>
+                    <th>소속</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for a in form.attendees %}
+                  <tr>
+                    <td>{{ a.name }}</td>
+                    <td>{{ a.studentId or "-" }}</td>
+                    <td>{{ form.affiliationLabel }}</td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <th>주요<br />면담 내용</th>
+            {# 비어 있는 항목은 인쇄하지 않습니다 - 결재 서류라 빈 제목만 남으면
+               지저분합니다. 항목 순서는 record_service.NOTE_CATEGORIES를 따릅니다. #}
+            <td class="notes" colspan="3">{% if record.notesMode == "individual" %}{% for a in form.attendees %}[{{ a.name }}]
+{% for key, label in note_categories %}{% if record.perStudentNotes.get(a.key, {}).get(key) %}{{ label }}: {{ record.perStudentNotes[a.key][key] }}
+{% endif %}{% endfor %}
+{% endfor %}{% else %}{% for key, label in note_categories %}{% if record.sharedNotes.get(key) %}{{ label }}: {{ record.sharedNotes[key] }}
+{% endif %}{% endfor %}{% endif %}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="sign-row">
+        <span>{{ record.date }}</span>
+        <span>지도교수 {{ record.professorName }}</span>
+        {% if record.hasSignature %}
+        <img class="sign-img" src="/api/records/{{ record._id }}/file/signature.png" alt="서명" />
+        {% else %}
+        <span class="sign-box"></span>
+        {% endif %}
+      </div>
+
+      {% if form.settlement.receiptFile %}
+      <div class="receipt-block">
+        <h3>영수증</h3>
+        {% if form.settlement.receiptFile.endswith(".pdf") %}
+        <a href="/api/records/{{ record._id }}/file/{{ form.settlement.receiptFile }}" target="_blank" rel="noopener">
+          {{ form.settlement.receiptName or "영수증 PDF 열기" }}
+        </a>
+        {% else %}
+        <img class="receipt-img" src="/api/records/{{ record._id }}/file/{{ form.settlement.receiptFile }}" alt="영수증" />
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </body>
+</html>

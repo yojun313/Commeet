@@ -194,6 +194,22 @@ async def delete_contact(owner: dict, contact_id: str) -> bool:
     return result.deleted_count > 0
 
 
+async def delete_contacts(owner: dict, contact_ids: list[str]) -> int:
+    """여러 건을 한 번에 지우고 실제로 지워진 수를 돌려줍니다.
+
+    ownerId를 조건에 함께 걸어, 남의 연락처 id가 섞여 들어와도 지워지지
+    않습니다. 잘못된 형식의 id는 조용히 건너뜁니다 - 하나가 이상하다고
+    나머지 선택까지 실패시킬 이유가 없습니다.
+    """
+    oids = [oid for oid in (to_object_id(cid) for cid in contact_ids) if oid]
+    if not oids:
+        return 0
+    result = await contacts_col.delete_many(
+        {"_id": {"$in": oids}, "ownerId": owner["_id"]}
+    )
+    return result.deleted_count
+
+
 async def list_contacts(owner: dict) -> list[dict]:
     contacts = (
         await contacts_col.find({"ownerId": owner["_id"]})

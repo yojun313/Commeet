@@ -6,7 +6,8 @@
     <h1>모두가 가능한 시간을<br />한눈에 찾아보세요</h1>
     <p class="subtitle">
       번거로운 대화 없이 그룹 일정을 조율하세요. 링크 하나로 팀원들의 가능한 시간을 모으고,
-      Google Calendar를 연동하면 자동으로 빈 시간을 채워줍니다.
+      {% if GOOGLE_CALENDAR_ENABLED %}Google Calendar를 연동하면 자동으로 빈 시간을 채워줍니다.
+      {% else %}겹치는 시간을 한눈에 확인하세요.{% endif %}
     </p>
     <div class="cta-row">
       {% if user %}
@@ -55,14 +56,16 @@
         <summary>몇 명까지 응답할 수 있나요?</summary>
         <p>인원 제한이 없습니다.</p>
       </details>
+      {% if GOOGLE_CALENDAR_ENABLED %}
       <details class="faq-item">
         <summary>어떤 캘린더와 연동되나요?</summary>
-        <p>현재 Google Calendar 연동을 지원합니다. 설정 페이지에서 연결할 수 있어요.</p>
+        <p>현재 Google Calendar 연동을 지원합니다. 캘린더 페이지에서 연결할 수 있어요.</p>
       </details>
       <details class="faq-item">
         <summary>캘린더 연동이 꼭 필요한가요?</summary>
         <p>아니요. 캘린더 없이 직접 가능한 시간을 클릭해서 표시할 수 있습니다. 캘린더 연동은 이 과정을 더 빠르게 해줄 뿐입니다.</p>
       </details>
+      {% endif %}
       <details class="faq-item">
         <summary>다른 사람이 제 캘린더 일정을 볼 수 있나요?</summary>
         <p>아니요. 다른 참여자에게는 오직 "바쁨" 여부만 표시되고, 일정 제목 등 세부 내용은 공유되지 않습니다.</p>

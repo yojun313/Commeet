@@ -52,62 +52,79 @@ function fmtDateRange(event) {
   const dates = event.dates.map((d) => new Date(d)).sort((a, b) => a - b);
   const fmt = (d) => `${d.getMonth() + 1}/${d.getDate()}`;
 
-  if (event.type === "dow" || event.type === "group") {
-    const days = ["일", "월", "화", "수", "목", "금", "토"];
-    const set = new Set(dates.map((d) => d.getDay()));
-    return [...set].sort().map((i) => days[i]).join(", ");
-  }
   if (dates.length === 1) return fmt(dates[0]);
   return `${fmt(dates[0])} ~ ${fmt(dates[dates.length - 1])}`;
 }
 
 function typeBadge(event) {
-  // In list view every row is the same kind of thing, so the plain "일정"
-  // badge is just noise - only the ones that actually say something
-  // ("그룹", "확정됨") are kept there.
-  const isList = viewMode === "list";
-  const kind =
-    event.type === "group"
-      ? '<span class="badge">그룹</span>'
-      : isList
-        ? ""
-        : '<span class="badge badge-muted">일정</span>';
+  // 목록 보기에서는 모든 줄이 같은 종류라 "일정" 뱃지가 소음일 뿐입니다 -
+  // 실제로 무언가를 말해 주는 "확정됨"만 남깁니다.
+  const kind = viewMode === "list" ? "" : '<span class="badge badge-muted">일정</span>';
   const closed = event.isClosed ? ' <span class="badge" style="background:var(--color-primary);color:#fff;">확정됨</span>' : "";
   return kind + closed;
 }
 
 const GRIP_HTML = `<span class="event-card-grip" title="끌어서 폴더로 이동"><i></i><i></i><i></i><i></i><i></i><i></i></span>`;
 
+/* 참여 중인 일정(내가 만들지 않은 일정)은 읽기 전용입니다 - 수정·복제·보관·
+ * 삭제는 서버에서도 소유자만 허용하므로, 버튼을 두면 눌러 봐야 403만
+ * 돌아옵니다. 폴더 이동과 순서 변경도 내 일정을 정리하는 기능이라 빼둡니다. */
+/* 마지막 날짜 + 시간 범위가 이미 지났는지. 서버 event_service.is_past_event()와
+ * 같은 규칙입니다. */
+function isPastEvent(event) {
+  const dates = (event.dates || []).map((d) => new Date(d));
+  if (!dates.length) return false;
+  const last = new Date(Math.max(...dates));
+  last.setHours(last.getHours() + (event.duration || 0));
+  return last < new Date();
+}
+
 function eventCard(event) {
-  const url = event.type === "group" ? `/g/${event.shortId || event._id}` : `/e/${event.shortId || event._id}`;
+  const readOnly = event.isOwner === false;
+  const url = `/e/${event.shortId || event._id}`;
   const div = document.createElement("div");
-  div.className = "event-card";
+  div.className = "event-card" + (readOnly ? " event-card-readonly" : "");
   div.dataset.eventId = event._id;
   // List view puts the drag handle first so it lines up down the left edge
   // of the rows; the card layout is a plain flex row there, so DOM order is
   // the position.
   const isList = viewMode === "list";
+  const grip = readOnly ? "" : GRIP_HTML;
   div.innerHTML = `
-    ${isList ? GRIP_HTML : ""}
+    ${isList ? grip : ""}
     <div class="event-card-top">
       <div>
         <div class="event-card-title"><a href="${url}">${escapeHtml(event.name)}</a></div>
         <div class="event-card-meta">${fmtDateRange(event)} &middot; 응답 ${event.numResponses ?? 0}명</div>
-        <div class="event-card-created">${fmtCreatedAt(event.createdAt)} 생성</div>
+        <div class="event-card-created">${
+          readOnly
+            ? `${escapeHtml(event.ownerName || "익명")}님의 일정`
+            : `${fmtCreatedAt(event.createdAt)} 생성`
+        }</div>
       </div>
       <div class="event-card-top-right">
         ${typeBadge(event)}
-        ${isList ? "" : GRIP_HTML}
+        ${isList ? "" : grip}
       </div>
     </div>
     <div class="event-card-actions">
       <a class="btn btn-sm btn-secondary" href="${url}">열기</a>
-      <button class="btn btn-sm btn-ghost" data-action="edit">수정</button>
-      <button class="btn btn-sm btn-ghost" data-action="duplicate">복제</button>
-      <button class="btn btn-sm btn-ghost" data-action="archive">${event.isArchived ? "보관 해제" : "보관"}</button>
-      <button class="btn btn-sm btn-ghost" data-action="delete" style="color: var(--color-danger);">삭제</button>
+      ${
+        readOnly
+          ? `<span class="event-card-readonly-note">${
+              event.hasResponded ? "응답함" : "응답 대기"
+            }</span>`
+          : `<button class="btn btn-sm btn-ghost" data-action="edit">수정</button>
+             <button class="btn btn-sm btn-ghost" data-action="duplicate">복제</button>
+             <button class="btn btn-sm btn-ghost" data-action="archive">${event.isArchived ? "보관 해제" : "보관"}</button>
+             <button class="btn btn-sm btn-ghost" data-action="delete" style="color: var(--color-danger);">${
+               isPastEvent(event) ? "삭제" : "취소"
+             }</button>`
+      }
     </div>
   `;
+
+  if (readOnly) return div;
 
   div.querySelector('[data-action="edit"]').addEventListener("click", async () => {
     const full = await api.get(`/api/events/${event._id}`);
@@ -126,6 +143,15 @@ function eventCard(event) {
   });
   div.querySelector('[data-action="delete"]').addEventListener("click", () => {
     deleteTargetId = event._id;
+    // 앞으로 있을 일정은 참가자에게 "취소", 이미 지난 일정은 기록 "삭제"입니다.
+    const word = isPastEvent(event) ? "삭제" : "취소";
+    document.getElementById("delete-dialog-title").textContent = `일정 ${word}`;
+    document.getElementById("delete-notify-label").textContent =
+      `참가자에게 ${word} 안내 메일 보내기`;
+    document.getElementById("delete-notify-desc").textContent =
+      `응답한 사람과 초대받은 사람에게 일정이 ${word}되었다고 알립니다.`;
+    document.getElementById("confirm-delete-event-btn").textContent =
+      word === "삭제" ? "삭제" : "취소하기";
     openDialog("delete-event-dialog");
   });
 
@@ -196,17 +222,34 @@ function persistManualOrder() {
   showSnackbar("순서를 저장했습니다.", "success");
 }
 
+/* 폴더는 내가 만든 일정을 정리하는 도구입니다. 남의 일정은 폴더에 넣거나
+   보관할 수 없으므로 이 계산에서 아예 제외합니다. */
+function ownedEvents() {
+  return events.filter((e) => e.isOwner !== false);
+}
+
+function joinedEvents() {
+  return sortItems(
+    events.filter((e) => e.isOwner === false),
+    sortMode,
+    DASHBOARD_COMPARATORS,
+    manualOrder,
+    (e) => e._id
+  );
+}
+
 function folderEventList(folderId) {
+  const mine = ownedEvents();
   let list;
   if (folderId === "__none__") {
     const assigned = new Set(folders.flatMap((f) => f.eventIds || []));
-    list = events.filter((e) => !assigned.has(e._id) && !e.isArchived);
+    list = mine.filter((e) => !assigned.has(e._id) && !e.isArchived);
   } else if (folderId === "__archived__") {
-    list = events.filter((e) => e.isArchived);
+    list = mine.filter((e) => e.isArchived);
   } else {
     const folder = folders.find((f) => f._id === folderId);
     const ids = new Set((folder && folder.eventIds) || []);
-    list = events.filter((e) => ids.has(e._id) && !e.isArchived);
+    list = mine.filter((e) => ids.has(e._id) && !e.isArchived);
   }
   return sortItems(list, sortMode, DASHBOARD_COMPARATORS, manualOrder, (e) => e._id);
 }
@@ -221,8 +264,8 @@ function renderFolderBlock(id, name, color, list, options) {
   options = options || {};
   const block = document.createElement("div");
   block.className = "folder-block";
-  // "보관됨" isn't a real folder assignment target, so it doesn't accept drops.
-  if (id !== "__archived__") block.dataset.folderId = id;
+  // "보관됨"과 "참여 중인 일정"은 폴더 배정 대상이 아니라 드롭을 받지 않습니다.
+  if (id !== "__archived__" && !options.notDroppable) block.dataset.folderId = id;
 
   const header = document.createElement("div");
   header.className = "folder-header";
@@ -280,7 +323,9 @@ function renderFolderBlock(id, name, color, list, options) {
     header.classList.toggle("collapsed");
   });
 
-  block.appendChild(header);
+  // 섹션 제목이 이미 이름을 달고 있는 곳(참여 중인 일정)에서는 폴더 칩
+  // 헤더가 같은 말을 두 번 하게 되므로 생략합니다.
+  if (!options.noHeader) block.appendChild(header);
   block.appendChild(body);
   return block;
 }
@@ -293,6 +338,13 @@ function syncViewToggle() {
 
 // Split from loadDashboard so switching the view mode can redraw from the
 // folders/events already in memory instead of refetching them.
+function sectionTitle(text, count) {
+  const el = document.createElement("h2");
+  el.className = "dashboard-section-title";
+  el.innerHTML = `${escapeHtml(text)} <span class="dashboard-section-count">${count}</span>`;
+  return el;
+}
+
 function renderFolders() {
   const root = document.getElementById("folders-root");
   root.innerHTML = "";
@@ -301,6 +353,14 @@ function renderFolders() {
     root.innerHTML = `<div class="empty-state"><div class="icon">🗓️</div>아직 일정이 없습니다. 첫 일정을 만들어보세요!</div>`;
     return;
   }
+
+  const mine = ownedEvents();
+  const joined = joinedEvents();
+
+  // 두 종류가 다 있을 때만 제목을 붙입니다 - 한 종류뿐이면 굳이 나눌
+  // 것이 없고, 제목만 늘어나 화면이 길어집니다.
+  const showTitles = mine.length > 0 && joined.length > 0;
+  if (showTitles) root.appendChild(sectionTitle("내가 만든 일정", mine.length));
 
   folders.forEach((folder) => {
     const list = folderEventList(folder._id);
@@ -318,17 +378,51 @@ function renderFolders() {
       renderFolderBlock("__archived__", "보관됨", "#BDBDBD", archivedList, { archived: true, emptyText: "보관된 일정이 없습니다" })
     );
   }
+
+  if (joined.length) {
+    // 이 블록은 폴더 헤더가 없으므로 제목을 항상 붙입니다.
+    root.appendChild(sectionTitle("참여 중인 일정", joined.length));
+    root.appendChild(
+      renderFolderBlock("__joined__", "참여 중인 일정", "#9FB6CB", joined, {
+        notDroppable: true,
+        noHeader: true,
+        emptyText: "참여 중인 일정이 없습니다",
+      })
+    );
+  }
 }
 
 async function loadDashboard() {
-  [folders, events] = await Promise.all([api.get("/api/folders"), api.get("/api/user/events")]);
+  // 버전 지문을 목록과 함께 받아 둡니다. 따로 받으면 그 사이에 들어온
+  // 변경을 놓칠 수 있고, 자동 갱신이 첫 차례에 괜히 한 번 더 받습니다.
+  let version;
+  [folders, events, version] = await Promise.all([
+    api.get("/api/folders"),
+    api.get("/api/user/events"),
+    api.get("/api/user/events/version").catch(() => null),
+  ]);
   renderFolders();
+  if (version) live.sync(version.v);
 }
+
+/* 자동 갱신 - 내가 만든 일정에 누가 응답하거나, 참여 중인 일정이 확정·
+   취소·삭제되면 새로고침 없이 목록이 바뀝니다. 폴링 루프는 live.js. */
+const live = createLiveRefresh({
+  url: "/api/user/events/version",
+  // 다이얼로그가 떠 있거나 카드를 끌고 있는 동안에는 목록을 다시 그리지
+  // 않습니다 - 무엇을 지우려던 참이었는지 알 수 없게 됩니다.
+  isBusy: () => liveDialogOpen() || liveDragging(),
+  onChange: () => loadDashboard(),
+});
+
+// 일정을 만들고 뒤로 돌아오면 새 일정이 보여야 합니다.
+onPageRestore(loadDashboard);
 
 document.addEventListener("DOMContentLoaded", () => {
   syncViewToggle();
   buildSortSelect(document.getElementById("sort-select"), DASHBOARD_SORT_OPTIONS, sortMode);
-  loadDashboard();
+  // 첫 조회가 끝나 기준점(live.sync)이 잡힌 뒤에 폴링을 시작합니다.
+  loadDashboard().then(() => live.start());
 
   document.getElementById("sort-select").addEventListener("change", (e) => {
     sortMode = e.target.value;
@@ -382,9 +476,23 @@ document.addEventListener("DOMContentLoaded", () => {
 
   document.getElementById("confirm-delete-event-btn").addEventListener("click", async () => {
     if (!deleteTargetId) return;
-    await api.del(`/api/events/${deleteTargetId}`);
-    closeDialog("delete-event-dialog");
-    deleteTargetId = null;
-    loadDashboard();
+    const target = events.find((e) => e._id === deleteTargetId);
+    const word = target && isPastEvent(target) ? "삭제" : "취소";
+    const notify = document.getElementById("delete-notify").checked;
+    try {
+      const res = await api.del(`/api/events/${deleteTargetId}?notify=${notify}`);
+      closeDialog("delete-event-dialog");
+      deleteTargetId = null;
+      const n = res && res.notifiedCount;
+      showSnackbar(
+        n
+          ? `${word} 처리했습니다. ${n}명에게 안내 메일을 보내는 중입니다.`
+          : `일정을 ${word}했습니다.`,
+        "success"
+      );
+      loadDashboard();
+    } catch (err) {
+      showSnackbar(err.message || "삭제하지 못했습니다.", "error");
+    }
   });
 });

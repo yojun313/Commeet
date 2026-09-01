@@ -18,9 +18,16 @@ from app.db import access_logs_col, events_col, users_col
 # the log volume many times over.
 _EXCLUDED_PREFIXES = ("/static/",)
 
+# 일정 화면이 몇 초마다 두드리는 버전 확인 요청(/api/events/{id}/version).
+# 사용자가 한 행동이 아니라 화면이 켜져 있다는 사실일 뿐인데, 남겨 두면
+# 로그의 대부분을 차지해 나머지를 덮어 버립니다.
+_EXCLUDED_SUFFIXES = ("/version",)
+
 
 def should_log(path: str) -> bool:
-    return not path.startswith(_EXCLUDED_PREFIXES)
+    if path.startswith(_EXCLUDED_PREFIXES):
+        return False
+    return not path.endswith(_EXCLUDED_SUFFIXES)
 
 
 async def record_request(

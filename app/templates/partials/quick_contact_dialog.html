@@ -1,0 +1,27 @@
+{# 초대 창 안에서 연락처를 추가하는 창.
+
+   연락처가 없을 때 "/contacts로 가세요"라고 안내하면 초대하려던 흐름이 끊깁니다.
+   연락처 페이지와 **같은 패널**(contact_add_panel.html)을 그대로 넣어, 검색·직접
+   입력·붙여넣기를 모두 여기서 할 수 있게 합니다. 추가하면 초대 목록이 바로
+   갱신되고 방금 넣은 사람은 선택된 상태가 됩니다 (event-grid.js).
+
+   초대 창 다음에 놓아야 합니다 - 두 창의 backdrop이 같은 z-index라 나중에
+   오는 쪽이 위에 그려집니다. #}
+<div class="dialog-backdrop" id="quick-contact-dialog">
+  <div class="dialog dialog-md">
+    <div class="dialog-header">
+      <h2>연락처 추가</h2>
+      <button class="btn-icon" type="button" data-dialog-close>&times;</button>
+    </div>
+
+    <p class="hint" style="margin-top: 0;">
+      추가한 사람은 초대 목록에 바로 나타나고 선택된 상태가 됩니다.
+    </p>
+
+    {% include "partials/contact_add_panel.html" %}
+
+    <div class="dialog-footer">
+      <button type="button" class="btn btn-primary" data-dialog-close>완료</button>
+    </div>
+  </div>
+</div>

@@ -12,12 +12,12 @@ from app.db.mongo import db
 users_col = db["users"]
 events_col = db["events"]
 event_responses_col = db["event_responses"]
-attendees_col = db["attendees"]
 folders_col = db["folders"]
 folder_events_col = db["folder_events"]
 contacts_col = db["contacts"]
 pending_signups_col = db["pending_signups"]
 access_logs_col = db["access_logs"]
+meeting_records_col = db["meeting_records"]
 
 
 async def create_indexes() -> None:
@@ -28,8 +28,6 @@ async def create_indexes() -> None:
     await events_col.create_index("ownerId")
 
     await event_responses_col.create_index([("eventId", 1), ("userId", 1)], unique=True)
-
-    await attendees_col.create_index([("eventId", 1), ("email", 1)], unique=True)
 
     await folders_col.create_index("userId")
     await folder_events_col.create_index([("folderId", 1), ("eventId", 1)], unique=True)
@@ -47,3 +45,11 @@ async def create_indexes() -> None:
     # doesn't mean "grow forever".
     await access_logs_col.create_index("ts", expireAfterSeconds=60 * 24 * 3600)
     await access_logs_col.create_index("userId")
+
+    # 학생지도비 신청서. One record per (event, meeting start) - meetings[]
+    # has no id of its own and confirm() rewrites the whole finalization
+    # subdoc, so the meeting's start time is the stable handle.
+    await meeting_records_col.create_index("ownerId")
+    await meeting_records_col.create_index(
+        [("ownerId", 1), ("eventId", 1), ("meetingStart", 1)], unique=True
+    )

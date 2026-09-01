@@ -37,13 +37,14 @@
             {% if user.isAdmin %}
             <a href="/admin">관리자 대시보드</a>
             {% endif %}
+            <a href="/trash">휴지통</a>
             <a href="/settings">설정</a>
             <button type="button" data-sign-out>로그아웃</button>
           </div>
         </div>
       {% else %}
-        <a class="btn btn-ghost btn-sm" href="/sign-in">로그인</a>
-        <a class="btn btn-primary btn-sm" href="/sign-up">시작하기</a>
+        <a class="btn btn-ghost btn-sm" href="{{ sign_in_url(request) }}">로그인</a>
+        <a class="btn btn-primary btn-sm" href="{{ sign_up_url(request) }}">시작하기</a>
       {% endif %}
     </div>
   </div>

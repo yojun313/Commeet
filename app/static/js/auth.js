@@ -1,8 +1,14 @@
+// 로그인/가입이 끝난 뒤 돌아갈 곳. 초대 링크(/e/...)로 들어왔다가
+// 로그인 화면으로 튕긴 사람을 원래 링크로 되돌려 보냅니다.
+// 서버 쪽 같은 규칙은 app/core/redirects.py 의 safe_next 를 보세요.
 function nextUrl() {
   const params = new URLSearchParams(window.location.search);
   const next = params.get("next");
   // Only allow internal paths, so a crafted ?next= can't bounce users off-site.
-  if (next && next.startsWith("/") && !next.startsWith("//")) return next;
+  // "//evil.com" 과 "/\\evil.com" 은 브라우저가 외부 주소로 읽습니다.
+  if (next && next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\")) {
+    return next;
+  }
   return "/home";
 }
 

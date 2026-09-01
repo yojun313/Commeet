@@ -3,6 +3,7 @@ from datetime import datetime
 from bson import ObjectId
 from fastapi import APIRouter, HTTPException, Request, status
 
+from app.core.ids import to_object_id
 from app.core.serialize import jsonable
 from app.db import events_col
 from app.schemas.event import (
@@ -19,26 +20,17 @@ from app.services.auth_service import get_optional_user, get_user_by_id, require
 router = APIRouter(prefix="/api/events", tags=["events"])
 
 
-async def _check_group_access(event: dict, viewer: dict | None) -> None:
-    """Groups are permissioned: only the owner and invited attendees may view
-    them (unlike regular events, which are open to anyone with the link)."""
-    if event["type"] != "group":
-        return
-    if not viewer:
-        raise HTTPException(status_code=401, detail="그룹을 보려면 로그인이 필요합니다")
-    if event.get("ownerId") == viewer["_id"]:
-        return
-    attendees = await event_service.get_attendees(event["_id"])
-    if any(a["email"] == viewer["email"] for a in attendees):
-        return
-    raise HTTPException(status_code=403, detail="이 그룹에 접근할 권한이 없습니다")
-
-
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_event(payload: EventPayload, request: Request):
     owner = await get_optional_user(request)
     event = await event_service.create_event(payload, owner)
-    return {"eventId": str(event["_id"]), "shortId": event.get("shortId")}
+    return {
+        "eventId": str(event["_id"]),
+        "shortId": event.get("shortId"),
+        # 초대 메일은 백그라운드로 나갑니다. 화면이 "보내는 중"이라고 알릴 수
+        # 있도록 넘긴 통수를 함께 돌려줍니다.
+        "invitesQueued": event.get("invitesQueued", 0),
+    }
 
 
 @router.put("/{event_id}")
@@ -49,13 +41,13 @@ async def edit_event(event_id: str, payload: EventPayload, request: Request):
 
     requester = await get_optional_user(request)
     try:
-        await event_service.update_event(event, payload, requester)
+        saved = await event_service.update_event(event, payload, requester)
     except event_service.NotEventOwner as exc:
         raise HTTPException(
             status_code=403, detail="이 이벤트를 수정할 권한이 없습니다"
         ) from exc
 
-    return {}
+    return {"invitesQueued": saved.get("invitesQueued", 0)}
 
 
 @router.get("/{event_id}/ids")
@@ -66,6 +58,24 @@ async def get_event_ids(event_id: str):
     return {"shortId": event.get("shortId") or "", "longId": str(event["_id"])}
 
 
+@router.get("/{event_id}/version")
+async def get_event_version(event_id: str):
+    """화면이 몇 초마다 두드리는 **가장 싼** 엔드포인트.
+
+    응답은 `{"v": 12}` 뿐이고, 인증도 하지 않습니다 - 링크 자체가 비밀이고
+    "무언가 바뀌었다"는 사실만으로는 아무 내용도 새어 나가지 않으므로,
+    쿠키에서 사용자를 찾는 조회 한 번까지 아낍니다. 결과적으로 폴링 1회당
+    인덱스 조회 정확히 1번입니다.
+
+    지워진 일정은 404를 돌려주어, 보고 있던 화면이 폴링을 멈출 수 있게
+    합니다 (event-grid.js의 liveTick).
+    """
+    version = await event_service.get_version(event_id)
+    if version is None:
+        raise HTTPException(status_code=404, detail="이벤트를 찾을 수 없습니다")
+    return {"v": version}
+
+
 @router.get("/{event_id}")
 async def get_event(event_id: str, request: Request, guestName: str | None = None):
     event = await event_service.get_event_by_either_id(event_id)
@@ -73,7 +83,6 @@ async def get_event(event_id: str, request: Request, guestName: str | None = Non
         raise HTTPException(status_code=404, detail="이벤트를 찾을 수 없습니다")
 
     viewer = await get_optional_user(request)
-    await _check_group_access(event, viewer)
     is_owner = bool(viewer) and event.get("ownerId") == viewer["_id"]
 
     responses = await event_service.get_event_responses(event["_id"])
@@ -87,11 +96,6 @@ async def get_event(event_id: str, request: Request, guestName: str | None = Non
     )
     result["isOwner"] = is_owner
     result["isClosed"] = bool(event.get("isClosed"))
-
-    if event["type"] == "group":
-        result["attendees"] = await event_service.get_attendees(event["_id"])
-        if viewer:
-            result["hasResponded"] = str(viewer["_id"]) in responses_map
 
     if event.get("blindAvailabilityEnabled") and not is_owner:
         result["numResponses"] = None
@@ -113,7 +117,6 @@ async def get_responses(
         raise HTTPException(status_code=404, detail="이벤트를 찾을 수 없습니다")
 
     viewer = await get_optional_user(request)
-    await _check_group_access(event, viewer)
     is_owner = bool(viewer) and event.get("ownerId") == viewer["_id"]
 
     responses_map = await event_service.get_filtered_responses_map(
@@ -134,7 +137,6 @@ async def update_event_response(
         raise HTTPException(status_code=404, detail="이벤트를 찾을 수 없습니다")
 
     requester = await get_optional_user(request)
-    await _check_group_access(event, requester)
 
     try:
         is_new, user_key = await event_service.upsert_response(
@@ -159,7 +161,7 @@ async def update_event_response(
         owner = await get_user_by_id(owner_id)
         current_count = (event.get("numResponses") or 0) + 1
 
-        if owner and (event.get("notificationsEnabled") or event["type"] == "group"):
+        if owner and event.get("notificationsEnabled"):
             respondent_name = (
                 payload.name if payload.guest else (requester or {}).get("name", "")
             )
@@ -219,40 +221,9 @@ async def rename_user(event_id: str, payload: RenameGuestPayload):
     return {}
 
 
-@router.post("/{event_id}/decline")
-async def decline_invite(event_id: str, request: Request):
-    user = await require_user(request)
-    event = await event_service.get_event_by_id(event_id)
-    if event is None:
-        raise HTTPException(status_code=404, detail="이벤트를 찾을 수 없습니다")
-    if event["type"] != "group":
-        raise HTTPException(status_code=400, detail="그룹 이벤트가 아닙니다")
-
-    if not await event_service.decline_invite(event, user):
-        raise HTTPException(status_code=404, detail="초대 목록에서 찾을 수 없습니다")
-    return {}
-
-
-@router.get("/{event_id}/calendar-availabilities")
-async def calendar_availabilities(
-    event_id: str, request: Request, timeMin: datetime, timeMax: datetime
-):
-    user = await require_user(request)
-    event = await event_service.get_event_by_id(event_id)
-    if event is None:
-        raise HTTPException(status_code=404, detail="이벤트를 찾을 수 없습니다")
-    if event["type"] != "group":
-        raise HTTPException(status_code=400, detail="그룹 이벤트가 아닙니다")
-    await _check_group_access(event, user)
-
-    result = await event_service.get_calendar_availabilities(
-        event, timeMin, timeMax, user
-    )
-    return jsonable(result)
-
-
 @router.delete("/{event_id}")
-async def delete_event(event_id: str, request: Request):
+async def delete_event(event_id: str, request: Request, notify: bool = True):
+    """`notify=false`면 취소 안내 메일을 보내지 않습니다 (시험용 일정 등)."""
     user = await require_user(request)
     if not ObjectId.is_valid(event_id):
         raise HTTPException(status_code=400, detail="잘못된 이벤트 ID입니다")
@@ -263,8 +234,8 @@ async def delete_event(event_id: str, request: Request):
     if event is None:
         raise HTTPException(status_code=404, detail="이벤트를 찾을 수 없습니다")
 
-    await event_service.delete_event(event, user)
-    return {}
+    notified = await event_service.delete_event(event, user, notify=notify)
+    return {"notifiedCount": notified}
 
 
 @router.post("/{event_id}/invite")
@@ -283,22 +254,17 @@ async def send_invites(event_id: str, payload: SendInvitePayload, request: Reque
             status_code=403, detail="일정을 만든 사람만 초대를 보낼 수 있습니다"
         )
 
-    is_group = event["type"] == "group"
     recipients = list(dict.fromkeys(str(e).strip().lower() for e in payload.emails))
 
-    for email in recipients:
-        if is_group:
-            # Group access is invite-only, so sending the link must also grant entry.
-            await event_service.add_attendee(event, email)
-            await email_service.send_group_invite_email(
-                email, user, event, payload.message
-            )
-        else:
-            await email_service.send_event_invite_email(
-                email, user, event, payload.message
-            )
+    mails = [
+        email_service.build_event_invite_mail(email, user, event, payload.message)
+        for email in recipients
+    ]
 
-    return {"sent": len(recipients)}
+    # 발송을 기다리지 않습니다 - 최대 20명이면 메일 서버와의 왕복만 몇 초라,
+    # 기다리면 다이얼로그가 그동안 멈춰 있는 것처럼 보입니다.
+    queued = email_service.send_many_detached(mails)
+    return {"sent": queued}
 
 
 @router.post("/{event_id}/duplicate")
@@ -309,11 +275,53 @@ async def duplicate_event(
     event = await event_service.get_event_by_either_id(event_id)
     if event is None:
         raise HTTPException(status_code=404, detail="이벤트를 찾을 수 없습니다")
+    # 참여만 하고 있는 남의 일정은 복제 대상이 아닙니다 (수정·보관·삭제와 동일).
+    # 소유자 없는 게스트 생성 일정은 링크를 가진 누구나 다룰 수 있어 예외입니다.
+    if event.get("ownerId") is not None and event.get("ownerId") != user["_id"]:
+        raise HTTPException(
+            status_code=403, detail="내가 만든 일정만 복제할 수 있습니다"
+        )
 
     new_event = await event_service.duplicate_event(
         event, payload.eventName, payload.copyAvailability, user
     )
     return {"eventId": str(new_event["_id"]), "shortId": new_event.get("shortId")}
+
+
+async def _deleted_owned_event(user: dict, event_id: str) -> dict:
+    """휴지통 안의 내 일정을 가져옵니다.
+
+    일반 조회 함수는 isDeleted를 걸러 내므로 여기서 직접 찾습니다.
+    ownerId를 함께 걸어 남의 휴지통에는 손댈 수 없습니다.
+    """
+    oid = to_object_id(event_id)
+    event = (
+        await events_col.find_one(
+            {"_id": oid, "ownerId": user["_id"], "isDeleted": True}
+        )
+        if oid
+        else None
+    )
+    if event is None:
+        raise HTTPException(status_code=404, detail="휴지통에서 찾을 수 없습니다")
+    return event
+
+
+@router.post("/{event_id}/restore")
+async def restore_event(event_id: str, request: Request, notify: bool = False):
+    """`notify=true`면 취소 안내를 받았던 사람들에게 정정 안내를 보냅니다."""
+    user = await require_user(request)
+    event = await _deleted_owned_event(user, event_id)
+    notified = await event_service.restore_event(event, user, notify=notify)
+    return {"notifiedCount": notified}
+
+
+@router.delete("/{event_id}/purge")
+async def purge_event(event_id: str, request: Request):
+    """휴지통에서 완전히 지웁니다 - 응답·초대·폴더 연결·면담 기록까지."""
+    user = await require_user(request)
+    event = await _deleted_owned_event(user, event_id)
+    return {"removed": await event_service.purge_event(event, user)}
 
 
 @router.post("/{event_id}/archive")

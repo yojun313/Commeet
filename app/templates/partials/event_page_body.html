@@ -1,27 +1,19 @@
-<div class="container">
+<div class="container" style="padding-bottom: 60px;">
   <div class="event-header">
     <div>
       <h1 id="ev-title">{{ event_name }}</h1>
       <div class="event-meta" id="ev-meta"></div>
     </div>
     <div class="event-header-actions">
-      {% if is_group %}
-      <div class="week-nav" id="week-nav" style="display: none;">
-        <button class="btn-icon" type="button" id="week-prev">&lsaquo;</button>
-        <span id="week-label"></span>
-        <button class="btn-icon" type="button" id="week-next">&rsaquo;</button>
-        <button class="btn btn-sm btn-ghost" type="button" id="week-today">이번 주</button>
-      </div>
-      {% endif %}
       <button class="btn btn-secondary btn-sm" type="button" id="copy-link-btn">링크 복사</button>
-      <button class="btn btn-secondary btn-sm" type="button" id="edit-event-btn" style="display: none;">{{ "그룹" if is_group else "일정" }} 정보 수정</button>
-      <button class="btn btn-ghost btn-sm" type="button" id="delete-event-btn" style="display: none; color: var(--color-danger);">{{ "그룹" if is_group else "일정" }} 삭제</button>
+      <button class="btn btn-secondary btn-sm" type="button" id="edit-event-btn" style="display: none;">일정 정보 수정</button>
+      <button class="btn btn-ghost btn-sm" type="button" id="delete-event-btn" style="display: none; color: var(--color-danger);">일정 <span id="delete-event-btn-word">취소</span></button>
       <a class="btn-finalize" id="finalize-link-btn" style="display: none;" href="/e/{{ event_id }}/finalize">
         <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M8 2v3M16 2v3M3.5 9h17M5 5h14a1.5 1.5 0 011.5 1.5V19a1.5 1.5 0 01-1.5 1.5H5A1.5 1.5 0 013.5 19V6.5A1.5 1.5 0 015 5z"></path>
           <path d="M8.5 14.2l2.3 2.3 4.7-4.9"></path>
         </svg>
-        <span id="finalize-link-label">일정 확정하기</span>
+        <span id="finalize-link-label">최적 배정 계산하기</span>
       </a>
     </div>
   </div>
@@ -35,36 +27,56 @@
   <div id="event-body-root">
     <div class="empty-state"><span class="spinner"></span></div>
   </div>
+
+  <!-- 확정된 일정에서 호스트에게만 보입니다. #event-body-root 바깥에 두어
+       renderSkeleton()이 그리드를 다시 그려도 지워지지 않습니다. -->
+  <div class="card card-pad" id="ev-records-card" style="display: none; margin-top: 16px;">
+    <div class="fin-records-head">
+      <h2 style="font-size: 17px; margin: 0;">면담 기록 · 학생지도비</h2>
+      <span class="hint" id="ev-records-summary"></span>
+    </div>
+    <p class="hint" style="margin-top: 0;">
+      확정된 시간대별로 면담 내용을 기록하고 정산 요청 양식을 만듭니다.
+      기록은 면담이 끝난 뒤에 작성하는 것을 권합니다.
+    </p>
+    <div id="ev-records-list" class="fin-records-list"></div>
+  </div>
 </div>
+
+{% include "partials/record_form_dialog.html" %}
 
 {% include "partials/new_event_dialog.html" %}
 {% include "partials/guest_name_dialog.html" %}
 {% include "partials/invite_dialog.html" %}
-
-<div class="dialog-backdrop" id="grid-detail-dialog">
-  <div class="dialog dialog-xl">
-    <div class="dialog-header">
-      <h2>전체 보기</h2>
-      <button class="btn-icon" type="button" data-dialog-close>&times;</button>
-    </div>
-    <div class="grid-detail-body" id="grid-detail-body"></div>
-  </div>
-</div>
+{# 초대 창 위에 뜨는 작은 창이라 반드시 그 뒤에 옵니다. #}
+{% include "partials/quick_contact_dialog.html" %}
 
 <div class="dialog-backdrop" id="delete-event-page-dialog">
   <div class="dialog dialog-sm">
     <div class="dialog-header">
-      <h2>{{ "그룹" if is_group else "일정" }} 삭제</h2>
+      <h2 id="delete-page-title">일정 취소</h2>
       <button class="btn-icon" type="button" data-dialog-close>&times;</button>
     </div>
-    <p>이 {{ "그룹을" if is_group else "일정을" }} 정말 삭제하시겠어요? 참여자들의 응답도 함께 사라집니다.</p>
+    <p>
+      다른 사람의 응답이 있으면 그 응답을 지우지 않기 위해 <b>휴지통</b>으로 옮깁니다.
+      나 혼자 응답한 일정이라면 바로 완전히 삭제됩니다.
+    </p>
+    <p class="hint" style="margin: 0 0 12px;">휴지통에서 되돌리거나 완전히 지울 수 있습니다.</p>
+    <label class="checkbox-row" style="margin: 0;">
+      <input type="checkbox" id="delete-notify-page" checked />
+      <span class="checkbox-copy">
+        <span id="delete-page-notify-label">참가자에게 취소 안내 메일 보내기</span>
+        <div class="desc">응답한 사람과 초대받은 사람에게 알립니다.</div>
+      </span>
+    </label>
     <div class="dialog-footer">
       <button type="button" class="btn btn-ghost" data-dialog-close>취소</button>
-      <button type="button" class="btn btn-danger" id="confirm-delete-event-page-btn">삭제</button>
+      <button type="button" class="btn btn-danger" id="confirm-delete-event-page-btn">취소하기</button>
     </div>
   </div>
 </div>
 
 <script>
   window.COMMEET_EVENT_CONFIG = {{ config_json | safe }};
+  window.RECORDS_CONFIG = {{ records_config_json | safe }};
 </script>

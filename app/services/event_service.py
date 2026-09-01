@@ -7,19 +7,19 @@ only" / "specific times per day" modes, and reminder emails are sent once
 queue in this port.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from bson import ObjectId
 
 from app.core.ids import generate_short_id, to_object_id
 from app.db import (
-    attendees_col,
     event_responses_col,
     events_col,
     folder_events_col,
+    meeting_records_col,
     users_col,
 )
-from app.schemas.event import EventPayload, EventType
+from app.schemas.event import EventPayload
 from app.services import calendar_service, email_service
 
 
@@ -37,6 +37,29 @@ class BlindAvailabilityViolation(Exception):
 
 class EventClosed(Exception):
     pass
+
+
+def is_past_event(event: dict) -> bool:
+    """이 일정의 마지막 시간이 이미 지났는지.
+
+    지난 일정을 없애는 건 "취소"가 아니라 기록을 "삭제"하는 일이고,
+    앞으로 있을 일정을 없애는 건 참가자에게 "취소"입니다. 안내 문구가
+    달라야 해서 구분합니다.
+
+    """
+    dates = [d for d in (event.get("dates") or []) if isinstance(d, datetime)]
+    if not dates:
+        return False
+
+    last_end = max(dates) + timedelta(hours=float(event.get("duration") or 0))
+    if last_end.tzinfo is None:
+        last_end = last_end.replace(tzinfo=UTC)
+    return last_end < datetime.now(UTC)
+
+
+def removal_word(event: dict) -> str:
+    """지난 일정이면 "삭제", 앞으로의 일정이면 "취소"."""
+    return "삭제" if is_past_event(event) else "취소"
 
 
 def is_closed(event: dict) -> bool:
@@ -67,6 +90,19 @@ async def get_event_by_short_id(short_id: str) -> dict | None:
     return await events_col.find_one({"shortId": short_id, "isDeleted": {"$ne": True}})
 
 
+async def get_removed_event(event_id: str) -> dict | None:
+    """휴지통에 있는(soft-deleted) 일정을 id로 찾습니다.
+
+    일반 조회는 isDeleted를 걸러 내므로 링크를 누른 참가자에게는 그냥 404가
+    떴습니다. "취소되었습니다"라고 알려 주려면 지워진 문서도 볼 수 있어야
+    합니다. 이름과 주최자만 쓰고 응답 내용은 노출하지 않습니다.
+    """
+    if len(event_id) <= 10:
+        return await events_col.find_one({"shortId": event_id, "isDeleted": True})
+    oid = to_object_id(event_id)
+    return await events_col.find_one({"_id": oid, "isDeleted": True}) if oid else None
+
+
 async def get_event_by_either_id(event_id: str) -> dict | None:
     """Event links use either the Mongo _id or the short, shareable id."""
     if len(event_id) <= 10:
@@ -74,12 +110,60 @@ async def get_event_by_either_id(event_id: str) -> dict | None:
     return await get_event_by_id(event_id)
 
 
+# --------------------------------------------------------------------- #
+# 화면 자동 갱신용 버전 카운터                                             #
+# --------------------------------------------------------------------- #
+#
+# 일정 페이지는 다른 참가자가 시간을 찍으면 자동으로 반영돼야 합니다.
+# 그렇다고 응답 전체(/responses는 응답자 한 명당 ISO 문자열 수백 개)를
+# 몇 초마다 다시 받으면 트래픽이 감당이 안 됩니다.
+#
+# 그래서 "바뀌었나?"와 "데이터 줘"를 나눕니다. 이벤트 문서에 정수 `v`를
+# 하나 두고 **변경이 일어날 때마다 1씩 올립니다**. 화면은 `v`만 폴링하다가
+# (한 번에 _id 인덱스 조회 1회 + 수십 바이트) 값이 달라졌을 때만 무거운
+# 조회를 합니다.
+#
+# `v`를 올리는 곳은 app.main의 bump_event_version_middleware 한 곳뿐입니다 -
+# 응답 저장/삭제/이름변경/거절/일정수정/초대/확정 등 쓰기 경로가 서른 군데
+# 가까이 흩어져 있어서, 한 군데씩 넣으면 반드시 빠뜨리기 때문입니다.
+
+
+def either_id_query(event_id: str) -> dict | None:
+    """`get_event_by_either_id`와 같은 판별 규칙의 **필터만** 만듭니다.
+
+    버전을 읽거나 올릴 때는 문서 본문이 필요 없으므로, 조회를 한 번 더
+    하지 않고 이 필터로 바로 질의합니다.
+    """
+    if len(event_id) <= 10:
+        return {"shortId": event_id, "isDeleted": {"$ne": True}}
+    oid = to_object_id(event_id)
+    return {"_id": oid, "isDeleted": {"$ne": True}} if oid else None
+
+
+async def get_version(event_id: str) -> int | None:
+    """일정의 현재 버전. 없거나 지워진 일정이면 None."""
+    query = either_id_query(event_id)
+    if query is None:
+        return None
+    doc = await events_col.find_one(query, {"v": 1})
+    if doc is None:
+        return None
+    return int(doc.get("v") or 0)
+
+
+async def bump_version(event_id: str) -> None:
+    """화면에 보이는 내용이 바뀌었다고 표시합니다.
+
+    `v`가 없던 기존 문서에도 $inc가 그대로 동작합니다(0에서 시작).
+    """
+    query = either_id_query(event_id)
+    if query is None:
+        return
+    await events_col.update_one(query, {"$inc": {"v": 1}})
+
+
 async def get_event_responses(event_id: ObjectId) -> list[dict]:
     return await event_responses_col.find({"eventId": event_id}).to_list(length=None)
-
-
-async def get_attendees(event_id: ObjectId) -> list[dict]:
-    return await attendees_col.find({"eventId": event_id}).to_list(length=None)
 
 
 async def find_response(event_id: ObjectId, user_key: str) -> dict | None:
@@ -132,29 +216,23 @@ async def create_event(payload: EventPayload, owner: dict | None) -> dict:
     result = await events_col.insert_one(event)
     event["_id"] = result.inserted_id
 
-    if payload.type == EventType.GROUP:
-        emails = list(
-            dict.fromkeys([*(([owner["email"]]) if owner else []), *payload.attendees])
+    remindees = [{"email": email, "responded": False} for email in payload.remindees]
+    if remindees:
+        await events_col.update_one(
+            {"_id": event["_id"]}, {"$set": {"remindees": remindees}}
         )
-        for email in emails:
-            await attendees_col.update_one(
-                {"eventId": event["_id"], "email": email},
-                {"$setOnInsert": {"declined": False}},
-                upsert=True,
-            )
-        for email in payload.attendees:
-            await email_service.send_group_invite_email(email, owner, event)
-    else:
-        remindees = [
-            {"email": email, "responded": False} for email in payload.remindees
-        ]
-        if remindees:
-            await events_col.update_one(
-                {"_id": event["_id"]}, {"$set": {"remindees": remindees}}
-            )
-            event["remindees"] = remindees
-        for email in payload.remindees:
-            await email_service.send_event_invite_email(email, owner, event)
+        event["remindees"] = remindees
+
+    # 만들자마자 초대 메일을 보내지 않습니다.
+    #
+    # 예전에는 여기서 바로 보냈는데, 주최자는 보통 일정을 만든 **다음에**
+    # 자기 가능한 시간을 찍습니다. 그 사이에 메일을 받은 사람들이 링크를 열면
+    # 아무도 표시하지 않은 빈 화면이 나와서 "이걸 왜 보냈지?" 하게 됩니다.
+    #
+    # 그래서 발송은 주최자가 처음 가능한 시간을 저장한 뒤로 미룹니다 -
+    # 그때 화면이 초대할지 묻고, /api/events/{id}/invite로 보냅니다
+    # (event-grid.js의 maybeOfferInvite). 여기서 받은 명단은 저장만 해 둡니다.
+    event["invitesQueued"] = 0
 
     if owner:
         await users_col.update_one(
@@ -186,59 +264,71 @@ async def update_event(
         "type": payload.type.value,
     }
 
-    if payload.type == EventType.GROUP:
-        existing_attendees = await get_attendees(event["_id"])
-        existing_emails = {a["email"] for a in existing_attendees}
+    old_remindees = {r["email"]: r for r in event.get("remindees") or []}
+    new_remindee_emails = set(payload.remindees)
+    kept_emails = set(old_remindees) & new_remindee_emails
+    added_emails = new_remindee_emails - set(old_remindees)
 
-        owner_email = None
-        if event.get("ownerId"):
-            owner_doc = await users_col.find_one({"_id": event["ownerId"]})
-            owner_email = owner_doc["email"] if owner_doc else None
+    updated_remindees = [old_remindees[email] for email in kept_emails]
+    for email in added_emails:
+        updated_remindees.append({"email": email, "responded": False})
+    queued = email_service.send_many_detached(
+        [
+            email_service.build_event_invite_mail(email, requester, event)
+            for email in added_emails
+        ]
+    )
 
-        new_emails = set(payload.attendees)
-        if owner_email:
-            new_emails.add(owner_email)
-
-        added = new_emails - existing_emails
-        removed = existing_emails - new_emails
-
-        for email in removed:
-            await attendees_col.delete_one({"eventId": event["_id"], "email": email})
-            removed_user = await users_col.find_one({"email": email})
-            if removed_user:
-                deleted = await event_responses_col.delete_one(
-                    {"eventId": event["_id"], "userId": str(removed_user["_id"])}
-                )
-                if deleted.deleted_count:
-                    await events_col.update_one(
-                        {"_id": event["_id"]}, {"$inc": {"numResponses": -1}}
-                    )
-
-        for email in added:
-            await attendees_col.update_one(
-                {"eventId": event["_id"], "email": email},
-                {"$setOnInsert": {"declined": False}},
-                upsert=True,
-            )
-            await email_service.send_group_invite_email(email, requester, event)
-    else:
-        old_remindees = {r["email"]: r for r in event.get("remindees") or []}
-        new_remindee_emails = set(payload.remindees)
-        kept_emails = set(old_remindees) & new_remindee_emails
-        added_emails = new_remindee_emails - set(old_remindees)
-
-        updated_remindees = [old_remindees[email] for email in kept_emails]
-        for email in added_emails:
-            updated_remindees.append({"email": email, "responded": False})
-            await email_service.send_event_invite_email(email, requester, event)
-
-        updates["remindees"] = updated_remindees
+    updates["remindees"] = updated_remindees
 
     await events_col.update_one({"_id": event["_id"]}, {"$set": updates})
-    return await events_col.find_one({"_id": event["_id"]})
+    saved = await events_col.find_one({"_id": event["_id"]})
+    saved["invitesQueued"] = queued
+    return saved
 
 
-async def delete_event(event: dict, requester: dict) -> None:
+async def _cancellation_recipients(event: dict, owner: dict) -> list[str]:
+    """일정 취소 안내를 받아야 할 이메일 목록.
+
+    응답한 사람 전원 (주최자 본인은 제외).
+    주최자 본인은 뺍니다 - 본인이 취소한 것이니 알릴 이유가 없습니다.
+    """
+    from app.services.finalize_service import _load_people
+
+    _host, people = await _load_people(event)
+    owner_email = (owner.get("email") or "").lower()
+    seen: set[str] = set()
+    emails: list[str] = []
+
+    for person in people:
+        email = (person.get("email") or "").lower()
+        if email and email != owner_email and email not in seen:
+            seen.add(email)
+            emails.append(person["email"])
+
+    return emails
+
+
+async def delete_event(event: dict, requester: dict, *, notify: bool = True) -> int:
+    """일정을 삭제하고, 참가자에게 취소 안내를 보낸 통수를 반환합니다.
+
+    남이 응답한 일정은 그 응답을 지우지 않으려고 숨김 처리(휴지통)만 하는데,
+    참가자 입장에서는 어느 쪽이든 "이 일정은 없어졌다"가 되므로 안내는
+    똑같이 나갑니다.
+    """
+    notified = 0
+    if notify:
+        word = removal_word(event)
+        recipients = await _cancellation_recipients(event, requester)
+        notified = email_service.send_many_detached(
+            [
+                email_service.build_event_cancelled_mail(
+                    email, requester, event, word=word
+                )
+                for email in recipients
+            ]
+        )
+
     responses = await get_event_responses(event["_id"])
     has_other_responses = any(r["userId"] != str(requester["_id"]) for r in responses)
 
@@ -262,8 +352,84 @@ async def delete_event(event: dict, requester: dict) -> None:
         calendar_service.clear_synced_events_detached(synced, only_future=True)
         await events_col.delete_one({"_id": event["_id"]})
         await event_responses_col.delete_many({"eventId": event["_id"]})
-        await attendees_col.delete_many({"eventId": event["_id"]})
         await folder_events_col.delete_many({"eventId": event["_id"]})
+
+    return notified
+
+
+async def list_deleted_events(user: dict) -> list[dict]:
+    """휴지통 목록. 남이 응답한 일정을 지우면 완전히 없애지 않고 숨기는데
+    (delete_event 참고), 그렇게 숨겨진 내 일정을 여기서 다시 봅니다."""
+    events = (
+        await events_col.find({"ownerId": user["_id"], "isDeleted": True})
+        .sort("_id", -1)
+        .to_list(length=None)
+    )
+    for event in events:
+        event["numResponses"] = await event_responses_col.count_documents(
+            {"eventId": event["_id"]}
+        )
+        event["numRecords"] = await meeting_records_col.count_documents(
+            {"ownerId": user["_id"], "eventId": event["_id"]}
+        )
+        # 화면에서 "취소됨 / 삭제됨"을 구분해 보여 주기 위한 값.
+        event["removalWord"] = removal_word(event)
+        event["isPast"] = is_past_event(event)
+    return events
+
+
+async def restore_event(event: dict, owner: dict, *, notify: bool = False) -> int:
+    """휴지통에서 되돌리고, 보낸 안내 통수를 반환합니다.
+
+    삭제할 때 "취소되었습니다"를 받은 사람들에게는 그 안내를 정정해 줘야
+    하므로, 되돌릴 때도 알릴 수 있게 해 둡니다.
+    """
+    await events_col.update_one({"_id": event["_id"]}, {"$set": {"isDeleted": False}})
+    if not notify:
+        return 0
+    recipients = await _cancellation_recipients(event, owner)
+    return email_service.send_many_detached(
+        [
+            email_service.build_event_reopened_mail(email, owner, event)
+            for email in recipients
+        ]
+    )
+
+
+async def purge_event(event: dict, owner: dict) -> dict:
+    """일정과 딸린 데이터를 DB에서 완전히 지웁니다. 되돌릴 수 없습니다.
+
+    면담 기록은 암호화된 첨부(서명·영수증)를 디스크에도 남기므로, 문서를
+    지우기 전에 파일부터 지웁니다 - 순서가 반대면 파일 경로를 알 방법이
+    없어져 고아 파일이 남습니다.
+
+    구글 캘린더는 건드리지 않습니다. 이미 delete_event()가 앞으로의 약속만
+    지웠고, 지난 약속은 실제로 있었던 일이라 남겨 두는 편이 맞습니다.
+    """
+    from app.services import crypto_service
+
+    event_id = event["_id"]
+    records = await meeting_records_col.find(
+        {"ownerId": owner["_id"], "eventId": event_id}, {"_id": 1}
+    ).to_list(length=None)
+    for record in records:
+        crypto_service.delete_record_files(str(record["_id"]))
+
+    removed = {
+        "records": (
+            await meeting_records_col.delete_many(
+                {"ownerId": owner["_id"], "eventId": event_id}
+            )
+        ).deleted_count,
+        "responses": (
+            await event_responses_col.delete_many({"eventId": event_id})
+        ).deleted_count,
+        "folderLinks": (
+            await folder_events_col.delete_many({"eventId": event_id})
+        ).deleted_count,
+    }
+    await events_col.delete_one({"_id": event_id})
+    return removed
 
 
 async def archive_event(event: dict, archived: bool) -> None:
@@ -279,7 +445,8 @@ async def duplicate_event(
     new_event = {
         k: v
         for k, v in event.items()
-        if k not in {"_id", "shortId", "numResponses", "remindees", "createdAt"}
+        # "v"는 갱신 카운터라 원본 것을 물려받을 이유가 없습니다 (0에서 시작).
+        if k not in {"_id", "shortId", "numResponses", "remindees", "createdAt", "v"}
     }
     new_event.update(
         {
@@ -314,43 +481,7 @@ async def duplicate_event(
             )
             new_event["numResponses"] = len(responses)
 
-        if event["type"] == EventType.GROUP.value:
-            attendees = await get_attendees(event["_id"])
-            if attendees:
-                await attendees_col.insert_many(
-                    [
-                        {
-                            "eventId": new_event["_id"],
-                            "email": a["email"],
-                            "declined": a.get("declined", False),
-                        }
-                        for a in attendees
-                    ]
-                )
-
-    if requester:
-        await users_col.update_one(
-            {"_id": requester["_id"]}, {"$inc": {"numEventsCreated": 1}}
-        )
-
     return new_event
-
-
-async def add_attendee(event: dict, email: str) -> None:
-    """Grants a group invitee access, without clearing an existing decline."""
-    await attendees_col.update_one(
-        {"eventId": event["_id"], "email": email},
-        {"$setOnInsert": {"declined": False}},
-        upsert=True,
-    )
-
-
-async def decline_invite(event: dict, user: dict) -> bool:
-    result = await attendees_col.update_one(
-        {"eventId": event["_id"], "email": user["email"]},
-        {"$set": {"declined": True}},
-    )
-    return result.matched_count > 0
 
 
 # ---------------------------------------------------------------------------
@@ -394,19 +525,6 @@ async def upsert_response(
             "enabledCalendars": payload.enabledCalendars,
         }
 
-        if event["type"] == EventType.GROUP.value:
-            await attendees_col.update_one(
-                {"eventId": event["_id"], "email": requester["email"]},
-                {"$set": {"declined": False}},
-            )
-            existing = await find_response(event["_id"], user_key)
-            manual = dict(
-                (existing or {}).get("response", {}).get("manualAvailability") or {}
-            )
-            if payload.manualAvailability:
-                manual.update(payload.manualAvailability)
-            response["manualAvailability"] = manual
-
     existing = await find_response(event["_id"], user_key)
     is_new = existing is None
 
@@ -447,12 +565,6 @@ async def delete_response(event: dict, payload, requester: dict | None) -> None:
             {"eventId": event["_id"], "userId": target}
         )
 
-        if event["type"] == EventType.GROUP.value and target == user_key:
-            await attendees_col.update_one(
-                {"eventId": event["_id"], "email": requester["email"]},
-                {"$set": {"declined": True}},
-            )
-
     if result.deleted_count:
         await events_col.update_one(
             {"_id": event["_id"]}, {"$inc": {"numResponses": -1}}
@@ -465,7 +577,7 @@ async def delete_response(event: dict, payload, requester: dict | None) -> None:
 
 
 async def _decorate_response(
-    doc: dict, *, show_emails: bool, keep_group_emails: bool, include_availability: bool
+    doc: dict, *, show_emails: bool, include_availability: bool
 ) -> dict | None:
     resp = dict(doc["response"])
     user_oid = resp.get("userId")
@@ -474,12 +586,11 @@ async def _decorate_response(
         user = await users_col.find_one({"_id": user_oid})
         if user is None:
             return None  # account was deleted
-        email_visible = show_emails or keep_group_emails
         resp["user"] = {
             "_id": str(user["_id"]),
             "name": user.get("name", ""),
             "picture": user.get("picture", ""),
-            "email": user.get("email", "") if email_visible else "",
+            "email": user.get("email", "") if show_emails else "",
         }
     else:
         resp["user"] = {
@@ -503,13 +614,11 @@ async def build_responses_map(
     event: dict, responses: list[dict], *, is_owner: bool, include_availability: bool
 ) -> dict:
     show_emails = is_owner and bool(event.get("collectEmails"))
-    is_group = event["type"] == EventType.GROUP.value
     result: dict[str, dict] = {}
     for doc in responses:
         decorated = await _decorate_response(
             doc,
             show_emails=show_emails,
-            keep_group_emails=is_group,
             include_availability=include_availability,
         )
         if decorated is not None:
@@ -575,50 +684,3 @@ async def get_filtered_responses_map(
         key: filter_response_time_range(resp, time_min, time_max)
         for key, resp in full_map.items()
     }
-
-
-async def get_calendar_availabilities(
-    event: dict, time_min: datetime, time_max: datetime, viewer: dict
-) -> dict:
-    from app.services import calendar_service
-
-    responses = await get_event_responses(event["_id"])
-    candidates = []
-    for doc in responses:
-        resp = doc["response"]
-        if resp.get("useCalendarAvailability") and resp.get("userId"):
-            user = await users_col.find_one({"_id": resp["userId"]})
-            if user:
-                candidates.append(
-                    (doc["userId"], user, resp.get("enabledCalendars") or {})
-                )
-
-    result: dict[str, list[dict]] = {}
-    for user_key, user, enabled_calendars in candidates:
-        try:
-            events_by_account = await calendar_service.get_users_calendar_events(
-                user,
-                time_min,
-                time_max,
-                account_keys_filter=set(enabled_calendars.keys()) or None,
-            )
-        except calendar_service.GoogleCalendarNotConfigured:
-            events_by_account = {}
-
-        enabled_calendar_ids = {
-            cid for ids in enabled_calendars.values() for cid in ids
-        }
-        merged = []
-        for _account_key, payload in events_by_account.items():
-            for calendar_event in payload.get("calendarEvents", []):
-                if (
-                    enabled_calendar_ids
-                    and calendar_event["calendarId"] not in enabled_calendar_ids
-                ):
-                    continue
-                if user_key != str(viewer["_id"]):
-                    calendar_event = {**calendar_event, "summary": "BUSY"}
-                merged.append(calendar_event)
-        result[user_key] = merged
-
-    return result

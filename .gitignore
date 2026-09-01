@@ -216,3 +216,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Encrypted meeting records (학생지도비 신청서) - personal data, never committed.
+# Override the location with RECORD_STORAGE_DIR in .env.
+/instance/
