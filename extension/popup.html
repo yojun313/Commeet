@@ -1,0 +1,35 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>Commeet → POVIS</title>
+<link rel="stylesheet" href="popup.css" />
+
+<h1>Commeet → POVIS <span class="tag">데모</span></h1>
+
+<p class="warn">
+  저장은 하지 않습니다. 값을 채우기만 하며, 실제 반영은 POVIS의 저장 버튼을
+  직접 누를 때만 일어납니다.
+</p>
+
+<section>
+  <h2>1. 필드 스캔</h2>
+  <p class="hint">
+    현재 화면의 입력 필드와 그 <b>바인딩 경로</b>를 뽑습니다. 지도면담입력
+    화면에서 이걸 돌리면 매핑표를 만들 수 있습니다. (값은 가져오지 않고
+    글자 수만 봅니다.)
+  </p>
+  <button id="scan">현재 화면 필드 스캔</button>
+</section>
+
+<section>
+  <h2>2. 자동 채우기</h2>
+  <p class="hint">
+    아래 가짜 면담 기록을 미래설계 화면의 30·40·50·60대 칸에 채웁니다 -
+    교수 화면을 아직 못 봐서, 동작 확인용 임시 매핑입니다.
+  </p>
+  <button id="fill" class="primary">데모 데이터로 채우기</button>
+  <button id="restore">원래대로 되돌리기</button>
+</section>
+
+<pre id="out" hidden></pre>
+
+<script src="popup.js"></script>
