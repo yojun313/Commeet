@@ -39,6 +39,18 @@ class EventClosed(Exception):
     pass
 
 
+def records_enabled(event: dict) -> bool:
+    """이 일정에서 "면담 기록 · 학생지도비"를 쓰는가.
+
+    값이 **없는** 일정은 켜진 것으로 봅니다. 이 항목이 생기기 전에 만든
+    일정에도 이미 적어 둔 기록이 있는데, 없다고 꺼 버리면 그 기록에 닿을
+    길이 사라집니다. 새로 만드는 일정은 항상 True/False가 명시됩니다.
+
+    화면 쪽 같은 규칙은 event-grid.js의 recordsEnabled()입니다.
+    """
+    return event.get("guidanceRecordsEnabled") is not False
+
+
 def is_past_event(event: dict) -> bool:
     """이 일정의 마지막 시간이 이미 지났는지.
 
@@ -204,6 +216,7 @@ async def create_event(payload: EventPayload, owner: dict | None) -> dict:
         "notificationsEnabled": payload.notificationsEnabled,
         "blindAvailabilityEnabled": payload.blindAvailabilityEnabled,
         "collectEmails": payload.collectEmails,
+        "guidanceRecordsEnabled": payload.guidanceRecordsEnabled,
         "timeIncrement": payload.timeIncrement,
         "sendEmailAfterXResponses": payload.sendEmailAfterXResponses,
         "type": payload.type.value,
@@ -260,6 +273,7 @@ async def update_event(
         "notificationsEnabled": payload.notificationsEnabled,
         "blindAvailabilityEnabled": payload.blindAvailabilityEnabled,
         "collectEmails": payload.collectEmails,
+        "guidanceRecordsEnabled": payload.guidanceRecordsEnabled,
         "sendEmailAfterXResponses": payload.sendEmailAfterXResponses,
         "type": payload.type.value,
     }
@@ -307,6 +321,64 @@ async def _cancellation_recipients(event: dict, owner: dict) -> list[str]:
             emails.append(person["email"])
 
     return emails
+
+
+async def mail_targets(event: dict, owner: dict) -> dict:
+    """주최자가 메일을 보낼 수 있는 사람들. 응답 여부로 나눠 돌려줍니다.
+
+    응답한 사람은 응답 기록에서, 아직 안 한 사람은 초대 명단(remindees)에서
+    가져옵니다 - 초대는 보냈지만 응답이 없는 사람이 리마인더의 대상입니다.
+
+    이메일을 모르는 사람도 목록에는 넣되 email을 비워 둡니다. 조용히 빼면
+    주최자는 "왜 이 사람은 안 보이지" 하게 되고, 게스트가 이메일을 남기지
+    않았다는 사실 자체를 알 방법이 없습니다.
+    """
+    from app.services.finalize_service import _load_people
+
+    _host, people = await _load_people(event)
+    owner_email = (owner.get("email") or "").lower()
+
+    responded = []
+    responded_emails: set[str] = set()
+    for person in people:
+        email = (person.get("email") or "").strip()
+        if email.lower() == owner_email:
+            continue  # 주최자 본인에게 보낼 이유가 없습니다
+        if email:
+            responded_emails.add(email.lower())
+        responded.append({"name": person.get("name") or email, "email": email})
+
+    pending = []
+    for entry in event.get("remindees") or []:
+        email = (entry.get("email") or "").strip()
+        if not email:
+            continue
+        low = email.lower()
+        if low == owner_email or low in responded_emails:
+            continue
+        pending.append({"name": email.split("@")[0], "email": email})
+
+    return {"responded": responded, "pending": pending}
+
+
+async def remember_invitees(event: dict, emails: list[str]) -> None:
+    """초대한 사람을 일정에 적어 둡니다.
+
+    적어 두지 않으면 "초대는 받았는데 아직 응답하지 않은 사람"을 알 수 없어
+    리마인더를 보낼 대상을 고를 수 없습니다 (mail_targets). 이미 있는 주소는
+    그대로 둡니다.
+    """
+    existing = {(r.get("email") or "").lower() for r in (event.get("remindees") or [])}
+    added = [
+        {"email": email, "responded": False}
+        for email in dict.fromkeys(e.strip() for e in emails if e and e.strip())
+        if email.lower() not in existing
+    ]
+    if not added:
+        return
+    await events_col.update_one(
+        {"_id": event["_id"]}, {"$push": {"remindees": {"$each": added}}}
+    )
 
 
 async def delete_event(event: dict, requester: dict, *, notify: bool = True) -> int:

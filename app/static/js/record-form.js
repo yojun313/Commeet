@@ -550,15 +550,18 @@ const RecordDialog = (() => {
     // here so they read in the host's own timezone. A saved record keeps the
     // strings the host actually confirmed.
     const startedAt = localParts(data.meetingStart || meetingStart);
-    const endedAt = data.meetingEnd ? localParts(data.meetingEnd) : null;
 
     state.form = {
       eventId: data.eventId || eventId,
       meetingStart: data.meetingStart || meetingStart,
       eventName: data.eventName || "",
       date: data.date || startedAt.date,
-      startTime: data.startTime || startedAt.time,
-      endTime: data.endTime || (endedAt ? endedAt.time : ""),
+      // 시각과 장소는 일정에서 끌어오지 않고 비워 둡니다. 신청서에 적을 것은
+      // **실제로 면담한 시각**과 영수증 시각인데, 잡아 둔 시각이 미리 들어가
+      // 있으면 그대로 두고 넘어가기 쉽습니다. 일정 시각은 창 제목에 그대로
+      // 보이므로 참고할 것이 없어지지는 않습니다.
+      startTime: data.startTime || "",
+      endTime: data.endTime || "",
       place: data.place || "",
       professorName: data.professorName || CFG.professorName || "",
       attendees: (data.attendees || []).map((a) => ({ ...a })),
@@ -589,6 +592,7 @@ const RecordDialog = (() => {
     if (!state.form.settlements.length) syncSettlements();
     else renderSettlements();
 
+    savedSnapshot = formSnapshot();
     openDialog("rec-form-dialog");
     // Sizing needs the dialog to be laid out, which only happens once open.
     requestAnimationFrame(() => {
@@ -596,6 +600,24 @@ const RecordDialog = (() => {
       resetSignaturePad();
       loadExistingSignature();
     });
+  }
+
+  /* 마지막으로 저장(또는 불러온) 시점의 폼 내용. 지금과 다르면 저장하지 않은
+     변경이 있다는 뜻입니다. */
+  let savedSnapshot = null;
+
+  function formSnapshot() {
+    // collectForm()은 화면의 값을 state로 끌어올릴 뿐이라 불러도 안전합니다.
+    return JSON.stringify(collectForm());
+  }
+
+  /* 서명과 영수증은 폼 값이 아니라 따로 올라가므로 함께 봅니다 - 서명만
+     새로 그리고 신청서를 열면 빈 서명란이 인쇄됩니다. */
+  function hasUnsavedChanges() {
+    if (savedSnapshot === null) return false;
+    if (formSnapshot() !== savedSnapshot) return true;
+    if (state.signatureDirty) return true;
+    return Object.keys(state.pendingReceipts || {}).length > 0;
   }
 
   function collectForm() {
@@ -644,8 +666,11 @@ const RecordDialog = (() => {
       if (onSaved) await onSaved();
       // Re-read so uploaded receipts come back with their stored filenames.
       await refreshOpenForm();
+      savedSnapshot = formSnapshot();
+      return true;
     } catch (e) {
       showSnackbar(e.message, "error");
+      return false;
     } finally {
       btn.disabled = false;
     }
@@ -703,26 +728,20 @@ const RecordDialog = (() => {
   }
 
   async function copyPovis() {
-    const text = povisText();
-    try {
-      await navigator.clipboard.writeText(text);
+    if (await copyToClipboard(povisText())) {
       showSnackbar("POVIS 입력용 내용을 복사했습니다.", "success");
-    } catch (e) {
-      // Clipboard API needs a secure context; fall back to a manual select.
-      const ta = document.createElement("textarea");
-      ta.value = text;
-      ta.style.position = "fixed";
-      ta.style.opacity = "0";
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand("copy");
-      ta.remove();
-      showSnackbar("POVIS 입력용 내용을 복사했습니다.", "success");
+    } else {
+      showSnackbar("복사하지 못했습니다. 내용을 직접 선택해 복사해 주세요.", "error");
     }
   }
 
   async function deleteRecord() {
-    if (!state.recordId) return;
+    if (!state.recordId) {
+      // 아직 저장 전이라 지울 것이 없습니다. 조용히 아무 일도 안 일어나면
+      // 버튼이 고장 난 것처럼 보입니다.
+      showSnackbar("아직 저장하지 않아 삭제할 기록이 없습니다.", "error");
+      return;
+    }
     if (!confirm("이 면담 기록과 첨부한 영수증·서명을 모두 삭제할까요?")) return;
     try {
       await api.del(`/api/records/${state.recordId}`);
@@ -764,7 +783,20 @@ const RecordDialog = (() => {
     document.getElementById("rec-save").addEventListener("click", saveForm);
     document.getElementById("rec-copy-povis").addEventListener("click", copyPovis);
     document.getElementById("rec-delete").addEventListener("click", deleteRecord);
-    document.getElementById("rec-print").addEventListener("click", () => {
+    document.getElementById("rec-print").addEventListener("click", async () => {
+      // 신청서는 **저장된** 기록을 서버가 그려 주는 화면이라, 아직 저장하지
+      // 않았으면 열 수 없습니다. 그대로 열면 "페이지를 찾을 수 없습니다"가
+      // 뜨고 무엇이 잘못됐는지 알 수 없습니다.
+      if (!state.recordId) {
+        showSnackbar("먼저 저장한 뒤에 신청서를 열 수 있습니다.", "error");
+        return;
+      }
+      // 신청서는 **저장된** 내용을 서버가 그립니다. 고치는 중에 그냥 열면
+      // 방금 적은 것이 빠진 서류가 나오는데, 새 탭이라 눈치채기도 어렵습니다.
+      if (hasUnsavedChanges()) {
+        if (!confirm("저장하지 않은 변경이 있습니다.\n저장한 뒤 신청서를 열까요?")) return;
+        if (!(await saveForm())) return; // 저장이 실패하면 열지 않습니다
+      }
       window.open(`/records/${state.recordId}/print`, "_blank", "noopener");
     });
   }

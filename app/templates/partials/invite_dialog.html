@@ -24,9 +24,14 @@
     <div class="field">
       <label for="invite-email-input">직접 입력</label>
       <div class="chip-input" id="invite-email-chips">
-        <input type="text" id="invite-email-input" placeholder="이메일 입력 후 Enter" />
+        <input type="text" id="invite-email-input"
+               placeholder="이메일 입력 후 Enter (여러 개는 , 또는 ; 로 구분)" />
       </div>
-      <div class="hint">연락처에 없는 외부 사람도 이메일만 있으면 보낼 수 있습니다.</div>
+      <div class="hint">
+        연락처에 없는 외부 사람도 이메일만 있으면 보낼 수 있습니다.
+        쉼표(<code>,</code>)나 세미콜론(<code>;</code>), 줄바꿈으로 구분하면 한 번에 여러 명을 넣을 수 있고,
+        그렇게 구분된 목록을 그대로 붙여넣어도 됩니다.
+      </div>
     </div>
 
     <div class="field">
@@ -38,6 +43,10 @@
     <p class="form-error" id="invite-error"></p>
 
     <div class="dialog-footer">
+      {# 메일 말고 카톡·메신저로 직접 보내는 경우가 많아, 초대하는 자리에서
+         링크도 바로 집어 갈 수 있게 둡니다. #}
+      <button type="button" class="btn btn-secondary btn-sm" id="invite-copy-link">링크 복사</button>
+      <span style="flex: 1;"></span>
       <button type="button" class="btn btn-ghost" data-dialog-close>취소</button>
       <button type="button" class="btn btn-primary" id="invite-send-btn">보내기</button>
     </div>

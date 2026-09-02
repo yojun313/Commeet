@@ -119,6 +119,78 @@
         max-height: 420px;
         border: 1px solid #ccc;
       }
+      /* ── 무은재학부 양식 ───────────────────────────────────────────
+         학과에서 내려온 서식을 그대로 옮긴 것이라 일반 양식과 구조가
+         다릅니다: 지도교수명이 표 밖 한 줄로 나가고, 표는 라벨 한 열 +
+         내용 한 열이며, 영수증은 별지 "증빙서"에 붙입니다. */
+      .sheet-muunjae .mj-title {
+        text-align: center;
+        font-size: 19px;
+        font-weight: 800;
+        margin: 0 0 18px;
+      }
+      .sheet-muunjae .mj-professor {
+        font-size: 14px;
+        font-weight: 700;
+        margin: 0 0 8px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .mj-table {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+        font-size: 14px;
+      }
+      .mj-table th,
+      .mj-table td {
+        border: 1px solid #333;
+        padding: 10px;
+        vertical-align: middle;
+        word-break: break-word;
+      }
+      .mj-table th {
+        width: 96px;
+        font-weight: 700;
+        text-align: center;
+      }
+      .mj-table td.mj-people {
+        height: 64px;
+        vertical-align: top;
+        line-height: 1.8;
+      }
+      .mj-table td.mj-notes {
+        height: 420px;
+        vertical-align: top;
+        white-space: pre-wrap;
+        line-height: 1.8;
+      }
+      .mj-foot {
+        font-size: 13px;
+        margin: 10px 0 0;
+      }
+      /* 별지 - 영수증을 붙이는 증빙서 */
+      .mj-proof-title {
+        text-align: center;
+        font-size: 18px;
+        font-weight: 800;
+        letter-spacing: 10px;
+        text-decoration: underline;
+        text-underline-offset: 6px;
+        margin: 0 0 20px;
+      }
+      .mj-proof-box {
+        border: 1px solid #333;
+        min-height: 620px;
+        padding: 12px;
+      }
+      .mj-proof-note {
+        color: #c00;
+        font-size: 13px;
+        margin: 0 0 12px;
+      }
+
       /* Each 신청서 starts its own sheet of paper. */
       .sheet + .sheet {
         page-break-before: always;
@@ -142,6 +214,20 @@
       <button class="btn btn-primary btn-sm" type="button" onclick="window.print()">인쇄 / PDF 저장</button>
     </div>
 
+{# 면담 주요내용. 비어 있는 항목은 인쇄하지 않습니다 - 결재 서류라 빈 제목만
+   남으면 지저분합니다. 항목 순서는 record_service.NOTE_CATEGORIES를 따릅니다. #}
+{%- macro notes_text(attendees) -%}
+{%- if record.notesMode == "individual" -%}
+{%- for a in attendees %}[{{ a.name }}]
+{% for key, label in note_categories %}{% if record.perStudentNotes.get(a.key, {}).get(key) %}{{ label }}: {{ record.perStudentNotes[a.key][key] }}
+{% endif %}{% endfor %}
+{% endfor -%}
+{%- else -%}
+{%- for key, label in note_categories %}{% if record.sharedNotes.get(key) %}{{ label }}: {{ record.sharedNotes[key] }}
+{% endif %}{% endfor -%}
+{%- endif -%}
+{%- endmacro -%}
+
     {% if not forms %}
     <div class="sheet">
       <p>정산할 참석자가 없습니다. 면담 기록에서 참석자를 확인해 주세요.</p>
@@ -149,6 +235,66 @@
     {% endif %}
 
     {% for form in forms %}
+    {% if form.settlement.affiliation == "muunjae" %}
+    {# 무은재학부 서식 (학과 제공 양식 그대로). #}
+    <div class="sheet sheet-muunjae">
+      <h1 class="mj-title">&lt;무은재학부 학생지도비 신청서&gt;</h1>
+      <p class="mj-professor">
+        <span>&middot; 지도교수명 : {{ record.professorName }}</span>
+        {% if record.hasSignature %}
+        <img class="sign-img" src="/api/records/{{ record._id }}/file/signature.png" alt="서명" />
+        {% endif %}
+      </p>
+
+      <table class="mj-table">
+        <tbody>
+          <tr>
+            <th>일시</th>
+            <td>{{ record.date }} {{ record.startTime }} ~ {{ record.endTime }}</td>
+          </tr>
+          <tr>
+            <th>장소</th>
+            <td>{{ record.place }}</td>
+          </tr>
+          <tr>
+            {# 양식 안내: "교수님을 포함하여 참석 지도학생 전원의 성명 기재요" #}
+            <th>참석자</th>
+            <td class="mj-people">{{ ([record.professorName] + form.attendees | map(attribute="name") | list) | select | join(", ") }}</td>
+          </tr>
+          <tr>
+            <th>집행액</th>
+            <td>{{ "{:,}".format(form.settlement.amount or 0) }}원</td>
+          </tr>
+          <tr>
+            <th>면담<br />주요내용</th>
+            <td class="mj-notes">{{ notes_text(form.attendees) }}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p class="mj-foot">
+        - 학생지도비: {{ "{:,}".format(form.settlement.unitPrice or 0) }}원*{{ form.settlement.headcount }}회 / 대학 법인카드 사용
+      </p>
+    </div>
+
+    {# 별지 - 영수증을 붙이는 증빙서. #}
+    <div class="sheet sheet-muunjae">
+      <h1 class="mj-proof-title">증 빙 서</h1>
+      <div class="mj-proof-box">
+        <p class="mj-proof-note">※ 교비 법인카드 영수증 부착(산단 법인카드 불가)</p>
+        {% if form.settlement.receiptFile %}
+        {% if form.settlement.receiptFile.endswith(".pdf") %}
+        <a href="/api/records/{{ record._id }}/file/{{ form.settlement.receiptFile }}" target="_blank" rel="noopener">
+          {{ form.settlement.receiptName or "영수증 PDF 열기" }}
+        </a>
+        {% else %}
+        <img class="receipt-img" src="/api/records/{{ record._id }}/file/{{ form.settlement.receiptFile }}" alt="영수증" />
+        {% endif %}
+        {% endif %}
+      </div>
+    </div>
+
+    {% else %}
     <div class="sheet">
       <h1 class="sheet-title">학생지도비 신청서</h1>
       <p class="sheet-sub">{{ form.affiliationLabel }}{% if forms | length > 1 %} ({{ loop.index }}/{{ forms | length }}){% endif %}</p>
@@ -205,13 +351,7 @@
           </tr>
           <tr>
             <th>주요<br />면담 내용</th>
-            {# 비어 있는 항목은 인쇄하지 않습니다 - 결재 서류라 빈 제목만 남으면
-               지저분합니다. 항목 순서는 record_service.NOTE_CATEGORIES를 따릅니다. #}
-            <td class="notes" colspan="3">{% if record.notesMode == "individual" %}{% for a in form.attendees %}[{{ a.name }}]
-{% for key, label in note_categories %}{% if record.perStudentNotes.get(a.key, {}).get(key) %}{{ label }}: {{ record.perStudentNotes[a.key][key] }}
-{% endif %}{% endfor %}
-{% endfor %}{% else %}{% for key, label in note_categories %}{% if record.sharedNotes.get(key) %}{{ label }}: {{ record.sharedNotes[key] }}
-{% endif %}{% endfor %}{% endif %}</td>
+            <td class="notes" colspan="3">{{ notes_text(form.attendees) }}</td>
           </tr>
         </tbody>
       </table>
@@ -239,6 +379,7 @@
       </div>
       {% endif %}
     </div>
+    {% endif %}
     {% endfor %}
   </body>
 </html>

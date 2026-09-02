@@ -229,6 +229,17 @@ html, body {
   padding: 0;
 }
 
+/* hidden 속성이 항상 먹도록.
+ *
+ * 브라우저 기본은 `[hidden] { display: none }` 인데, display를 지정한 클래스
+ * 규칙(.btn의 inline-flex 등)이 우선순위에서 이겨 버립니다. 그래서 JS에서
+ * `el.hidden = true`로 감춘 것이 화면에는 그대로 남아 있었습니다 - 저장 전
+ * 면담 기록에서 "신청서 열기"가 계속 보여 누르면 없는 기록을 열려다 오류가
+ * 났고, 응답자별 입력칸도 같은 이유로 남아 있었습니다. */
+[hidden] {
+  display: none !important;
+}
+
 body {
   font-family: var(--font-sans);
   background-color: var(--color-bg);
@@ -2041,10 +2052,13 @@ textarea.input {
   padding: 16px;
   display: flex;
   flex-direction: column;
-  /* Fills whatever the column has left under the CTA. The column itself is
-     stretched to the calendar's height by .event-layout (align-items:
-     stretch), so the card never exceeds the calendar. */
-  flex: 1;
+  /* 내용만큼만 차지합니다.
+     예전에는 flex:1로 늘려 캘린더 높이를 채웠는데, 응답자가 두세 명뿐이면
+     카드 안이 텅 비고 "초대 보내기"가 저 아래에 뚝 떨어져 보였습니다.
+     목록이 길어질 때 캘린더보다 커지지 않게 막는 것은 이 늘리기가 아니라
+     #respondents-list의 max-height(event-grid.js syncRespondentListHeight)가
+     맡고 있으므로, 늘리지 않아도 넘칠 일은 없습니다. */
+  flex: 0 1 auto;
   min-height: 0;
 }
 .sidebar-card h3 {
@@ -2065,8 +2079,11 @@ textarea.input {
   flex-shrink: 0;
 }
 #respondents-list {
-  flex: 1;
-  min-height: 120px;
+  /* 남은 자리를 채우지 않고 명단 길이만큼만 - 그래야 바로 아래 버튼이
+     목록에 붙어 나옵니다. 길어지면 JS가 걸어 주는 max-height 안에서
+     스크롤합니다. */
+  flex: 0 1 auto;
+  min-height: 40px;
   overflow-y: auto;
 }
 /* 응답자 목록에서 내 줄 표시. 이름과 붙되 이름 자체보다는 흐리게 - 찾기 위한
@@ -2514,6 +2531,27 @@ select.list-sort-select {
   justify-content: space-between;
   gap: 8px;
   margin-bottom: 6px;
+}
+
+/* "메일 보내기" 창의 받는 사람 묶음 머리 (응답 여부로 나뉩니다). */
+.msg-target-group {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 10px 0 6px;
+}
+.msg-target-group:first-child {
+  margin-top: 0;
+}
+.msg-target-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-text-muted);
+}
+/* 이메일을 몰라 보낼 수 없는 사람 - 목록에는 남기되 흐리게. */
+.checkbox-row.msg-target-nomail {
+  opacity: 0.55;
 }
 
 .invite-contact-list {
@@ -4091,12 +4129,6 @@ textarea.rec-textarea-sm {
   display: flex;
   flex-direction: column;
   gap: 10px;
-}
-/* display를 지정한 클래스 규칙은 브라우저 기본 [hidden] { display: none }
-   보다 강합니다 - 이 줄이 없으면 "동일 내용"으로 돌아와도 참석자별 입력칸이
-   그대로 보입니다. */
-.rec-note-list[hidden] {
-  display: none;
 }
 .rec-note-label {
   display: block;

@@ -6,7 +6,7 @@ const DOW_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
 
 const TOOL_HINTS = {
   available: "확실히 참여할 수 있는 시간을 칠하세요. 최적 시간 계산에 반영됩니다.",
-  ifNeeded: "꼭 필요하다면 맞출 수 있는 시간입니다. 최적 시간 계산에는 반영되지 않습니다.",
+  ifNeeded: "선택적으로 최적 배정에 사용 가능합니다.",
 };
 
 function pad2(n) {
@@ -282,6 +282,7 @@ function renderSkeleton() {
           </div>
           <div id="respondents-list"></div>
           <button class="btn btn-primary btn-block" id="invite-btn" style="display: none; margin-top: 14px;">초대 보내기</button>
+          <button class="btn btn-secondary btn-block" id="message-btn" style="display: none; margin-top: 8px;">메일 보내기</button>
           <button class="btn btn-ghost btn-block" id="delete-response-btn" style="display: none; margin-top: 8px; color: var(--color-danger);">
             내 응답 삭제
           </button>
@@ -591,11 +592,20 @@ function fmtMeetingRange(startIso, endIso) {
   )} ~ ${pad2(e.getHours())}:${pad2(e.getMinutes())}`;
 }
 
+/* 이 일정에서 "면담 기록 · 학생지도비"를 쓰는가.
+
+   값이 **없는** 일정은 켜진 것으로 봅니다 - 이 항목이 생기기 전에 만든
+   일정에도 이미 적어 둔 기록이 있는데, 없다고 꺼 버리면 그 기록에 닿을 길이
+   사라집니다. 서버 쪽 같은 규칙은 event_service.records_enabled()입니다. */
+function recordsEnabled() {
+  return !!ST.event && ST.event.guidanceRecordsEnabled !== false;
+}
+
 async function loadEventRecords() {
   const card = document.getElementById("ev-records-card");
   if (!card) return;
-  // 남의 일정에서는 기록이 보이면 안 되고, 확정 전에는 걸 약속이 없습니다.
-  if (!ST.isOwner || !confirmedMeetings().length) {
+  // 기능을 끈 일정, 남의 일정에서는 보이지 않고, 확정 전에는 걸 약속이 없습니다.
+  if (!recordsEnabled() || !ST.isOwner || !confirmedMeetings().length) {
     card.style.display = "none";
     return;
   }
@@ -1063,6 +1073,27 @@ function inviteSelectedEmails() {
   return [...new Set([...checked, ...inviteTypedEmails])];
 }
 
+/* 한 칸에 들어온 문자열을 이메일 여러 개로 나눕니다.
+ *
+ * 쉼표·세미콜론·줄바꿈·공백을 모두 구분자로 봅니다. 메일 프로그램이나 엑셀에서
+ * 복사한 목록은 이 중 어느 것으로든 이어져 있어서, 하나만 받으면 통째로 한
+ * 칸에 들어가 "@"가 있다는 이유로 엉뚱한 값이 그대로 등록됩니다.
+ *
+ * "홍길동 <a@b.com>" 처럼 이름이 붙은 형태도 흔해서 꺾쇠 안쪽만 꺼냅니다. */
+function splitEmails(value) {
+  return (value || "")
+    .split(/[,;\s]+/)
+    .map((part) => {
+      const angled = part.match(/<([^>]+)>/);
+      return (angled ? angled[1] : part).trim();
+    })
+    .filter(Boolean);
+}
+
+function addInviteChips(value) {
+  splitEmails(value).forEach(addInviteChip);
+}
+
 function addInviteChip(value) {
   const email = value.trim();
   if (!email || !email.includes("@") || inviteTypedEmails.includes(email)) return;
@@ -1177,6 +1208,112 @@ function openQuickContactDialog() {
   if (search) search.focus();
 }
 
+/* ---------------------------------------------------------------------- */
+/* 참가자에게 메일 보내기                                                    */
+/* ---------------------------------------------------------------------- */
+//
+// 초대와 나눠 둔 이유: 초대는 "링크를 받아 보세요"이고 이쪽은 이미 링크를 받은
+// 사람에게 보내는 알림입니다. 주 용도는 아직 응답하지 않은 사람에게 보내는
+// 리마인더라, 받는 사람이 **응답 여부로 나뉘어** 나오고 묶음째 고를 수 있습니다.
+
+let messageTargets = { responded: [], pending: [] };
+
+function renderMessageTargets() {
+  const root = document.getElementById("msg-targets");
+  const groups = [
+    { key: "pending", label: "아직 응답하지 않은 사람", people: messageTargets.pending },
+    { key: "responded", label: "응답한 사람", people: messageTargets.responded },
+  ];
+  const total = groups.reduce((n, g) => n + g.people.length, 0);
+
+  root.innerHTML = "";
+  if (!total) {
+    root.innerHTML = `<p class="hint" style="margin:0;">보낼 사람이 없습니다. 먼저 초대를 보내 주세요.</p>`;
+    return;
+  }
+
+  groups.forEach((group) => {
+    if (!group.people.length) return;
+    // 이메일을 모르는 사람은 고를 수 없지만 목록에는 남깁니다 - 조용히 빼면
+    // 왜 빠졌는지 알 수 없습니다.
+    const head = el(`
+      <div class="msg-target-group">
+        <span class="msg-target-title">${escapeHtml(group.label)} (${group.people.length}명)</span>
+        <button type="button" class="btn btn-ghost btn-sm" data-role="msg-toggle-all">모두 선택</button>
+      </div>
+    `);
+    head.querySelector("[data-role=msg-toggle-all]").addEventListener("click", () => {
+      const boxes = [...root.querySelectorAll(`input[data-group="${group.key}"]`)];
+      const turnOn = boxes.some((b) => !b.checked);
+      boxes.forEach((b) => (b.checked = turnOn));
+    });
+    root.appendChild(head);
+
+    group.people.forEach((p) => {
+      const label = document.createElement("label");
+      label.className = "checkbox-row" + (p.email ? "" : " msg-target-nomail");
+      label.style.marginBottom = "6px";
+      label.innerHTML = `
+        <input type="checkbox" data-group="${group.key}" value="${escapeHtml(p.email)}"
+               ${p.email ? (group.key === "pending" ? "checked" : "") : "disabled"} />
+        <span class="checkbox-copy">
+          ${escapeHtml(p.name || p.email)}
+          <div class="desc">${p.email ? escapeHtml(p.email) : "이메일을 몰라 보낼 수 없습니다"}</div>
+        </span>
+      `;
+      root.appendChild(label);
+    });
+  });
+}
+
+async function openMessageDialog() {
+  document.getElementById("msg-error").textContent = "";
+  document.getElementById("msg-body").value = "";
+  openDialog("message-dialog");
+
+  const root = document.getElementById("msg-targets");
+  root.innerHTML = `<p class="hint" style="margin:0;">불러오는 중...</p>`;
+  try {
+    messageTargets = await api.get(`/api/events/${ST.eventId}/mail-targets`);
+    renderMessageTargets();
+  } catch (err) {
+    root.innerHTML = `<p class="hint" style="margin:0;">받는 사람을 불러오지 못했습니다.</p>`;
+  }
+}
+
+async function sendEventMessage() {
+  const errorEl = document.getElementById("msg-error");
+  const btn = document.getElementById("msg-send-btn");
+  errorEl.textContent = "";
+
+  const emails = [
+    ...document.querySelectorAll("#msg-targets input[type=checkbox]:checked"),
+  ].map((cb) => cb.value);
+  if (!emails.length) {
+    errorEl.textContent = "받는 사람을 한 명 이상 선택해 주세요.";
+    return;
+  }
+  const message = document.getElementById("msg-body").value.trim();
+  if (!message) {
+    errorEl.textContent = "보낼 내용을 입력해 주세요.";
+    return;
+  }
+
+  btn.disabled = true;
+  try {
+    const res = await api.post(`/api/events/${ST.eventId}/message`, { emails, message });
+    closeDialog("message-dialog");
+    showSnackbar(
+      `${res.sent || emails.length}명에게 메일을 보내는 중입니다. 이 페이지를 나가도 전송됩니다.`,
+      "success"
+    );
+  } catch (err) {
+    errorEl.textContent = err.message || "메일을 보내지 못했습니다.";
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 async function sendInvites() {
   const errorEl = document.getElementById("invite-error");
   const btn = document.getElementById("invite-send-btn");
@@ -1185,7 +1322,7 @@ async function sendInvites() {
   // Fold in whatever is still sitting in the input but not yet chipped.
   const pending = document.getElementById("invite-email-input");
   if (pending.value.trim()) {
-    addInviteChip(pending.value);
+    addInviteChips(pending.value);
     pending.value = "";
   }
 
@@ -1235,18 +1372,46 @@ function wireStaticButtons() {
     },
   });
 
-  document.getElementById("copy-link-btn").addEventListener("click", () => {
-    navigator.clipboard.writeText(window.location.href);
-    showSnackbar("링크가 복사되었습니다.", "success");
+  document.getElementById("copy-link-btn").addEventListener("click", async () => {
+    if (await copyToClipboard(window.location.href)) {
+      showSnackbar("링크가 복사되었습니다.", "success");
+    } else {
+      showSnackbar("복사하지 못했습니다. 주소창의 주소를 직접 복사해 주세요.", "error");
+    }
   });
 
   document.getElementById("invite-send-btn").addEventListener("click", sendInvites);
-  document.getElementById("invite-email-input").addEventListener("keydown", (e) => {
-    if (e.key === "Enter" || e.key === "," || e.key === " ") {
+  document.getElementById("invite-copy-link").addEventListener("click", async () => {
+    const link = `${window.location.origin}/e/${ST.eventId}`;
+    if (await copyToClipboard(link)) {
+      showSnackbar("일정 링크를 복사했습니다.", "success");
+    } else {
+      showSnackbar("복사하지 못했습니다. 주소창의 주소를 직접 복사해 주세요.", "error");
+    }
+  });
+  document.getElementById("msg-send-btn").addEventListener("click", sendEventMessage);
+  const inviteInput = document.getElementById("invite-email-input");
+  inviteInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === "," || e.key === ";" || e.key === " ") {
       e.preventDefault();
-      addInviteChip(e.target.value);
+      addInviteChips(e.target.value);
       e.target.value = "";
     }
+  });
+  // 목록을 통째로 붙여넣는 경우. 구분자가 없으면(주소 하나) 그냥 붙여넣게
+  // 두어 오타를 고칠 수 있게 합니다.
+  inviteInput.addEventListener("paste", (e) => {
+    const text = (e.clipboardData || window.clipboardData).getData("text") || "";
+    if (!/[,;\s]/.test(text.trim())) return;
+    e.preventDefault();
+    addInviteChips(`${e.target.value} ${text}`);
+    e.target.value = "";
+  });
+  // 적어 두고 그냥 다른 곳을 눌렀을 때 입력이 사라지지 않게 합니다.
+  inviteInput.addEventListener("blur", () => {
+    if (!inviteInput.value.trim()) return;
+    addInviteChips(inviteInput.value);
+    inviteInput.value = "";
   });
 
   document.getElementById("guest-name-submit").addEventListener("click", async () => {
@@ -1324,6 +1489,9 @@ function wireDynamicButtons() {
     const inviteBtn = document.getElementById("invite-btn");
     inviteBtn.style.display = "";
     inviteBtn.addEventListener("click", openInviteDialog);
+    const messageBtn = document.getElementById("message-btn");
+    messageBtn.style.display = "";
+    messageBtn.addEventListener("click", openMessageDialog);
     document.getElementById("finalize-link-btn").style.display = "";
     // Only swap the label span's text, not the whole button - the button
     // also contains an SVG icon that a plain .textContent assignment here

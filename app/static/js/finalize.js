@@ -79,9 +79,14 @@ function populateSettings() {
   }
 
   const fin = CFG.finalization;
-  if (fin && fin.status === "confirmed") {
+  // 확정을 취소해도 배정은 남습니다 (finalize_service.cancel). 그때도 조건은
+  // 그대로 살려 둬야 다시 계산했을 때 같은 모양이 나옵니다.
+  if (fin && (fin.meetings || []).length) {
     capacity.value = String(fin.capacity);
     minutes.value = String(fin.meetingMinutes);
+  }
+  // 배너와 "확정 취소" 버튼은 **지금 확정 상태일 때만** 의미가 있습니다.
+  if (fin && fin.status === "confirmed") {
     document.getElementById("confirmed-banner").style.display = "";
     document.getElementById("fin-cancel-btn").style.display = "";
   }
@@ -92,6 +97,28 @@ function populateSettings() {
 function setResultVisible(visible) {
   document.getElementById("fin-result").style.display = visible ? "" : "none";
   document.getElementById("fin-top-actions").style.display = visible ? "" : "none";
+  syncConfirmButtonLabel();
+}
+
+/* 확정 버튼이 실제로 하는 일에 맞춰 이름을 붙입니다.
+ *
+ * 이미 확정·마감된 일정에서 이 버튼은 "확정"이 아니라 **손으로 고친 배정을
+ * 반영**하는 것입니다 (confirmSchedule의 재확정 분기 - 시간이 바뀐 사람에게만
+ * 안내가 나가고 마감 상태는 그대로입니다). 그런데도 "확정하고 마감"이라고
+ * 적혀 있으면 이미 마감된 것을 또 마감한다는 말이 되어, 왜 아직 있는지
+ * 알 수 없습니다.
+ *
+ * 확정을 취소해 둔 상태는 배정이 남아 있어도 "확정 전"입니다 - 누르면
+ * 실제로 마감되므로 원래 문구가 맞습니다.
+ */
+function syncConfirmButtonLabel() {
+  const btn = document.getElementById("fin-confirm-btn");
+  if (!btn) return;
+  const confirmed = !!(CFG.finalization && CFG.finalization.status === "confirmed");
+  btn.textContent = confirmed ? "변경 내용 저장" : "이 내용으로 확정하고 마감";
+  btn.title = confirmed
+    ? "고친 배정을 반영합니다. 시간이 바뀐 사람에게만 안내가 갑니다."
+    : "참가자에게 안내 메일이 발송되고 응답이 잠깁니다.";
 }
 
 /* ------------------------------------------------------------------ */
@@ -767,9 +794,11 @@ function bookingByKey(meetings) {
   return out;
 }
 
+/* 마지막으로 확정했던 배정. 확정을 취소해도 남아 있으므로(그래야 이어서
+   고칠 수 있습니다) status가 아니라 meetings가 있는지로 판단합니다. */
 function savedMeetings() {
   const fin = CFG.finalization;
-  return fin && fin.status === "confirmed" ? fin.meetings || [] : null;
+  return fin && (fin.meetings || []).length ? fin.meetings : null;
 }
 
 /** 저장된 확정본과 지금 편집 중인 배정의 차이. */
@@ -854,7 +883,9 @@ async function confirmSchedule() {
   errorEl.textContent = "";
 
   const meetings = currentMeetings();
-  const already = CFG.finalization && CFG.finalization.status === "confirmed";
+  // 확정을 취소해 둔 상태여도 지난 배정이 있으면 "다시 확정"입니다 -
+  // 바뀐 사람에게만 안내가 나갑니다 (finalize_service.confirm).
+  const already = !!savedMeetings();
   const changes = assignmentChanges();
 
   let question;
@@ -895,15 +926,18 @@ async function confirmSchedule() {
 }
 
 async function cancelSchedule() {
-  if (!confirm("확정을 취소하고 다시 응답을 받을까요? 참가자에게 취소 안내 메일이 발송됩니다.")) return;
+  if (
+    !confirm(
+      "확정을 풀고 다시 응답을 받을까요?\n\n참가자에게는 아무 안내도 가지 않습니다. " +
+        "지금 배정은 그대로 남아 이어서 고칠 수 있고, 다시 확정하면 시간이 바뀐 사람에게만 안내가 갑니다."
+    )
+  )
+    return;
   try {
     await api.post(`/api/events/${CFG.eventId}/finalize/cancel`);
-    showSnackbar(
-      "확정을 취소했습니다. 취소 안내 메일은 백그라운드로 발송됩니다 — 이 페이지를 나가도 계속 전송됩니다.",
-      "success"
-    );
+    showSnackbar("확정을 풀었습니다. 배정은 그대로 남아 있습니다.", "success");
     live.stop(); // 곧 새로고침합니다 - 내 행동으로 알림이 뜨지 않게
-    setTimeout(() => window.location.reload(), 2600);
+    setTimeout(() => window.location.reload(), 1200);
   } catch (err) {
     showSnackbar(err.message || "취소하지 못했습니다.", "error");
   }
@@ -954,5 +988,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  if (CFG.finalization && CFG.finalization.status === "confirmed") runOptimizer(true);
+  // 확정을 취소해 둔 일정도 지난 배정을 그대로 불러옵니다.
+  if (savedMeetings()) runOptimizer(true);
 });

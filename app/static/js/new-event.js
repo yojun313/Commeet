@@ -389,6 +389,12 @@ const NewEventDialog = (() => {
     if (collectEmails) collectEmails.checked = !!(event && event.collectEmails);
     const blind = document.getElementById("ne-blind");
     if (blind) blind.checked = !!(event && event.blindAvailabilityEnabled);
+    const guidance = document.getElementById("ne-guidance-records");
+    // 값이 없는 예전 일정은 켜진 것으로 봅니다 (event_service.records_enabled와
+    // 같은 규칙) - 이 항목이 생기기 전에 적어 둔 기록이 사라지면 안 됩니다.
+    if (guidance) {
+      guidance.checked = event ? event.guidanceRecordsEnabled !== false : false;
+    }
     const thresholdEnable = document.getElementById("ne-threshold-enable");
     const thresholdCount = document.getElementById("ne-threshold-count");
     if (thresholdEnable) {
@@ -490,6 +496,9 @@ const NewEventDialog = (() => {
         notificationsEnabled: document.getElementById("ne-notify") ? document.getElementById("ne-notify").checked : false,
         collectEmails: document.getElementById("ne-collect-emails") ? document.getElementById("ne-collect-emails").checked : false,
         blindAvailabilityEnabled: document.getElementById("ne-blind") ? document.getElementById("ne-blind").checked : false,
+        guidanceRecordsEnabled: document.getElementById("ne-guidance-records")
+          ? document.getElementById("ne-guidance-records").checked
+          : false,
         remindees: state.remindees,
       };
 
@@ -519,6 +528,19 @@ const NewEventDialog = (() => {
           );
         }
         const id = result.shortId || result.eventId || result._id;
+        const link = `${window.location.origin}/e/${id}`;
+        // 만든 직후에 하는 일은 거의 링크 공유라, 누르지 않아도 복사해 둡니다.
+        // "만들기"를 누른 그 클릭이 곧 사용자 동작이므로 브라우저가 막지
+        // 않습니다. 복사가 막히는 환경(비-https 등)에서는 알리지 않습니다.
+        if (state.mode !== "edit") {
+          const copied = await copyToClipboard(link);
+          queueSnackbar(
+            copied
+              ? "일정을 만들었습니다. 링크를 복사했으니 바로 붙여넣어 공유하세요."
+              : "일정을 만들었습니다.",
+            "success"
+          );
+        }
         window.location.href = `/e/${id}`;
       } catch (err) {
         showError(err.message || "일정을 저장하지 못했습니다.");

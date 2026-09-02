@@ -13,6 +13,7 @@ from app.schemas.event import (
     EventResponsePayload,
     RenameGuestPayload,
     SendInvitePayload,
+    SendMessagePayload,
 )
 from app.services import email_service, event_service
 from app.services.auth_service import get_optional_user, get_user_by_id, require_user
@@ -261,9 +262,53 @@ async def send_invites(event_id: str, payload: SendInvitePayload, request: Reque
         for email in recipients
     ]
 
+    # 초대한 사람을 적어 둡니다 - 나중에 "아직 응답 안 한 사람"에게 리마인더를
+    # 보내려면 누구를 불렀는지 알아야 합니다 (mail_targets).
+    await event_service.remember_invitees(event, recipients)
+
     # 발송을 기다리지 않습니다 - 최대 20명이면 메일 서버와의 왕복만 몇 초라,
     # 기다리면 다이얼로그가 그동안 멈춰 있는 것처럼 보입니다.
     queued = email_service.send_many_detached(mails)
+    return {"sent": queued}
+
+
+async def _require_event_host(event_id: str, request: Request) -> tuple[dict, dict]:
+    """메일을 보내려는 사람이 이 일정의 주최자인지. 주인 없는(게스트가 만든)
+    일정에서 아무나 메일을 보낼 수 있으면 이 앱이 발송 대행이 됩니다."""
+    user = await require_user(request)
+    event = await event_service.get_event_by_either_id(event_id)
+    if event is None:
+        raise HTTPException(status_code=404, detail="이벤트를 찾을 수 없습니다")
+    if event.get("ownerId") != user["_id"]:
+        raise HTTPException(
+            status_code=403, detail="일정을 만든 사람만 메일을 보낼 수 있습니다"
+        )
+    return event, user
+
+
+@router.get("/{event_id}/mail-targets")
+async def mail_targets(event_id: str, request: Request):
+    """메일 보내기 창이 채울 명단 - 응답한 사람 / 아직 안 한 사람."""
+    event, user = await _require_event_host(event_id, request)
+    return await event_service.mail_targets(event, user)
+
+
+@router.post("/{event_id}/message")
+async def send_message(event_id: str, payload: SendMessagePayload, request: Request):
+    """주최자가 고른 사람들에게 짧은 안내를 보냅니다 (응답 재촉 등)."""
+    event, user = await _require_event_host(event_id, request)
+    recipients = list(
+        dict.fromkeys(str(e).strip() for e in payload.emails if e.strip())
+    )
+    if not recipients:
+        raise HTTPException(status_code=400, detail="받는 사람을 선택해 주세요")
+
+    queued = email_service.send_many_detached(
+        [
+            email_service.build_event_message_mail(email, user, event, payload.message)
+            for email in recipients
+        ]
+    )
     return {"sent": queued}
 
 

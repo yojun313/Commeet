@@ -18,7 +18,7 @@ from bson import ObjectId
 from app.config import GUIDANCE_FEE_RATES
 from app.core.ids import to_object_id
 from app.db import contacts_col, events_col, meeting_records_col
-from app.services import crypto_service
+from app.services import crypto_service, event_service
 
 AFFILIATIONS = ("cse", "muunjae", "other")
 AFFILIATION_LABELS = {"cse": "컴퓨터공학과", "muunjae": "무은재학부", "other": "기타"}
@@ -58,6 +58,10 @@ def _as_per_student(value) -> dict:
     if not isinstance(value, dict):
         return {}
     return {key: _as_notes(note) for key, note in value.items()}
+
+
+class RecordsDisabled(Exception):
+    """지도 면담 기능이 꺼진 일정입니다."""
 
 
 class RecordNotFound(Exception):
@@ -180,7 +184,17 @@ def _keep_receipts(
 
 
 def find_meeting(event: dict, meeting_start: datetime) -> dict:
-    for m in (event.get("finalization") or {}).get("meetings") or []:
+    """확정된 약속만 찾습니다.
+
+    확정을 풀어도 배정은 남습니다 (finalize_service.cancel) - 이어서 고칠 수
+    있어야 하기 때문입니다. 하지만 확정이 아닌 배정으로 새 기록을 시작하면
+    안 되므로 상태를 함께 봅니다. 이미 써 둔 기록을 읽고 고치는 것은
+    막지 않습니다.
+    """
+    finalization = event.get("finalization") or {}
+    if finalization.get("status") != "confirmed":
+        raise MeetingNotFound()
+    for m in finalization.get("meetings") or []:
         if m["start"] == meeting_start:
             return m
     raise MeetingNotFound()
@@ -276,6 +290,11 @@ async def save_record(owner: dict, data: dict) -> str:
     event = await events_col.find_one({"_id": event_oid})
     if not event or event.get("ownerId") != owner["_id"]:
         raise RecordNotFound()
+    # 꺼 둔 일정에는 새로 쓰지 않습니다. 화면에서는 칸 자체가 안 보이지만,
+    # 열어 둔 탭에서 뒤늦게 저장이 날아올 수 있습니다. 읽기는 막지 않습니다 -
+    # 이미 적어 둔 기록은 계속 볼 수 있어야 합니다.
+    if not event_service.records_enabled(event):
+        raise RecordsDisabled()
 
     attendees = data.get("attendees") or []
     settlements = data.get("settlements") or compute_settlements(attendees)

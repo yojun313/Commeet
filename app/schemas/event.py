@@ -31,6 +31,10 @@ class EventPayload(BaseModel):
     notificationsEnabled: bool = False
     blindAvailabilityEnabled: bool = False
     collectEmails: bool = False
+    # 지도 면담 기능. 켜면 일정 페이지에 "면담 기록 · 학생지도비" 칸이 생깁니다.
+    # 값이 **없는** 예전 일정은 켜진 것으로 봅니다 (records_enabled 참고) -
+    # 이 항목이 생기기 전에 적어 둔 기록이 사라지면 안 됩니다.
+    guidanceRecordsEnabled: bool = False
     timeIncrement: int = 15
     sendEmailAfterXResponses: int | None = None
 
@@ -75,3 +79,13 @@ class SendInvitePayload(BaseModel):
     # Capped to keep this from being usable as a bulk mailer.
     emails: list[EmailStr] = Field(min_length=1, max_length=20)
     message: str = Field(default="", max_length=500)
+
+
+class SendMessagePayload(BaseModel):
+    """주최자가 참가자에게 보내는 짧은 안내 (응답 재촉 등).
+
+    인원 상한은 초대와 같습니다 - 이 앱이 대량 발송 도구로 쓰이지 않게.
+    """
+
+    emails: list[EmailStr] = Field(min_length=1, max_length=20)
+    message: str = Field(default="", max_length=1000)

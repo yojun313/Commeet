@@ -92,6 +92,16 @@ async def access_log_middleware(request: Request, call_next):
 # 아직 아무도 보고 있지 않은 일정이라 올릴 것도 없습니다.
 _EVENT_WRITE_PATH = re.compile(r"^/api/events/([^/]+)")
 
+# 쓰기처럼 보이지만 **아무것도 바꾸지 않는** 요청들. POST인 이유는 본문을
+# 받아야 해서일 뿐입니다 - proposal은 최적 배정을 계산해 돌려주기만 하고,
+# invite는 메일만 보냅니다 (둘 다 DB에 쓰지 않습니다).
+#
+# 걸러 내지 않으면 확정 화면이 **자기 자신의 행동**을 남의 변경으로 착각합니다.
+# 이미 확정된 일정은 열자마자 proposal을 한 번 돌리는데(finalize.js), 그때
+# 올라간 버전 때문에 몇 초 뒤 "참가자의 응답이 바뀌었습니다"가 떴습니다 -
+# 아무도 아무것도 바꾸지 않았는데도.
+_NO_CHANGE_SUFFIXES = ("/finalize/proposal", "/invite")
+
 
 @app.middleware("http")
 async def bump_event_version_middleware(request: Request, call_next):
@@ -108,6 +118,8 @@ async def bump_event_version_middleware(request: Request, call_next):
     """
     response = await call_next(request)
     if request.method == "GET" or not (200 <= response.status_code < 300):
+        return response
+    if request.url.path.endswith(_NO_CHANGE_SUFFIXES):
         return response
     match = _EVENT_WRITE_PATH.match(request.url.path)
     if match:

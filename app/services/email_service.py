@@ -414,6 +414,27 @@ def build_event_invite_mail(
     )
 
 
+def build_event_message_mail(
+    to: str, host: dict | None, event: dict, message: str
+) -> Mail:
+    """주최자가 참가자에게 직접 쓴 짧은 안내. 응답 재촉이 주 용도입니다.
+
+    초대 메일과 달리 "초대합니다"라고 하지 않습니다 - 이미 링크를 받은
+    사람에게 다시 초대라고 하면 무엇이 달라진 건지 알 수 없습니다.
+    """
+    host_name = _owner_name(host)
+    body = f"{host_name}님이 '{event['name']}' 일정에 대해 알려드립니다.\n\n"
+    if message:
+        body += f"{message}\n\n"
+    body += f"아래 링크에서 가능한 시간을 확인하거나 수정할 수 있습니다.\n{_event_url(event)}\n"
+    return Mail(
+        to=to,
+        subject=f"[{APP_NAME}] '{event['name']}' 안내",
+        body=body,
+        sender_name=_host_sender_name(host),
+    )
+
+
 async def send_event_invite_email(
     to: str, owner: dict | None, event: dict, message: str = ""
 ) -> None:

@@ -8,6 +8,33 @@ function showSnackbar(message, type) {
   setTimeout(() => el.remove(), 3200);
 }
 
+/* 클립보드에 복사합니다. 성공 여부를 돌려줍니다.
+ *
+ * navigator.clipboard는 https(또는 localhost)에서만 동작합니다. 사내망
+ * http로 접속한 경우에도 링크 복사가 되어야 해서, 안 되면 화면 밖 textarea를
+ * 만들어 execCommand로 떨어집니다. 두 경로 모두 막히면 false를 돌려주니
+ * 부르는 쪽이 "복사했습니다"라고 거짓말하지 않을 수 있습니다. */
+async function copyToClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (e) {
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      const done = document.execCommand("copy");
+      ta.remove();
+      return done;
+    } catch (e2) {
+      return false;
+    }
+  }
+}
+
 /* 페이지를 옮겨 가며 보여 줘야 하는 알림.
  *
  * 일정을 만들면 곧바로 새 일정 페이지로 이동하기 때문에, 만들기 창에서

@@ -321,8 +321,13 @@ async def confirm(
                 "약속 시간이 서로 겹칩니다. 호스트는 동시에 참석할 수 없습니다."
             )
 
-    was_confirmed = is_confirmed(event)
-    previous_finalization = event.get("finalization") if was_confirmed else None
+    # 지난 배정이 남아 있으면 - 확정 상태든, 확정을 취소해 둔 상태든 - 그것과
+    # 비교해 **바뀐 사람에게만** 알립니다. 확정 취소는 아무에게도 알리지
+    # 않으므로(cancel 참고), 취소했다가 다시 확정했을 때 시간이 그대로인
+    # 사람에게 같은 안내가 한 번 더 가면 안 됩니다.
+    stored_finalization = event.get("finalization") or {}
+    had_assignment = bool(stored_finalization.get("meetings"))
+    previous_finalization = stored_finalization if had_assignment else None
     finalization = {
         "status": "confirmed",
         "capacity": capacity,
@@ -363,39 +368,40 @@ async def confirm(
         finalization,
         by_key,
         previous=previous_finalization,
-        updated=was_confirmed,
+        updated=had_assignment,
     )
     return finalization
 
 
 async def cancel(event: dict, host: dict) -> None:
-    """Reopens the event for responses and tells everyone it is off."""
+    """확정을 풀어 응답을 다시 받습니다. **알리지 않고, 배정은 남깁니다.**
+
+    주최자가 확정을 취소하는 것은 대개 "약속을 없던 일로 하겠다"가 아니라
+    "배정을 손보겠다"입니다. 그때마다 참가자 전원에게 취소 안내가 나가면
+    잠시 뒤 확정 안내가 또 나가서, 받는 쪽에서는 무슨 일이 벌어지는지
+    알 수 없습니다. 그래서 여기서는 메일을 보내지 않고, 다시 확정할 때
+    confirm()이 **실제로 시간이 바뀐 사람에게만** 안내합니다.
+
+    배정(meetings)은 지우지 않고 status만 내립니다 - 확정 화면이 그대로
+    불러와 이어서 고칠 수 있어야 하기 때문입니다. 지우면 처음부터 다시
+    계산해야 하고, 손으로 옮겨 둔 자리가 전부 사라집니다.
+    """
     finalization = event.get("finalization") or {}
     if finalization.get("status") != "confirmed":
         raise EventNotClosable("확정된 일정이 없습니다.")
 
-    _host_response, participants = await _load_people(event)
-    by_key = {p["key"]: p for p in participants}
-
+    # 캘린더에 넣어 둔 약속은 지웁니다 - 확정이 풀렸는데 남아 있으면 안 됩니다.
+    # 다시 확정하면 confirm()이 새로 넣습니다.
     calendar_service.clear_synced_events_detached(
         finalization.get("googleSyncedEvents")
     )
 
     await events_col.update_one(
         {"_id": event["_id"]},
-        {"$set": {"isClosed": False}, "$unset": {"finalization": ""}},
-    )
-
-    # 확정과 같은 이유로 요청과 분리해 보냅니다.
-    email_service.send_many_detached(
-        [
-            email_service.build_meeting_cancelled_mail(
-                by_key[key]["email"], host, event, meeting["start"]
-            )
-            for meeting in finalization.get("meetings") or []
-            for key in meeting.get("participants") or []
-            if by_key.get(key) and by_key[key]["email"]
-        ]
+        {
+            "$set": {"isClosed": False, "finalization.status": "cancelled"},
+            "$unset": {"finalization.googleSyncedEvents": ""},
+        },
     )
 
 

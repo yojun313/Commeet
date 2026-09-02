@@ -84,6 +84,11 @@ async def save_record(payload: SaveRecordRequest, request: Request):
     user = await require_user(request)
     try:
         record_id = await record_service.save_record(user, payload.model_dump())
+    except record_service.RecordsDisabled as exc:
+        raise HTTPException(
+            status_code=409,
+            detail="이 일정은 지도 면담 기능이 꺼져 있습니다. 일정 정보 수정에서 켜 주세요.",
+        ) from exc
     except record_service.RecordNotFound as exc:
         raise HTTPException(status_code=404, detail="일정을 찾을 수 없습니다.") from exc
     return {"id": record_id}
