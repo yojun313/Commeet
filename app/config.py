@@ -51,6 +51,20 @@ GUIDANCE_FEE_RATES = {
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
 DB_NAME = os.getenv("DB_NAME", "commeet")
 
+# 서버 밖(개발용 맥 등)에서 서버의 MongoDB를 쓰기 위한 SSH 터널. 켜면 앱이
+# 뜰 때 SSH로 먼저 붙고, MONGO_URI의 호스트 자리를 그 터널의 로컬 포트로
+# 바꿔서 접속합니다 - 즉 터널을 쓰든 안 쓰든 MONGO_URI는 "서버에서 본
+# MongoDB 주소"로 똑같이 적으면 됩니다 (app/db/mongo.py).
+# 서버 안에서 돌 때는 꺼 두세요. 자기 자신에게 SSH를 걸 이유가 없습니다.
+MONGO_SSH_TUNNEL = _bool("MONGO_SSH_TUNNEL", "false")
+SSH_HOST = os.getenv("SSH_HOST", "").strip()
+SSH_PORT = int(os.getenv("SSH_PORT", "22"))
+SSH_USER = os.getenv("SSH_USER", "").strip()
+# 개인키 파일 경로(~ 표기 가능). 키 대신 비밀번호로 붙으려면 SSH_PASSWORD.
+SSH_KEY = os.path.expanduser(os.getenv("SSH_KEY", "").strip())
+SSH_KEY_PASSPHRASE = os.getenv("SSH_KEY_PASSPHRASE", "")
+SSH_PASSWORD = os.getenv("SSH_PASSWORD", "")
+
 # Google Calendar integration (optional - only used for the "connect Google
 # Calendar" feature in Settings, not for login, which is email+password).
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")

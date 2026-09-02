@@ -428,8 +428,10 @@ for record in records:
 ```python
 def is_past_event(event) -> bool:
     # dow / group은 dates가 기준 주라 지난 일정 개념이 없습니다 (§4.2)
-    if event["type"] in (DOW, GROUP): return False
+    if event["type"] in (DOW, GROUP):
+        return False
     return max(dates) + duration < now
+
 
 def removal_word(event) -> str:
     return "삭제" if is_past_event(event) else "취소"
@@ -2369,7 +2371,7 @@ select.list-sort-select { width: auto; ... }
 | 변수 | 기본값 | 비고 |
 |---|---|---|
 | `SESSION_SECRET` | `dev-insecure-secret-change-me` | **반드시 변경.** 바꾸면 전원 로그아웃 + (파생 키 사용 시) 면담 기록 복호화 불가 |
-| `MONGO_URI` | `mongodb://localhost:27017` | |
+| `MONGO_URI` | `mongodb://localhost:27017` | 항상 **서버에서 본** 주소. SSH 터널을 켜도 이 값은 그대로 두고 호스트만 자동 치환됨 |
 | `DB_NAME` | `commeet` | |
 | `BASE_URL` | `http://localhost:8000` | 메일 링크와 OAuth 리다이렉트에 사용 |
 
@@ -2383,6 +2385,10 @@ select.list-sort-select { width: auto; ... }
 | `GOOGLE_CLIENT_ID` / `_SECRET` | 빈 값 | 없으면 위 값과 무관하게 자동으로 꺼짐 |
 | `MAIL_BACKEND` | `gmail` | `gmail` \| `postech` |
 | `MAIL_SENDER` / `MAIL_PASSWORD` | 빈 값 | 없으면 콘솔 로그 대체 |
+| `MONGO_SSH_TUNNEL` | `false` | 서버 밖에서 개발할 때 켬. SSH 터널을 연 뒤 그 로컬 포트로 MongoDB 접속 (`app/db/mongo.py`). 서버 안에서는 꺼 둘 것 |
+| `SSH_HOST` / `SSH_PORT` / `SSH_USER` | 빈 값 / `22` / 빈 값 | 터널을 켜면 host·user 필수 |
+| `SSH_KEY` / `SSH_KEY_PASSPHRASE` | 빈 값 | 개인키 경로(`~` 가능)와 키 암호 |
+| `SSH_PASSWORD` | 빈 값 | 키 대신 비밀번호로 붙을 때만 |
 | `MAIL_MAX_CONNECTIONS` | `4` | 여러 명에게 보낼 때 동시에 여는 SMTP 연결 수 |
 | `MAIL_VERIFY_DOMAIN` | `true` | 없는 도메인이면 발송을 건너뜀 (판단 불가 시 발송) |
 | `MAIL_DNS_TIMEOUT` | `3` | 위 DNS 조회 제한 시간(초) |

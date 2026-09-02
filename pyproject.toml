@@ -17,6 +17,8 @@ dependencies = [
     "pymongo>=4.17.0",
     "python-dotenv>=1.2.3",
     "python-multipart>=0.0.32",
+    # MONGO_SSH_TUNNEL=true일 때만 import 됩니다 (app/db/mongo.py).
+    "sshtunnel>=0.4.0",
     "uvicorn>=0.52.4",
 ]
 
