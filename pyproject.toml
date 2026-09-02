@@ -18,7 +18,11 @@ dependencies = [
     "python-dotenv>=1.2.3",
     "python-multipart>=0.0.32",
     # MONGO_SSH_TUNNEL=true일 때만 import 됩니다 (app/db/mongo.py).
+    # paramiko 4.0이 DSSKey를 없앴는데 sshtunnel 0.4.0은 아직 그걸
+    # 참조합니다 (AttributeError: module 'paramiko' has no attribute
+    # 'DSSKey'). sshtunnel이 고쳐질 때까지 3.x에 묶어 둡니다.
     "sshtunnel>=0.4.0",
+    "paramiko<4",
     "uvicorn>=0.52.4",
 ]
 
