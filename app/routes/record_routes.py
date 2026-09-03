@@ -68,6 +68,17 @@ async def get_draft(request: Request, eventId: str, meetingStart: datetime):
         ) from exc
 
 
+@router.get("/counts")
+async def record_counts(request: Request):
+    """일정별 면담 기록 수. 목록에서 "기록 있음"을 표시할 때 씁니다.
+
+    `/{record_id}`보다 위에 있어야 합니다 - 아래에 두면 "counts"가 record_id로
+    잡힙니다.
+    """
+    user = await require_user(request)
+    return {"counts": await record_service.count_by_event(user)}
+
+
 @router.get("/{record_id}")
 async def get_record(record_id: str, request: Request):
     user = await require_user(request)

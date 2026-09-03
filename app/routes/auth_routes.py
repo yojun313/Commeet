@@ -57,12 +57,18 @@ async def signup_verify(payload: SignupVerifyRequest, response: Response):
 
 @router.post("/login")
 async def login(payload: LoginRequest, response: Response):
-    user = await auth_service.authenticate(payload.email, payload.password)
-    if not user:
+    try:
+        user = await auth_service.authenticate(payload.email, payload.password)
+    except auth_service.EmailNotFound as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="이메일 또는 비밀번호가 올바르지 않습니다",
-        )
+            detail="아이디가 일치하지 않습니다.",
+        ) from exc
+    except auth_service.PasswordMismatch as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="비밀번호가 일치하지 않습니다.",
+        ) from exc
 
     auth_service.set_session_cookie(response, user["_id"])
     return {

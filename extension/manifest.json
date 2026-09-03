@@ -1,10 +1,15 @@
 {
   "manifest_version": 3,
   "name": "Commeet → POVIS 자동입력 (데모)",
-  "version": "0.1.0",
-  "description": "Commeet 면담 기록을 POVIS 입력 화면에 자동으로 채웁니다. 타당성 검증용 데모 - 저장은 하지 않습니다.",
-  "permissions": ["scripting", "activeTab"],
-  "host_permissions": ["https://povis.postech.ac.kr/*"],
+  "version": "0.2.0",
+  "description": "Commeet 면담 기록을 불러와 POVIS 입력 화면에 자동으로 채웁니다. 타당성 검증용 데모 - 저장은 하지 않습니다.",
+  "permissions": ["scripting", "activeTab", "storage"],
+  "host_permissions": [
+    "https://povis.postech.ac.kr/*",
+    "https://commeet.knpu.re.kr/*",
+    "http://localhost:8000/*",
+    "http://127.0.0.1:8000/*"
+  ],
   "action": {
     "default_title": "Commeet → POVIS",
     "default_popup": "popup.html"

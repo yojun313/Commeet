@@ -1,148 +1,221 @@
-// POVIS는 SAPUI5 앱입니다. 값을 넣는 방법이 하나로 정해집니다:
-//
-//   DOM에 직접 쓰면 (field.value = ... + input/change 이벤트) 화면에는
-//   보이지만 UI5 모델은 갱신되지 않습니다. 그 상태로 저장하면 **옛 값이**
-//   전송됩니다 - 에러도 안 나고 화면도 멀쩡해서 늦게 발견되는 종류입니다.
-//   그래서 반드시 모델에 씁니다: control.getModel().setProperty(path, value)
-//
-// 그리고 UI5가 붙여 주는 DOM id(__area57-inner)는 로드마다 바뀌므로 필드는
-// **바인딩 경로**(/GS_GOAL/ZGOAL)로 찾습니다. 이건 백엔드 필드명이라 안정적입니다.
-//
-// 아래 page* 함수들은 chrome.scripting이 문자열로 직렬화해 페이지의 MAIN
-// world에서 실행합니다 - 콘텐츠 스크립트의 격리된 world에서는 window.sap이
-// 보이지 않기 때문입니다. 그래서 클로저를 쓰지 못하고 전부 자기완결적입니다.
+// 팝업 UI. Commeet에서 면담 기록을 불러와(commeet.js) POVIS 화면에 채웁니다(povis.js).
 
 const POVIS_HOST = "povis.postech.ac.kr";
 
-// 데모용 가짜 Commeet 면담 기록. 실제 확장은 이 자리에서
-// GET /api/records 응답을 씁니다 (sharedNotes 또는 perStudentNotes[key]).
-const DEMO_RECORD = {
-  academic: "[데모] 학업지도: 자료구조 성적이 올랐고, 다음 학기 알고리즘 수강을 권유함.",
-  life: "[데모] 생활지도: 기숙사 생활 적응에 문제 없음. 동아리 활동 병행 중.",
-  career: "[데모] 진로지도: 대학원 진학과 취업을 함께 고민 중. 인턴 경험을 먼저 권유함.",
-  etc: "[데모] 기타사항: 다음 면담은 기말고사 이후로 예정.",
+// Commeet 면담 내용의 네 갈래. 순서와 라벨은 서버의
+// record_service.NOTE_CATEGORIES와 같습니다.
+const NOTE_CATEGORIES = [
+  ["academic", "학업지도"],
+  ["life", "생활지도"],
+  ["career", "진로지도"],
+  ["etc", "기타사항"],
+];
+
+// 지도면담입력 화면을 아직 못 봐서(교수 계정 필요) 진짜 경로를 모릅니다.
+// 그래서 동작 확인용으로 미래설계 화면의 30·40·50·60대 칸을 빌려 씁니다.
+// 교수 화면에서 "필드 스캔"을 돌려 나온 경로로 여기를 바꾸면 그대로 씁니다.
+const DEMO_FIELD_MAP = {
+  academic: "/GS_GOAL/ZAGE_30",
+  life: "/GS_GOAL/ZAGE_40",
+  career: "/GS_GOAL/ZAGE_50",
+  etc: "/GS_GOAL/ZAGE_60",
 };
 
-// 미래설계 화면에는 학업/생활/진로/기타 칸이 없어서, 동작 확인용으로
-// 30·40·50·60대 칸을 빌려 씁니다. 교수 화면(지도면담입력)의 진짜 경로는
-// 그 화면에서 "필드 스캔"을 돌려 채워 넣으면 됩니다.
-const DEMO_MAPPING = {
-  "/GS_GOAL/ZAGE_30": DEMO_RECORD.academic,
-  "/GS_GOAL/ZAGE_40": DEMO_RECORD.life,
-  "/GS_GOAL/ZAGE_50": DEMO_RECORD.career,
-  "/GS_GOAL/ZAGE_60": DEMO_RECORD.etc,
-};
+const $ = (id) => document.getElementById(id);
+const out = $("out");
+const state = { records: [], record: null, attendee: null };
 
-// ---------------------------------------------------------------------------
-// 페이지(MAIN world)에서 실행되는 코드
-// ---------------------------------------------------------------------------
-
-/** UI5 컨트롤 하나의 사람이 읽을 라벨을 추측합니다. 스캔 결과를 눈으로
- *  훑어 매핑표를 만들 때 쓰는 힌트일 뿐이라 실패해도 무방합니다. */
-function pageScan() {
-  if (!window.sap?.ui?.core?.Element?.registry) {
-    return { error: "이 페이지에서 SAPUI5를 찾지 못했습니다. POVIS 화면이 맞는지 확인해 주세요." };
-  }
-  const labelOf = (ctrl) => {
-    try {
-      const dom = ctrl.getDomRef();
-      if (!dom) return null;
-      const via = dom.getAttribute("aria-labelledby");
-      if (via) {
-        const text = via.split(/\s+/).map((id) => document.getElementById(id)?.textContent || "").join(" ").trim();
-        if (text) return text.slice(0, 40);
-      }
-      // 라벨이 앞 형제로 놓인 흔한 배치
-      let node = dom.closest("div");
-      for (let i = 0; i < 3 && node; i++, node = node.parentElement) {
-        const prev = node.previousElementSibling;
-        const text = prev?.textContent?.trim();
-        if (text && text.length < 40) return text;
-      }
-    } catch { /* 라벨은 있으면 좋은 정도 */ }
-    return null;
-  };
-
-  const fields = [];
-  sap.ui.core.Element.registry.forEach((c) => {
-    const binding = c.getBinding && c.getBinding("value");
-    if (!binding?.getPath) return;
-    const type = c.getMetadata().getName();
-    if (!/TextArea|Input|TextField/.test(type)) return;
-    fields.push({
-      path: binding.getPath(),
-      type: type.split(".").pop(),
-      label: labelOf(c),
-      len: (c.getValue?.() || "").length, // 값 자체는 개인정보라 길이만
-      editable: c.getEditable ? c.getEditable() : null,
-    });
-  });
-  return { url: location.href, ui5: sap.ui.version, count: fields.length, fields };
-}
-
-/** 매핑대로 모델에 씁니다. 원래 값은 되돌리기용으로 페이지에 보관합니다. */
-function pageFill(mapping) {
-  if (!window.sap?.ui?.core?.Element?.registry) {
-    return { error: "이 페이지에서 SAPUI5를 찾지 못했습니다." };
-  }
-  const find = (path) => {
-    let hit = null;
-    sap.ui.core.Element.registry.forEach((c) => {
-      const b = c.getBinding && c.getBinding("value");
-      if (!hit && b?.getPath && b.getPath() === path) hit = c;
-    });
-    return hit;
-  };
-
-  window.__commeetBackup = window.__commeetBackup || {};
-  const report = [];
-  for (const [path, value] of Object.entries(mapping)) {
-    const ctrl = find(path);
-    if (!ctrl) { report.push({ path, status: "필드 없음" }); continue; }
-    if (ctrl.getEditable && !ctrl.getEditable()) { report.push({ path, status: "읽기 전용" }); continue; }
-
-    const model = ctrl.getModel();
-    if (!(path in window.__commeetBackup)) window.__commeetBackup[path] = model.getProperty(path);
-    model.setProperty(path, value);
-
-    // 화면·모델이 실제로 같아졌는지 확인합니다. 조용히 어긋나는 것이
-    // 이 작업에서 가장 위험한 실패라서, 넣고 나서 반드시 되읽습니다.
-    const ok = ctrl.getValue() === value && model.getProperty(path) === value;
-    report.push({ path, status: ok ? "OK" : "불일치" });
-  }
-  return { filled: report.filter((r) => r.status === "OK").length, report };
-}
-
-function pageRestore() {
-  const backup = window.__commeetBackup;
-  if (!backup || !Object.keys(backup).length) return { error: "되돌릴 내용이 없습니다." };
-  const find = (path) => {
-    let hit = null;
-    sap.ui.core.Element.registry.forEach((c) => {
-      const b = c.getBinding && c.getBinding("value");
-      if (!hit && b?.getPath && b.getPath() === path) hit = c;
-    });
-    return hit;
-  };
-  let n = 0;
-  for (const [path, value] of Object.entries(backup)) {
-    const ctrl = find(path);
-    if (ctrl) { ctrl.getModel().setProperty(path, value); n++; }
-  }
-  delete window.__commeetBackup;
-  return { restored: n };
-}
-
-// ---------------------------------------------------------------------------
-// 팝업 쪽
-// ---------------------------------------------------------------------------
-
-const out = document.getElementById("out");
-
-function show(value) {
+function show(value, isError = false) {
   out.hidden = false;
+  out.classList.toggle("error", isError);
   out.textContent = typeof value === "string" ? value : JSON.stringify(value, null, 2);
 }
+function clearOut() { out.hidden = true; out.textContent = ""; }
+function view(id, on) { $(id).hidden = !on; }
+
+// ---------------------------------------------------------------------------
+// 기록에서 값 꺼내기
+// ---------------------------------------------------------------------------
+
+/** 한 참석자에게 적용되는 면담 내용.
+ *
+ *  notesMode가 무엇을 쓸지 결정합니다 - "individual"이면 학생별 노트,
+ *  아니면 공통 노트. 그리고 perStudentNotes의 키는 학번이 아니라 참석자
+ *  key이고, 화면 코드(record-form.js)가 이름으로도 폴백하므로 여기서도
+ *  같은 순서로 찾습니다. 규칙이 어긋나면 엉뚱한 학생의 기록을 넣게 됩니다. */
+function notesFor(record, attendee) {
+  const empty = { academic: "", life: "", career: "", etc: "" };
+  if (record.notesMode !== "individual") return record.sharedNotes || empty;
+  const per = record.perStudentNotes || {};
+  return per[attendee.key] || per[attendee.name] || empty;
+}
+
+function recordLabel(r) {
+  const when = r.date || (r.meetingStart || "").slice(0, 10);
+  const time = [r.startTime, r.endTime].filter(Boolean).join("~");
+  const bits = [when, time, r.place].filter(Boolean).join(" · ");
+  const flags = [];
+  if (r.status === "draft") flags.push("작성 중");
+  if (r.undecryptable) flags.push("복호화 실패");
+  return bits + (flags.length ? ` [${flags.join(", ")}]` : "");
+}
+
+function renderNotes() {
+  const box = $("notes");
+  box.innerHTML = "";
+  if (!state.record || !state.attendee) return;
+  const notes = notesFor(state.record, state.attendee);
+  for (const [key, label] of NOTE_CATEGORIES) {
+    const text = (notes[key] || "").trim();
+    const el = document.createElement("div");
+    el.className = "note";
+    el.innerHTML = `<b>${label}</b>`;
+    const p = document.createElement("p");
+    if (text) p.textContent = text;
+    else { p.textContent = "(비어 있음)"; p.className = "empty"; }
+    el.appendChild(p);
+    box.appendChild(el);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 화면 전환
+// ---------------------------------------------------------------------------
+
+async function showLoggedOut(message) {
+  view("account", false); view("eventsView", false); view("recordsView", false);
+  view("studentsView", false); view("povisView", false);
+  view("loginView", true);
+  $("baseUrl").value = await Commeet.baseUrl();
+  if (message) show(message, true);
+}
+
+async function showLoggedIn(profile) {
+  view("loginView", false);
+  view("account", true);
+  $("who").textContent = `${profile.name || profile.email} 님으로 로그인됨`;
+  view("eventsView", true);
+  await loadEvents();
+}
+
+// ---------------------------------------------------------------------------
+// 데이터 로딩
+// ---------------------------------------------------------------------------
+
+async function loadEvents() {
+  const sel = $("events");
+  sel.innerHTML = `<option>불러오는 중…</option>`;
+  try {
+    // 기록 수는 따로, 그리고 함께 받습니다. 실패해도 목록 자체는 떠야 하므로
+    // 개수 쪽만 조용히 비웁니다 - 배지가 없는 것이 목록이 없는 것보다 낫습니다.
+    const [events, counts] = await Promise.all([
+      Commeet.myEvents(),
+      Commeet.recordCounts().catch(() => ({})),
+    ]);
+    sel.innerHTML = "";
+    if (!events.length) {
+      sel.innerHTML = `<option value="">내가 만든 일정이 없습니다</option>`;
+      view("recordsView", false); view("studentsView", false); view("povisView", false);
+      return;
+    }
+
+    // 기록이 있는 일정을 위로 올립니다. 옮겨 적을 것이 있는 일정이 목적이라,
+    // 그것부터 보이는 편이 매번 훑는 것보다 빠릅니다.
+    const withCount = events.map((e) => ({ event: e, count: counts[e._id] || null }));
+    withCount.sort((a, b) => (b.count?.total || 0) - (a.count?.total || 0));
+
+    for (const { event, count } of withCount) {
+      const opt = document.createElement("option");
+      opt.value = event._id;
+      const name = event.name || "(이름 없는 일정)";
+      if (!count) {
+        opt.textContent = `${name} · 기록 없음`;
+      } else {
+        const draft = count.draft ? `, 초안 ${count.draft}` : "";
+        opt.textContent = `📝 ${name} · 기록 ${count.total}건${draft}`;
+      }
+      sel.appendChild(opt);
+    }
+    onEventChanged();
+  } catch (err) {
+    sel.innerHTML = `<option value="">불러오지 못했습니다</option>`;
+    await handleError(err);
+  }
+}
+
+/** 일정을 바꾸면 아래 단계는 지웁니다 - 이전 일정의 기록이 남아 있으면
+ *  다른 일정의 내용을 옮겨 적게 됩니다. */
+function onEventChanged() {
+  state.records = []; state.record = null; state.attendee = null;
+  view("recordsView", false); view("studentsView", false); view("povisView", false);
+}
+
+async function loadRecords() {
+  const eventId = $("events").value;
+  if (!eventId) return;
+  clearOut();
+  view("recordsView", true);
+  const sel = $("records");
+  sel.innerHTML = `<option>불러오는 중…</option>`;
+  try {
+    // 면담 기록이 실제로 있는 것만 씁니다. 초안(draft)도 남겨 두되
+    // 목록에 그렇게 표시해, 작성 중인 내용을 모르고 옮기지 않도록 합니다.
+    state.records = await Commeet.recordsFor(eventId);
+    sel.innerHTML = "";
+    if (!state.records.length) {
+      sel.innerHTML = `<option value="">이 일정에는 면담 기록이 없습니다</option>`;
+      $("recordMeta").textContent = "";
+      view("studentsView", false); view("povisView", false);
+      return;
+    }
+    state.records.forEach((r, i) => {
+      const opt = document.createElement("option");
+      opt.value = String(i);
+      opt.textContent = recordLabel(r);
+      sel.appendChild(opt);
+    });
+    selectRecord(0);
+  } catch (err) {
+    sel.innerHTML = `<option value="">불러오지 못했습니다</option>`;
+    await handleError(err);
+  }
+}
+
+function selectRecord(index) {
+  const r = state.records[index];
+  state.record = r;
+  if (!r) return;
+
+  $("recordMeta").innerHTML =
+    `${r.eventName || ""} · 내용 방식: <b>${r.notesMode === "individual" ? "학생별" : "공통"}</b>` +
+    (r.undecryptable ? ` <span class="badge">복호화 실패 - 내용을 읽을 수 없습니다</span>` : "");
+
+  // 불참자는 제외합니다 - 참석하지 않은 학생의 면담 기록을 옮길 이유가 없습니다.
+  const attendees = (r.attendees || []).filter((a) => a.present !== false);
+  const sel = $("students");
+  sel.innerHTML = "";
+  if (!attendees.length) {
+    sel.innerHTML = `<option value="">참석한 학생이 없습니다</option>`;
+    view("studentsView", true); view("povisView", false);
+    $("notes").innerHTML = "";
+    return;
+  }
+  attendees.forEach((a, i) => {
+    const opt = document.createElement("option");
+    opt.value = String(i);
+    opt.textContent = `${a.name || "(이름 없음)"}${a.studentId ? ` (${a.studentId})` : ""}`;
+    sel.appendChild(opt);
+  });
+  state.attendeeList = attendees;
+  state.attendee = attendees[0];
+  renderNotes();
+  view("studentsView", true);
+  view("povisView", true);
+}
+
+// ---------------------------------------------------------------------------
+// POVIS 쪽
+// ---------------------------------------------------------------------------
 
 async function runInPage(func, args = []) {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -163,16 +236,97 @@ async function runInPage(func, args = []) {
   }
 }
 
-document.getElementById("scan").addEventListener("click", async () => {
+async function fillPovis() {
+  if (!state.record || !state.attendee) return show("먼저 학생을 선택해 주세요.", true);
+  const notes = notesFor(state.record, state.attendee);
+  const mapping = {};
+  for (const [key, path] of Object.entries(DEMO_FIELD_MAP)) {
+    const text = (notes[key] || "").trim();
+    if (text) mapping[path] = text; // 빈 항목으로 기존 값을 덮지 않습니다
+  }
+  if (!Object.keys(mapping).length) {
+    return show("이 학생의 면담 내용이 비어 있어 채울 것이 없습니다.", true);
+  }
+  show("채우는 중…");
+  show(await runInPage(pageFill, [mapping]));
+}
+
+// ---------------------------------------------------------------------------
+// 에러 / 이벤트 배선
+// ---------------------------------------------------------------------------
+
+async function handleError(err) {
+  if (err instanceof Commeet.Error && err.status === 401) {
+    await showLoggedOut("세션이 만료되었습니다. 다시 로그인해 주세요.");
+  } else {
+    show(err.message || String(err), true);
+  }
+}
+
+$("settingsToggle").addEventListener("click", async () => {
+  const s = $("settings");
+  s.hidden = !s.hidden;
+  if (!s.hidden) $("baseUrl").value = await Commeet.baseUrl();
+});
+
+$("saveBaseUrl").addEventListener("click", async () => {
+  await Commeet.setBaseUrl($("baseUrl").value);
+  $("settings").hidden = true;
+  show(`서버 주소를 ${await Commeet.baseUrl()} 로 저장했습니다.`);
+});
+
+$("login").addEventListener("click", async () => {
+  const email = $("email").value.trim();
+  const password = $("password").value;
+  if (!email || !password) return show("이메일과 비밀번호를 입력해 주세요.", true);
+  clearOut();
+  $("login").disabled = true;
+  try {
+    await Commeet.login(email, password);
+    $("password").value = ""; // 비밀번호는 남기지 않습니다
+    await showLoggedIn(await Commeet.profile());
+  } catch (err) {
+    const message = err.message || String(err);
+    show(message, true);
+    // 서버가 어느 쪽이 틀렸는지 알려 주므로, 고칠 칸으로 커서를 옮깁니다.
+    if (message.includes("비밀번호")) { $("password").select(); }
+    else if (message.includes("아이디") || message.includes("이메일")) { $("email").select(); }
+  } finally {
+    $("login").disabled = false;
+  }
+});
+
+$("logout").addEventListener("click", async () => {
+  try { await Commeet.logout(); } catch { /* 어차피 로그아웃 화면으로 갑니다 */ }
+  await showLoggedOut("로그아웃했습니다.");
+});
+
+$("events").addEventListener("change", onEventChanged);
+$("loadRecords").addEventListener("click", loadRecords);
+$("records").addEventListener("change", (e) => selectRecord(Number(e.target.value)));
+$("students").addEventListener("change", (e) => {
+  state.attendee = state.attendeeList?.[Number(e.target.value)];
+  renderNotes();
+});
+
+$("fill").addEventListener("click", fillPovis);
+$("restore").addEventListener("click", async () => show(await runInPage(pageRestore)));
+$("scan").addEventListener("click", async () => {
   show("스캔 중…");
   show(await runInPage(pageScan));
 });
 
-document.getElementById("fill").addEventListener("click", async () => {
-  show("채우는 중…");
-  show(await runInPage(pageFill, [DEMO_MAPPING]));
-});
+for (const id of ["email", "password"]) {
+  $(id).addEventListener("keydown", (e) => { if (e.key === "Enter") $("login").click(); });
+}
 
-document.getElementById("restore").addEventListener("click", async () => {
-  show(await runInPage(pageRestore));
-});
+// 시작: 이미 로그인돼 있으면 바로 일정 목록으로.
+(async () => {
+  $("mappingHint").textContent =
+    `임시 매핑 (교수 화면 미확인): ${NOTE_CATEGORIES.map(([k, l]) => `${l}→${DEMO_FIELD_MAP[k]}`).join(", ")}`;
+  try {
+    await showLoggedIn(await Commeet.profile());
+  } catch (err) {
+    await showLoggedOut(err.status === 401 ? null : err.message);
+  }
+})();

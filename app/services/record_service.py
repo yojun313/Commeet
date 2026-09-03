@@ -450,6 +450,34 @@ async def list_records(owner: dict, event_id: str | None = None) -> list[dict]:
     return out
 
 
+async def count_by_event(owner: dict) -> dict[str, dict]:
+    """일정별 면담 기록 수. `{eventId: {"total": n, "draft": n}}`
+
+    목록 화면이 "이 일정에 기록이 있는지"를 표시하려고 부릅니다. 개수만
+    필요하므로 **복호화하지 않고** 몽고 집계로 끝냅니다 - 기록 전체를 내려
+    받아 세는 것은 느릴 뿐 아니라 필요 없는 개인정보를 옮기는 일입니다.
+    """
+    rows = await meeting_records_col.aggregate(
+        [
+            {"$match": {"ownerId": owner["_id"]}},
+            {
+                "$group": {
+                    "_id": "$eventId",
+                    "total": {"$sum": 1},
+                    "draft": {
+                        "$sum": {"$cond": [{"$eq": ["$status", "draft"]}, 1, 0]}
+                    },
+                }
+            },
+        ]
+    ).to_list(length=None)
+    return {
+        str(r["_id"]): {"total": r["total"], "draft": r["draft"]}
+        for r in rows
+        if r.get("_id")
+    }
+
+
 async def list_open_meetings(owner: dict) -> list[dict]:
     """Confirmed meetings the host hosts, flagged with whether a record exists,
     so the UI can offer "기록 작성" for the ones still missing one."""

@@ -43,6 +43,14 @@ class VerificationCodeInvalid(Exception):
     pass
 
 
+class EmailNotFound(Exception):
+    """그 이메일로 가입된 계정이 없습니다."""
+
+
+class PasswordMismatch(Exception):
+    """계정은 있지만 비밀번호가 다릅니다."""
+
+
 def normalize_email(email: str) -> str:
     return email.strip().lower()
 
@@ -160,10 +168,20 @@ async def verify_signup(email: str, code: str) -> dict:
 # ---------------------------------------------------------------------------
 
 
-async def authenticate(email: str, password: str) -> dict | None:
+async def authenticate(email: str, password: str) -> dict:
+    """로그인. 실패하면 **어느 쪽이 틀렸는지** 구분해서 예외를 던집니다.
+
+    가입 여부를 숨기는 쪽이 계정 존재 여부 탐색(enumeration)을 막는다는 점에서
+    더 안전하지만, 이 서비스는 가입이 학교 도메인으로 제한된 내부 도구이고,
+    "이메일과 비밀번호 중 하나가 틀렸습니다"는 고칠 곳을 알려 주지 못해
+    실제로 로그인 실패를 반복하게 만들었습니다. 구분해서 알려 주기로 한
+    선택입니다 - 되돌리려면 두 예외를 같은 메시지로 처리하면 됩니다.
+    """
     user = await get_user_by_email(email)
-    if not user or not verify_password(password, user.get("passwordHash", "")):
-        return None
+    if not user:
+        raise EmailNotFound()
+    if not verify_password(password, user.get("passwordHash", "")):
+        raise PasswordMismatch()
     return user
 
 
