@@ -154,12 +154,24 @@ def _filter_undeliverable(mails: list["Mail"]) -> list["Mail"]:
 @dataclass(frozen=True)
 class Mail:
     """보낼 메일 한 통. 여러 명에게 보낼 때는 이 목록을 만들어
-    `send_many()`에 한 번에 넘깁니다."""
+    `send_many()`에 한 번에 넘깁니다.
+
+    `extra_to`/`cc`는 **같은 한 통**을 함께 받는 사람들입니다 - "하나의
+    메일로 발송"처럼 수신자 전원이 서로를 보고 전체 답장할 수 있어야 할 때
+    씁니다. 서로 몰라야 하면 지금처럼 Mail을 사람 수만큼 만드세요.
+    """
 
     to: str
     subject: str
     body: str
     sender_name: str | None = None
+    extra_to: tuple[str, ...] = ()
+    cc: tuple[str, ...] = ()
+
+
+def _recipients(mail: Mail) -> list[str]:
+    """SMTP 봉투에 넣을 실제 수신자 전원 (To + extra_to + Cc)."""
+    return [mail.to, *mail.extra_to, *mail.cc]
 
 
 @contextmanager
@@ -229,7 +241,9 @@ def _deliver_batch(mails: list[Mail]) -> list[tuple[str, Exception]]:
                     mail = remaining[0]
                     try:
                         server.sendmail(
-                            MAIL_SENDER, mail.to, _build_message(mail).as_string()
+                            MAIL_SENDER,
+                            _recipients(mail),
+                            _build_message(mail).as_string(),
                         )
                     except _PER_RECIPIENT_ERRORS as exc:
                         failures.append((mail.to, exc))
@@ -254,7 +268,9 @@ def _build_message(mail: Mail, file_path: str | None = None) -> MIMEMultipart:
         if mail.sender_name
         else sender
     )
-    msg["To"] = mail.to
+    msg["To"] = ", ".join([mail.to, *mail.extra_to])
+    if mail.cc:
+        msg["Cc"] = ", ".join(mail.cc)
     # 발신 전용 주소로 보낼 때 회신이 갈 곳을 지정해 둔다
     if MAIL_REPLY_TO:
         msg["Reply-To"] = MAIL_REPLY_TO
@@ -388,6 +404,21 @@ async def send_verification_code_email(to: str, code: str) -> None:
     )
 
 
+async def send_password_reset_email(to: str, code: str) -> None:
+    if not MAIL_ENABLED:
+        # 메일이 안 붙는 로컬 개발에서는 코드가 갈 곳이 없으므로 콘솔로.
+        logger.warning("[메일 미설정] %s 비밀번호 재설정 코드: %s", to, code)
+
+    await _send(
+        to,
+        f"[{APP_NAME}] 비밀번호 재설정 코드",
+        f"{APP_NAME} 비밀번호 재설정 코드입니다: {code}\n\n"
+        f"이 코드는 {OTP_TTL_MINUTES}분 후에 만료됩니다.\n"
+        f"본인이 요청하지 않았다면 이 메일은 무시하셔도 됩니다 - "
+        f"비밀번호는 바뀌지 않습니다.\n",
+    )
+
+
 def _host_sender_name(owner: dict | None) -> str:
     """Invites come *from the host*, so their name leads the From header."""
     return f"{_owner_name(owner)} ({APP_NAME})"
@@ -415,7 +446,14 @@ def build_event_invite_mail(
 
 
 def build_event_message_mail(
-    to: str, host: dict | None, event: dict, message: str
+    to: str,
+    host: dict | None,
+    event: dict,
+    message: str,
+    *,
+    subject: str = "",
+    extra_to: tuple[str, ...] = (),
+    cc: tuple[str, ...] = (),
 ) -> Mail:
     """주최자가 참가자에게 직접 쓴 짧은 안내. 응답 재촉이 주 용도입니다.
 
@@ -429,9 +467,12 @@ def build_event_message_mail(
     body += f"아래 링크에서 가능한 시간을 확인하거나 수정할 수 있습니다.\n{_event_url(event)}\n"
     return Mail(
         to=to,
-        subject=f"[{APP_NAME}] '{event['name']}' 안내",
+        # 주최자가 제목을 적으면 그대로, 비우면 기본 제목.
+        subject=subject.strip() or f"[{APP_NAME}] '{event['name']}' 안내",
         body=body,
         sender_name=_host_sender_name(host),
+        extra_to=extra_to,
+        cc=cc,
     )
 
 

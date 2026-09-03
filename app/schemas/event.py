@@ -89,3 +89,9 @@ class SendMessagePayload(BaseModel):
 
     emails: list[EmailStr] = Field(min_length=1, max_length=20)
     message: str = Field(default="", max_length=1000)
+    # 비우면 기본 제목("[APP] '일정' 안내")을 씁니다.
+    subject: str = Field(default="", max_length=200)
+    # True면 전체 수신자를 To에 나란히 넣은 **한 통**을 보내고 주최자를
+    # 참조(Cc)합니다 - 받는 사람들이 서로를 보고 전체 답장할 수 있습니다.
+    # False면 지금까지처럼 한 사람당 한 통씩 따로 갑니다.
+    combined: bool = True

@@ -20,7 +20,7 @@ from app.core.security import (
     verify_otp_code,
     verify_password,
 )
-from app.db import pending_signups_col, users_col
+from app.db import password_resets_col, pending_signups_col, users_col
 
 
 class EmailDomainNotAllowed(Exception):
@@ -163,7 +163,70 @@ async def verify_signup(email: str, code: str) -> dict:
     return doc
 
 
+async def start_password_reset(email: str) -> str:
+    """재설정 코드를 만들어 저장하고 돌려줍니다 (메일 발송은 호출부 몫).
+
+    가입 인증(start_signup)과 같은 방식입니다 - 코드의 해시만 저장하고,
+    문서는 TTL로 스스로 만료됩니다. 계정이 없으면 EmailNotFound를 던지는데,
+    로그인 오류가 이미 "아이디가 일치하지 않습니다"라고 구분해 주고 있어
+    (authenticate) 여기서 숨겨 봐야 얻는 것이 없기 때문입니다.
+    """
+    email = normalize_email(email)
+    if not await get_user_by_email(email):
+        raise EmailNotFound()
+
+    code = generate_otp_code()
+    now = datetime.now(UTC)
+    await password_resets_col.update_one(
+        {"email": email},
+        {
+            "$set": {
+                "email": email,
+                "codeHash": hash_otp_code(email, code),
+                "expiresAt": now + timedelta(minutes=OTP_TTL_MINUTES),
+                "tries": 0,
+                "createdAt": now,
+            }
+        },
+        upsert=True,
+    )
+    return code
+
+
+async def verify_password_reset(email: str, code: str, new_password: str) -> dict:
+    """코드가 맞으면 비밀번호를 바꾸고 사용자를 돌려줍니다.
+
+    만료·시도 횟수 규칙은 가입 인증(verify_signup)과 동일합니다.
+    """
+    email = normalize_email(email)
+    now = datetime.now(UTC)
+
+    pending = await password_resets_col.find_one(
+        {"email": email, "expiresAt": {"$gt": now}}
+    )
+    if not pending:
+        raise VerificationExpired()
+    if int(pending.get("tries", 0)) >= OTP_MAX_TRIES:
+        raise VerificationTooManyAttempts()
+
+    if not verify_otp_code(email, (code or "").strip(), pending.get("codeHash", "")):
+        await password_resets_col.update_one({"email": email}, {"$inc": {"tries": 1}})
+        raise VerificationCodeInvalid()
+
+    await password_resets_col.delete_one({"email": email})
+
+    user = await get_user_by_email(email)
+    if not user:
+        raise EmailNotFound()  # 코드를 받은 사이에 계정이 지워진 경우
+    await users_col.update_one(
+        {"_id": user["_id"]}, {"$set": {"passwordHash": hash_password(new_password)}}
+    )
+    return user
+
+
 # ---------------------------------------------------------------------------
+# Sign-in / password
+# ---------------------------------------------------------------------------# ---------------------------------------------------------------------------
 # Sign-in / password
 # ---------------------------------------------------------------------------
 

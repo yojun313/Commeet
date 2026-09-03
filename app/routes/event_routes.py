@@ -303,13 +303,32 @@ async def send_message(event_id: str, payload: SendMessagePayload, request: Requ
     if not recipients:
         raise HTTPException(status_code=400, detail="받는 사람을 선택해 주세요")
 
-    queued = email_service.send_many_detached(
-        [
-            email_service.build_event_message_mail(email, user, event, payload.message)
+    if payload.combined:
+        # 전체 수신자를 To에 나란히 넣은 한 통 + 주최자 참조(Cc). 수신자끼리
+        # 서로를 보고 전체 답장할 수 있고, 주최자에게도 사본이 남습니다.
+        mails = [
+            email_service.build_event_message_mail(
+                recipients[0],
+                user,
+                event,
+                payload.message,
+                subject=payload.subject,
+                extra_to=tuple(recipients[1:]),
+                cc=(user["email"],),
+            )
+        ]
+    else:
+        mails = [
+            email_service.build_event_message_mail(
+                email, user, event, payload.message, subject=payload.subject
+            )
             for email in recipients
         ]
-    )
-    return {"sent": queued}
+
+    email_service.send_many_detached(mails)
+    # 화면에는 메일 통수가 아니라 받는 사람 수를 알려 줍니다 - 한 통으로
+    # 묶었어도 "N명에게 보냈다"가 사용자가 알고 싶은 사실입니다.
+    return {"sent": len(recipients)}
 
 
 @router.post("/{event_id}/duplicate")

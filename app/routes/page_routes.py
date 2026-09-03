@@ -193,6 +193,20 @@ async def sign_up(request: Request):
     )
 
 
+@router.get("/reset-password")
+async def reset_password(request: Request):
+    """비밀번호 재설정. 로그인 화면과 같은 틀(mode만 다름)을 씁니다."""
+    next_url = safe_next(request.query_params.get("next"))
+    user = await get_optional_user(request)
+    if user:
+        return RedirectResponse(next_url)
+    return templates.TemplateResponse(
+        request=request,
+        name="auth/sign_in.html",
+        context={"user": None, "mode": "reset", "next_url": next_url},
+    )
+
+
 @router.get("/privacy-policy")
 async def privacy_policy(request: Request):
     user = await get_optional_user(request)

@@ -383,12 +383,14 @@ const NewEventDialog = (() => {
     populateTimeSelect(document.getElementById("ne-end-time"), 17, 9.5, 24);
     document.getElementById("ne-time-increment").value = event ? String(event.timeIncrement || 15) : "15";
 
+    // 새로 만들 때는 세 옵션 모두 켠 채로 시작합니다 - 실제 사용 방식이
+    // 그쪽이라서입니다. 수정할 때는 그 일정에 저장된 값을 그대로 보여 줍니다.
     const notify = document.getElementById("ne-notify");
-    if (notify) notify.checked = !!(event && event.notificationsEnabled);
+    if (notify) notify.checked = event ? !!event.notificationsEnabled : true;
     const collectEmails = document.getElementById("ne-collect-emails");
-    if (collectEmails) collectEmails.checked = !!(event && event.collectEmails);
+    if (collectEmails) collectEmails.checked = event ? !!event.collectEmails : true;
     const blind = document.getElementById("ne-blind");
-    if (blind) blind.checked = !!(event && event.blindAvailabilityEnabled);
+    if (blind) blind.checked = event ? !!event.blindAvailabilityEnabled : true;
     const guidance = document.getElementById("ne-guidance-records");
     // 값이 없는 예전 일정은 켜진 것으로 봅니다 (event_service.records_enabled와
     // 같은 규칙) - 이 항목이 생기기 전에 적어 둔 기록이 사라지면 안 됩니다.

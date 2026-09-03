@@ -1,7 +1,13 @@
 from fastapi import APIRouter, HTTPException, Response, status
 
 from app.config import ALLOWED_EMAIL_DOMAIN, OTP_TTL_MINUTES
-from app.schemas.auth import LoginRequest, SignupStartRequest, SignupVerifyRequest
+from app.schemas.auth import (
+    LoginRequest,
+    PasswordResetStartRequest,
+    PasswordResetVerifyRequest,
+    SignupStartRequest,
+    SignupVerifyRequest,
+)
 from app.services import auth_service, email_service
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -53,6 +59,59 @@ async def signup_verify(payload: SignupVerifyRequest, response: Response):
 
     auth_service.set_session_cookie(response, user["_id"])
     return {"id": str(user["_id"]), "email": user["email"], "name": user["name"]}
+
+
+@router.post("/password-reset/send-code")
+async def password_reset_send_code(payload: PasswordResetStartRequest):
+    """1단계: 재설정 코드를 메일로 보냅니다. 비밀번호는 아직 그대로입니다."""
+    try:
+        code = await auth_service.start_password_reset(payload.email)
+    except auth_service.EmailNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail="가입되지 않은 이메일입니다."
+        ) from exc
+
+    await email_service.send_password_reset_email(payload.email, code)
+    return {"email": payload.email, "expiresInMinutes": OTP_TTL_MINUTES}
+
+
+@router.post("/password-reset/verify")
+async def password_reset_verify(
+    payload: PasswordResetVerifyRequest, response: Response
+):
+    """2단계: 코드가 맞으면 새 비밀번호로 바꾸고 바로 로그인시킵니다.
+
+    방금 이메일 소유를 증명하고 새 비밀번호까지 정한 사람에게 다시 로그인
+    화면을 거치게 할 이유가 없습니다.
+    """
+    try:
+        user = await auth_service.verify_password_reset(
+            payload.email, payload.code, payload.newPassword
+        )
+    except auth_service.VerificationExpired as exc:
+        raise HTTPException(
+            status_code=400, detail="코드가 만료되었거나 없습니다. 다시 요청해 주세요."
+        ) from exc
+    except auth_service.VerificationTooManyAttempts as exc:
+        raise HTTPException(
+            status_code=429,
+            detail="시도 횟수를 초과했습니다. 코드를 다시 요청해 주세요.",
+        ) from exc
+    except auth_service.VerificationCodeInvalid as exc:
+        raise HTTPException(
+            status_code=400, detail="인증 코드가 올바르지 않습니다."
+        ) from exc
+    except auth_service.EmailNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail="가입되지 않은 이메일입니다."
+        ) from exc
+
+    auth_service.set_session_cookie(response, user["_id"])
+    return {
+        "id": str(user["_id"]),
+        "email": user["email"],
+        "name": user.get("name", ""),
+    }
 
 
 @router.post("/login")

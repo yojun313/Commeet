@@ -1269,6 +1269,8 @@ function renderMessageTargets() {
 async function openMessageDialog() {
   document.getElementById("msg-error").textContent = "";
   document.getElementById("msg-body").value = "";
+  document.getElementById("msg-subject").value = "";
+  document.getElementById("msg-combined").checked = true;
   openDialog("message-dialog");
 
   const root = document.getElementById("msg-targets");
@@ -1301,7 +1303,12 @@ async function sendEventMessage() {
 
   btn.disabled = true;
   try {
-    const res = await api.post(`/api/events/${ST.eventId}/message`, { emails, message });
+    const res = await api.post(`/api/events/${ST.eventId}/message`, {
+      emails,
+      message,
+      subject: document.getElementById("msg-subject").value.trim(),
+      combined: document.getElementById("msg-combined").checked,
+    });
     closeDialog("message-dialog");
     showSnackbar(
       `${res.sent || emails.length}명에게 메일을 보내는 중입니다. 이 페이지를 나가도 전송됩니다.`,

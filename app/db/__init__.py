@@ -16,6 +16,7 @@ folders_col = db["folders"]
 folder_events_col = db["folder_events"]
 contacts_col = db["contacts"]
 pending_signups_col = db["pending_signups"]
+password_resets_col = db["password_resets"]
 access_logs_col = db["access_logs"]
 meeting_records_col = db["meeting_records"]
 
@@ -39,6 +40,10 @@ async def create_indexes() -> None:
     # Pending sign-ups expire on their own once the emailed code goes stale.
     await pending_signups_col.create_index("email", unique=True)
     await pending_signups_col.create_index("expiresAt", expireAfterSeconds=0)
+
+    # 비밀번호 재설정 코드도 같은 방식으로 스스로 만료됩니다.
+    await password_resets_col.create_index("email", unique=True)
+    await password_resets_col.create_index("expiresAt", expireAfterSeconds=0)
 
     # Admin dashboard traffic log - kept lean (one row per non-static
     # request, no bodies/headers) and self-pruning via TTL so "log a lot"

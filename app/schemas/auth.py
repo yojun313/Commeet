@@ -12,6 +12,17 @@ class SignupVerifyRequest(BaseModel):
     code: str = Field(min_length=6, max_length=6)
 
 
+class PasswordResetStartRequest(BaseModel):
+    email: EmailStr
+
+
+class PasswordResetVerifyRequest(BaseModel):
+    email: EmailStr
+    code: str = Field(min_length=6, max_length=6)
+    # 가입(SignupStartRequest)과 같은 최소 길이.
+    newPassword: str = Field(min_length=8)
+
+
 class LoginRequest(BaseModel):
     # 가입(SignupStartRequest)과 달리 EmailStr이 아니라 평범한 str입니다.
     # 형식이 틀린 값을 422로 되돌려주면 화면에는 pydantic의 검증 오류 배열이
