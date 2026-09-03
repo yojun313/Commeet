@@ -11,7 +11,7 @@
 // 버전에 따라 달라질 수 있습니다. 로그인은 됐는데 이후 호출이 401로 돌아온다면
 // 그 경우이니, docs/povis-extension-handoff.md의 "인증" 항목을 보세요.
 
-const COMMEET_DEFAULT_BASE = "https://commeet.knpu.re.kr";
+const COMMEET_DEFAULT_BASE = "https://commeet.postech.ac.kr";
 
 class CommeetError extends Error {
   constructor(message, status) {

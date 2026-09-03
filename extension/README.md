@@ -16,7 +16,7 @@ Commeet에 로그인해 면담 기록을 불러오고, 그 내용을 POVIS 입�
 ## 쓰는 법
 
 1. **로그인** — Commeet 계정으로 로그인합니다. 기본 서버는
-   `https://commeet.knpu.re.kr`이고, ⚙ 버튼으로 로컬 서버(`http://localhost:8000`)
+   `https://commeet.postech.ac.kr`이고, ⚙ 버튼으로 로컬 서버(`http://localhost:8000`)
    등으로 바꿀 수 있습니다.
 2. **내 일정** — 내가 만든 일정만 나옵니다(면담 기록은 주최자만 작성하므로).
    고른 뒤 **면담 기록 불러오기**.

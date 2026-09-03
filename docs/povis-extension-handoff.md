@@ -40,7 +40,9 @@ Claude in Chrome 확장으로 사용자의 실제 Chrome을 조작한다. **POVI
 
 - 데이터 출처: Commeet API `GET /api/records` (면담 기록, 서버에서 복호화되어 내려옴)
 - 인증: 확장 `host_permissions`에 Commeet 도메인을 넣어 **기존 세션 쿠키 재사용**
-  (별도 토큰 없음). Commeet 운영 주소: `https://commeet.knpu.re.kr`
+  (별도 토큰 없음). Commeet 운영 주소: `https://commeet.postech.ac.kr`
+  (구 주소 `https://commeet.knpu.re.kr`도 병행 운영 중 - 확장의
+  `host_permissions`에는 둘 다 넣어 두는 것이 안전)
 - 매칭: POVIS 화면의 **학번** → Commeet 기록의 `attendees[].studentId`.
   "학번으로 기록 조회" API는 서버 세션에서 추가 예정.
 - Commeet 기록 구조 (참고):
