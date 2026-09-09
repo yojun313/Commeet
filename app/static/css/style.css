@@ -4764,3 +4764,136 @@ textarea.rec-textarea-sm {
     display: none;
   }
 }
+
+/* ==========================================================================
+   POVIS 자동입력 확장 안내 페이지 (/povis-extension)
+   ========================================================================== */
+
+.ext-page {
+  max-width: 800px;
+  padding-top: 32px;
+  padding-bottom: 80px;
+}
+.ext-hero {
+  padding: 32px 28px;
+}
+.ext-eyebrow {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--color-primary);
+}
+.ext-hero h1 {
+  margin: 0 0 12px;
+  font-size: 30px;
+}
+.ext-lead {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.65;
+}
+.ext-cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 20px;
+}
+.ext-version {
+  font-weight: 500;
+  opacity: 0.8;
+  font-size: 13px;
+}
+.ext-note {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: var(--color-text-muted, #666);
+  line-height: 1.6;
+}
+.ext-section {
+  margin-top: 40px;
+}
+.ext-section h2 {
+  font-size: 22px;
+  margin: 0 0 16px;
+}
+.ext-sub {
+  font-size: 16px;
+  margin: 28px 0 10px;
+}
+.ext-steps {
+  list-style: none;
+  counter-reset: ext-step;
+  margin: 0;
+  padding: 0;
+}
+.ext-steps > li {
+  counter-increment: ext-step;
+  position: relative;
+  padding: 0 0 22px 48px;
+}
+.ext-steps > li::before {
+  content: counter(ext-step);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  color: #fff;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ext-steps h3 {
+  margin: 4px 0 6px;
+  font-size: 16px;
+  font-weight: 600;
+}
+.ext-steps p,
+.ext-list li {
+  margin: 0 0 6px;
+  line-height: 1.65;
+}
+.ext-list {
+  margin: 0;
+  padding-left: 20px;
+}
+.ext-address {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0;
+}
+.ext-address code {
+  font-size: 15px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+}
+.ext-callout {
+  margin-top: 8px;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  border-left: 4px solid var(--color-primary);
+  line-height: 1.6;
+}
+.ext-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.ext-table th,
+.ext-table td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: top;
+}
+.ext-table th {
+  background: var(--color-surface-2);
+}

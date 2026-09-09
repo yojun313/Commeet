@@ -1543,7 +1543,7 @@ smtplib/DNS/TLS가 던진 실제 메시지가 관리자에게 필요한 정보�
 
 **파일**: `app/services/crypto_service.py`, `app/services/record_service.py`, `app/routes/record_routes.py`, `app/schemas/record.py`, `app/static/js/record-form.js`, `app/templates/partials/record_form_dialog.html`, `app/templates/record_print.html`, `scripts/demo_records.py`
 
-면담 후 내용을 기록하고 영수증을 붙여 **POVIS 입력 텍스트 + 학생지도비 정산 요청 양식**까지 만드는 기능입니다.
+면담 후 내용을 기록하고 영수증을 붙여 **학생지도비 정산 요청 양식**까지 만드는 기능입니다. POVIS 지도면담입력은 크롬 확장(`extension/`, 안내 페이지 `/povis-extension`)이 이 기록을 읽어 자동으로 옮겨 적습니다.
 
 ### 16.0 진입점
 
@@ -1837,7 +1837,16 @@ PDF 라이브러리를 넣지 않고 **인쇄 최적화 HTML**을 서버 렌더�
 {% endfor %}
 ```
 
-`POVIS 입력용 복사` 버튼은 `povisText()`가 만든 평문을 클립보드에 넣습니다. Clipboard API는 보안 컨텍스트가 필요하므로 `document.execCommand("copy")` 폴백이 있습니다.
+폼 하단의 `POVIS 자동입력 도움말` 버튼은 `/povis-extension`(새 탭)으로 갑니다. 예전의 `POVIS 입력용 복사`(평문을 클립보드에 넣던 것)는 확장이 대신하게 되어 없앴습니다.
+
+### 16.13 POVIS 자동입력 확장 (`app/routes/extension_routes.py`)
+
+| 경로 | 하는 일 |
+|---|---|
+| `GET /povis-extension` | 소개·설치(개발자 모드로 압축해제 로드)·사용법 안내 페이지 (`povis_extension.html`) |
+| `GET /povis-extension/download` | 저장소의 `extension/` 폴더를 zip으로 묶어 내려줌 (`commeet-povis-<version>.zip`) |
+
+zip은 요청 시점에 `extension/` 폴더에서 만듭니다 - 배포 서버의 코드가 곧 배포본이라 빌드 산출물을 따로 관리하지 않습니다. 파일 mtime으로 캐시하고, `README.md`와 숨김 파일은 뺍니다. 확장 자체의 동작 원리(UI5 바인딩으로 써야 서버에 반영되는 이유 등)는 `extension/README.md`에 있습니다.
 
 ### 16.12 데모 스크립트
 
@@ -2358,7 +2367,7 @@ select.list-sort-select { width: auto; ... }
 
 ### 페이지 라우트
 
-`/` `/home` `/settings` `/contacts` `/records/{id}/print` `/admin` `/calendar` `/sign-in` `/sign-up` `/privacy-policy` `/e/{id}` `/e/{id}/finalize` `/g/{id}`
+`/` `/home` `/settings` `/contacts` `/records/{id}/print` `/admin` `/calendar` `/sign-in` `/sign-up` `/privacy-policy` `/povis-extension` `/povis-extension/download` `/e/{id}` `/e/{id}/finalize` `/g/{id}`
 
 ---
 

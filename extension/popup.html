@@ -4,26 +4,29 @@
 <link rel="stylesheet" href="popup.css" />
 
 <header>
-  <h1>Commeet → POVIS <span class="tag">데모</span></h1>
+  <h1>Commeet → POVIS</h1>
   <button id="settingsToggle" class="icon" title="서버 주소">⚙</button>
 </header>
 
-<p class="warn">저장은 하지 않습니다. 값을 채우기만 하며, 실제 반영은 POVIS의 저장 버튼을 직접 누를 때만 일어납니다.</p>
 
-<!-- 서버 주소 -->
+<!-- 설정 / 진단 -->
 <section id="settings" hidden>
   <h2>Commeet 서버</h2>
   <input id="baseUrl" type="url" placeholder="https://commeet.postech.ac.kr" />
   <button id="saveBaseUrl">저장</button>
+  <h2 class="sub">진단 (POVIS 탭에서)</h2>
+  <button id="scan">필드 스캔</button>
+  <button id="restore">되돌리기</button>
+  <p class="hint">필드 스캔은 POVIS 화면의 입력 필드와 바인딩 경로를 뽑습니다(값은 길이만). POVIS 화면이 바뀌어 입력이 실패할 때 확인용입니다.</p>
 </section>
 
 <!-- 1. 로그인 -->
 <section id="loginView" hidden>
   <h2>Commeet 로그인</h2>
-  <input id="email" type="email" placeholder="이메일" autocomplete="username" />
+  <input id="email" type="email" placeholder="이메일 (예: hong@postech.ac.kr)" autocomplete="username" />
   <input id="password" type="password" placeholder="비밀번호" autocomplete="current-password" />
   <button id="login" class="primary">로그인</button>
-  <p class="hint">비밀번호는 저장하지 않습니다. 로그인 후에는 세션 쿠키만 남습니다.</p>
+  <p class="hint">Commeet에 가입한 이메일 주소 전체(@postech.ac.kr 포함)를 입력하세요. 비밀번호는 저장하지 않습니다.</p>
 </section>
 
 <!-- 로그인 상태 -->
@@ -56,13 +59,31 @@
   <div id="notes" class="notes"></div>
 </section>
 
-<!-- 5. POVIS -->
+<!-- 5. 일괄 입력 -->
+<section id="batchView" hidden>
+  <h2>POVIS 일괄 입력</h2>
+  <p class="hint">POVIS <b>학사 → 지도학생면담 → 지도면담입력</b> 탭을 열어 두세요. 이 회의의 참석 학생 전원에 대해 학번 선택 → 지도면담 입력 → 네 항목 채우기 → 저장을 반복합니다.</p>
+  <ul id="plan" class="plan"></ul>
+  <label class="opt"><input type="checkbox" id="dryRun" /> 채우기만 하고 저장하지 않기 (확인용)</label>
+  <label class="opt"><input type="checkbox" id="allowDuplicate" /> POVIS에 같은 날짜 면담이 있어도 입력</label>
+  <label class="opt"><input type="checkbox" id="screenshot" checked /> 입력 화면 스크린샷 저장 (<code>회의_면담일_이름.png</code>)</label>
+  <div class="row folder">
+    <span>저장 폴더</span>
+    <input id="screenshotFolder" type="text" placeholder="다운로드 폴더 (비우면 바로 아래)" />
+  </div>
+  <p class="hint">Chrome 확장은 다운로드 폴더 아래에만 저장할 수 있어, 폴더는 다운로드 폴더 기준 하위 경로입니다 (예: <code>POVIS/2026-2</code>).</p>
+  <div class="row">
+    <button id="startBatch" class="primary">이 회의 학생 전원 자동 입력</button>
+    <button id="stopBatch" hidden>중단</button>
+  </div>
+  <div id="progress" class="progress" hidden></div>
+</section>
+
+<!-- 6. 한 명만 -->
 <section id="povisView" hidden>
-  <h2>POVIS</h2>
-  <p class="hint" id="mappingHint"></p>
-  <button id="fill" class="primary">POVIS에 채우기</button>
-  <button id="restore">되돌리기</button>
-  <button id="scan">필드 스캔</button>
+  <h2>선택한 학생만</h2>
+  <p class="hint">POVIS 입력 화면(면담결과입력)이 열려 있을 때, 위에서 고른 학생의 내용만 채웁니다. 저장은 직접 누르세요.</p>
+  <button id="fill">이 학생만 채우기</button>
 </section>
 
 <pre id="out" hidden></pre>

@@ -11,15 +11,15 @@ const NOTE_CATEGORIES = [
   ["etc", "기타사항"],
 ];
 
-// 지도면담입력 화면을 아직 못 봐서(교수 계정 필요) 진짜 경로를 모릅니다.
-// 그래서 동작 확인용으로 미래설계 화면의 30·40·50·60대 칸을 빌려 씁니다.
-// 교수 화면에서 "필드 스캔"을 돌려 나온 경로로 여기를 바꾸면 그대로 씁니다.
-const DEMO_FIELD_MAP = {
-  academic: "/GS_GOAL/ZAGE_30",
-  life: "/GS_GOAL/ZAGE_40",
-  career: "/GS_GOAL/ZAGE_50",
-  etc: "/GS_GOAL/ZAGE_60",
+// 지도면담입력 → 면담결과입력 화면의 바인딩 경로 (2026-09-09 교수 계정 실측).
+// 화면 왼쪽부터 학업지도·생활지도·진로지도·기타사항 순서입니다.
+const FIELD_MAP = {
+  academic: "/GS_DT_LIST/ZITV_01_S",
+  life: "/GS_DT_LIST/ZITV_02_S",
+  career: "/GS_DT_LIST/ZITV_03_S",
+  etc: "/GS_DT_LIST/ZITV_04_S",
 };
+const DATE_PATH = "/GS_DT_LIST/ZCON_DATE"; // 면담일, "YYYYMMDD"
 
 const $ = (id) => document.getElementById(id);
 const out = $("out");
@@ -48,6 +48,18 @@ function notesFor(record, attendee) {
   if (record.notesMode !== "individual") return record.sharedNotes || empty;
   const per = record.perStudentNotes || {};
   return per[attendee.key] || per[attendee.name] || empty;
+}
+
+/** 기록의 면담일을 POVIS 형식("YYYYMMDD")으로. 폼의 일자(YYYY-MM-DD)를
+ *  우선하고, 없으면 확정 일정(UTC 순간)을 이 브라우저의 시간대로 풀어 씁니다 -
+ *  Commeet 화면이 일자를 만드는 방식과 같습니다(record-form.js). */
+function povisDate(record) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(record.date || "")) return record.date.replace(/-/g, "");
+  if (!record.meetingStart) return "";
+  const d = new Date(record.meetingStart);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
 }
 
 function recordLabel(r) {
@@ -84,7 +96,7 @@ function renderNotes() {
 
 async function showLoggedOut(message) {
   view("account", false); view("eventsView", false); view("recordsView", false);
-  view("studentsView", false); view("povisView", false);
+  view("studentsView", false); view("povisView", false); view("batchView", false);
   view("loginView", true);
   $("baseUrl").value = await Commeet.baseUrl();
   if (message) show(message, true);
@@ -115,7 +127,7 @@ async function loadEvents() {
     sel.innerHTML = "";
     if (!events.length) {
       sel.innerHTML = `<option value="">내가 만든 일정이 없습니다</option>`;
-      view("recordsView", false); view("studentsView", false); view("povisView", false);
+      view("recordsView", false); view("studentsView", false); view("povisView", false); view("batchView", false);
       return;
     }
 
@@ -147,7 +159,7 @@ async function loadEvents() {
  *  다른 일정의 내용을 옮겨 적게 됩니다. */
 function onEventChanged() {
   state.records = []; state.record = null; state.attendee = null;
-  view("recordsView", false); view("studentsView", false); view("povisView", false);
+  view("recordsView", false); view("studentsView", false); view("povisView", false); view("batchView", false);
 }
 
 async function loadRecords() {
@@ -165,7 +177,7 @@ async function loadRecords() {
     if (!state.records.length) {
       sel.innerHTML = `<option value="">이 일정에는 면담 기록이 없습니다</option>`;
       $("recordMeta").textContent = "";
-      view("studentsView", false); view("povisView", false);
+      view("studentsView", false); view("povisView", false); view("batchView", false);
       return;
     }
     state.records.forEach((r, i) => {
@@ -196,7 +208,7 @@ function selectRecord(index) {
   sel.innerHTML = "";
   if (!attendees.length) {
     sel.innerHTML = `<option value="">참석한 학생이 없습니다</option>`;
-    view("studentsView", true); view("povisView", false);
+    view("studentsView", true); view("povisView", false); view("batchView", false);
     $("notes").innerHTML = "";
     return;
   }
@@ -209,7 +221,9 @@ function selectRecord(index) {
   state.attendeeList = attendees;
   state.attendee = attendees[0];
   renderNotes();
+  renderPlan();
   view("studentsView", true);
+  view("batchView", true);
   view("povisView", true);
 }
 
@@ -240,7 +254,7 @@ async function fillPovis() {
   if (!state.record || !state.attendee) return show("먼저 학생을 선택해 주세요.", true);
   const notes = notesFor(state.record, state.attendee);
   const mapping = {};
-  for (const [key, path] of Object.entries(DEMO_FIELD_MAP)) {
+  for (const [key, path] of Object.entries(FIELD_MAP)) {
     const text = (notes[key] || "").trim();
     if (text) mapping[path] = text; // 빈 항목으로 기존 값을 덮지 않습니다
   }
@@ -250,6 +264,137 @@ async function fillPovis() {
   show("채우는 중…");
   show(await runInPage(pageFill, [mapping]));
 }
+
+// ---------------------------------------------------------------------------
+// 일괄 입력 (background.js가 실행, 여기서는 계획을 만들고 진행을 보여 줍니다)
+// ---------------------------------------------------------------------------
+
+/** 선택한 기록의 참석 학생 전원에 대한 작업 목록. 학번이 없거나 내용이 빈
+ *  학생은 계획에 넣되 `skip` 사유를 달아, 왜 빠지는지 팝업에서 보이게 합니다. */
+function buildPlan() {
+  const r = state.record;
+  if (!r) return [];
+  const date = povisDate(r);
+  return (r.attendees || [])
+    .filter((a) => a.present !== false)
+    .map((a) => {
+      const notes = notesFor(r, a);
+      const hasNotes = NOTE_CATEGORIES.some(([k]) => (notes[k] || "").trim());
+      let skip = null;
+      if (!a.studentId) skip = "학번 없음";
+      else if (!hasNotes) skip = "내용 없음";
+      return { studentId: a.studentId || "", name: a.name || "", date, notes, skip, eventName: r.eventName || "면담" };
+    });
+}
+
+function renderPlan() {
+  const ul = $("plan");
+  ul.innerHTML = "";
+  const plan = buildPlan();
+  const date = povisDate(state.record || {});
+  for (const item of plan) {
+    const li = document.createElement("li");
+    if (item.skip) li.className = "skip";
+    const left = document.createElement("span");
+    left.textContent = `${item.name}${item.studentId ? ` (${item.studentId})` : ""}`;
+    const right = document.createElement("span");
+    right.textContent = item.skip || "입력 예정";
+    li.append(left, right);
+    ul.appendChild(li);
+  }
+  const ready = plan.filter((i) => !i.skip).length;
+  $("startBatch").disabled = !ready || !date;
+  $("startBatch").textContent = date
+    ? `${ready}명 자동 입력 (면담일 ${date.replace(/(\d{4})(\d{2})(\d{2})/, "$1.$2.$3")})`
+    : "면담일을 알 수 없어 실행할 수 없습니다";
+}
+
+async function findPovisTab() {
+  const tabs = await chrome.tabs.query({ url: `https://${POVIS_HOST}/*` });
+  if (!tabs.length) return null;
+  // 여러 개면 활성 탭을 우선합니다.
+  return tabs.find((t) => t.active) || tabs[0];
+}
+
+async function startBatch() {
+  const plan = buildPlan().filter((i) => !i.skip);
+  if (!plan.length) return show("입력할 학생이 없습니다.", true);
+  const tab = await findPovisTab();
+  if (!tab) return show("POVIS 탭을 찾지 못했습니다. 지도면담입력 화면을 열어 두세요.", true);
+  clearOut();
+  const options = {
+    dryRun: $("dryRun").checked,
+    allowDuplicate: $("allowDuplicate").checked,
+    screenshot: $("screenshot").checked,
+    screenshotFolder: $("screenshotFolder").value.trim(),
+  };
+  await chrome.storage.local.set({ screenshot: options.screenshot, screenshotFolder: options.screenshotFolder });
+  $("startBatch").disabled = true;
+  // 응답은 작업이 다 끝나야 오므로 기다리지 않습니다. 진행은 storage로 받습니다.
+  chrome.runtime.sendMessage({ type: "batch:start", tabId: tab.id, plan, options }, (res) => {
+    if (chrome.runtime.lastError) return; // 팝업이 닫혔다 열리면 여기로 옵니다 - 무시
+    if (res?.error) { show(res.error, true); $("startBatch").disabled = false; }
+  });
+}
+
+function statusClass(status) {
+  if (status === "저장됨" || status.startsWith("채움")) return "st-ok";
+  if (status === "실패" || status === "목록에 없음") return "st-bad";
+  return "st-warn";
+}
+
+function renderProgress(batch) {
+  const box = $("progress");
+  if (!batch) { box.hidden = true; $("stopBatch").hidden = true; return; }
+  box.hidden = false;
+  $("stopBatch").hidden = !batch.running;
+  $("startBatch").disabled = batch.running;
+
+  const pct = batch.total ? Math.round((batch.done / batch.total) * 100) : 0;
+  const head = batch.running
+    ? `진행 중 ${batch.done}/${batch.total}${batch.current ? ` — ${batch.current.name} (${batch.current.studentId})` : ""}`
+    : `${batch.stopped ? "중단됨" : "완료"} ${batch.done}/${batch.total}${batch.dryRun ? " (저장 안 함)" : ""}`;
+  const counts = {};
+  for (const r of batch.results) counts[r.status] = (counts[r.status] || 0) + 1;
+  const summary = Object.entries(counts).map(([k, v]) => `${k} ${v}`).join(" · ");
+
+  box.innerHTML = "";
+  const h = document.createElement("div"); h.textContent = head; box.appendChild(h);
+  const bar = document.createElement("div"); bar.className = "bar";
+  const fill = document.createElement("i"); fill.style.width = `${pct}%`; bar.appendChild(fill); box.appendChild(bar);
+  if (summary) { const s = document.createElement("div"); s.textContent = summary; box.appendChild(s); }
+  if (batch.error) { const e = document.createElement("div"); e.className = "st-bad"; e.textContent = batch.error; box.appendChild(e); }
+
+  const table = document.createElement("table");
+  for (const r of batch.results) {
+    const tr = document.createElement("tr");
+    const name = document.createElement("td"); name.textContent = `${r.name} (${r.studentId})`;
+    const st = document.createElement("td"); st.className = `st ${statusClass(r.status)}`; st.textContent = r.status;
+    const detail = document.createElement("td"); detail.textContent = r.detail || "";
+    tr.append(name, st, detail);
+    table.appendChild(tr);
+  }
+  box.appendChild(table);
+}
+
+async function loadProgress() {
+  const { batch } = await chrome.storage.session.get("batch");
+  renderProgress(batch || null);
+  // 스크린샷 설정은 지난번 값을 그대로 씁니다 - 매번 폴더를 다시 적지 않도록.
+  const { screenshot, screenshotFolder } = await chrome.storage.local.get(["screenshot", "screenshotFolder"]);
+  if (screenshot !== undefined) $("screenshot").checked = !!screenshot;
+  if (screenshotFolder) $("screenshotFolder").value = screenshotFolder;
+}
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "session" && changes.batch) renderProgress(changes.batch.newValue || null);
+});
+
+$("startBatch").addEventListener("click", startBatch);
+$("stopBatch").addEventListener("click", () => {
+  chrome.runtime.sendMessage({ type: "batch:stop" }, () => { void chrome.runtime.lastError; });
+  $("stopBatch").disabled = true;
+});
 
 // ---------------------------------------------------------------------------
 // 에러 / 이벤트 배선
@@ -322,8 +467,7 @@ for (const id of ["email", "password"]) {
 
 // 시작: 이미 로그인돼 있으면 바로 일정 목록으로.
 (async () => {
-  $("mappingHint").textContent =
-    `임시 매핑 (교수 화면 미확인): ${NOTE_CATEGORIES.map(([k, l]) => `${l}→${DEMO_FIELD_MAP[k]}`).join(", ")}`;
+  await loadProgress();
   try {
     await showLoggedIn(await Commeet.profile());
   } catch (err) {

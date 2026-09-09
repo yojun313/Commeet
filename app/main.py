@@ -22,6 +22,7 @@ from app.routes import (
     calendar_routes,
     contact_routes,
     event_routes,
+    extension_routes,
     finalize_routes,
     folder_routes,
     page_routes,
@@ -145,6 +146,7 @@ app.include_router(user_routes.public_router)
 app.include_router(calendar_routes.router)
 app.include_router(contact_routes.router)
 app.include_router(record_routes.router)
+app.include_router(extension_routes.router)
 app.include_router(admin_routes.router)
 
 

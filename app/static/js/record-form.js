@@ -684,57 +684,6 @@ const RecordDialog = (() => {
     renderSettlements();
   }
 
-  function povisText() {
-    const form = collectForm();
-    const present = form.attendees.filter((a) => a.present);
-    const lines = [
-      `일자: ${form.date}`,
-      `시간: ${form.startTime} ~ ${form.endTime}`,
-      `장소: ${form.place}`,
-      `지도교수: ${form.professorName}`,
-      `참석자(${present.length}명): ${present
-        .map((a) => `${a.name}${a.studentId ? `(${a.studentId})` : ""}`)
-        .join(", ")}`,
-      "",
-      "[주요 면담 내용]",
-    ];
-    // 비어 있는 항목은 적지 않습니다 - POVIS에 그대로 붙여 넣을 텍스트라
-    // "학업지도:" 만 덩그러니 남으면 지우는 손이 더 갑니다.
-    const noteLines = (notes, indent) =>
-      NOTE_CATEGORIES.filter(({ key }) => (notes[key] || "").trim()).map(
-        ({ key, label }) => `${indent}${label}: ${notes[key].trim()}`
-      );
-
-    if (form.notesMode === "individual") {
-      present.forEach((a) => {
-        const notes = form.perStudentNotes[a.key || a.name] || emptyNotes();
-        const written = noteLines(notes, "  ");
-        lines.push(`- ${a.name}`);
-        lines.push(...(written.length ? written : ["  (내용 없음)"]));
-      });
-    } else {
-      const written = noteLines(form.sharedNotes, "");
-      lines.push(...(written.length ? written : ["(내용 없음)"]));
-    }
-    lines.push("", "[집행 내역]");
-    form.settlements.forEach((s) => {
-      lines.push(
-        `- ${AFF_LABEL[s.affiliation] || s.affiliation}: ${won(s.unitPrice)} × ${s.headcount}명 = ${won(s.amount)}${
-          s.receiptTime ? ` (카드사용 ${s.receiptTime})` : ""
-        }`
-      );
-    });
-    return lines.join("\n");
-  }
-
-  async function copyPovis() {
-    if (await copyToClipboard(povisText())) {
-      showSnackbar("POVIS 입력용 내용을 복사했습니다.", "success");
-    } else {
-      showSnackbar("복사하지 못했습니다. 내용을 직접 선택해 복사해 주세요.", "error");
-    }
-  }
-
   async function deleteRecord() {
     if (!state.recordId) {
       // 아직 저장 전이라 지울 것이 없습니다. 조용히 아무 일도 안 일어나면
@@ -781,7 +730,6 @@ const RecordDialog = (() => {
     });
 
     document.getElementById("rec-save").addEventListener("click", saveForm);
-    document.getElementById("rec-copy-povis").addEventListener("click", copyPovis);
     document.getElementById("rec-delete").addEventListener("click", deleteRecord);
     document.getElementById("rec-print").addEventListener("click", async () => {
       // 신청서는 **저장된** 기록을 서버가 그려 주는 화면이라, 아직 저장하지

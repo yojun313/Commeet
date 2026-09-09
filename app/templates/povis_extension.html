@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}POVIS 자동입력 확장 프로그램 - {{ APP_NAME }}{% endblock %}
+{% block description %}Commeet 면담 기록을 POVIS 지도면담입력 화면에 자동으로 옮겨 적는 Chrome 확장 프로그램 설치·사용 안내{% endblock %}
+{% block content %}
+<div class="container ext-page">
+  <section class="ext-hero card card-pad">
+    <div>
+      <p class="ext-eyebrow">Chrome 확장 프로그램</p>
+      <h1>POVIS 자동입력</h1>
+      <p class="ext-lead">
+        {{ APP_NAME }}에 적어 둔 면담 기록을 POVIS <b>지도면담입력</b> 화면에 학생별로 자동 입력·저장합니다.
+        회의 하나를 고르면 참석 학생 전원에 대해 학번 선택 → 지도면담 입력 → 학업지도·생활지도·진로지도·기타사항 채우기 → 저장을 반복합니다.
+        더 이상 학생마다 손으로 옮겨 적지 않아도 됩니다.
+      </p>
+      <div class="ext-cta">
+        <a class="btn btn-primary" href="/povis-extension/download" download>
+          설치 파일 다운로드{% if version %} <span class="ext-version">v{{ version }}</span>{% endif %}
+        </a>
+        <a class="btn btn-ghost" href="#install">설치 방법 보기</a>
+      </div>
+      <p class="ext-note">
+        zip 파일 하나입니다. Chrome 웹 스토어를 거치지 않으므로 아래처럼 <b>개발자 모드</b>로 직접 추가합니다. Google Chrome 116 이상.
+      </p>
+    </div>
+  </section>
+
+  <section id="install" class="ext-section">
+    <h2>설치</h2>
+    <ol class="ext-steps">
+      <li>
+        <h3>설치 파일을 받아 압축을 풉니다</h3>
+        <p>위 <b>설치 파일 다운로드</b>로 받은 zip을 더블클릭해 압축을 풀면 <code>commeet-povis-{{ version or "x.y.z" }}</code> 폴더가 생깁니다.
+          Chrome은 이 폴더를 <b>계속 참조</b>하므로, 다운로드 폴더에 두지 말고 문서 폴더처럼 지우지 않을 곳으로 옮겨 두세요.
+          폴더를 지우면 확장 프로그램도 사라집니다.</p>
+      </li>
+      <li>
+        <h3>Chrome에서 확장 프로그램 관리 화면을 엽니다</h3>
+        <p>주소창에 아래 주소를 입력합니다. (보안상 페이지 안의 링크로는 열리지 않아, 직접 입력해야 합니다.)</p>
+        <div class="ext-address">
+          <code id="ext-address">chrome://extensions</code>
+          <button class="btn btn-ghost btn-sm" type="button" id="ext-copy-address">주소 복사</button>
+        </div>
+        <p>또는 메뉴(⋮) → <b>확장 프로그램</b> → <b>확장 프로그램 관리</b>.</p>
+      </li>
+      <li>
+        <h3>오른쪽 위 <b>개발자 모드</b>를 켭니다</h3>
+        <p>스위치를 켜면 왼쪽 위에 <b>압축해제된 확장 프로그램을 로드합니다</b> 버튼이 나타납니다.</p>
+      </li>
+      <li>
+        <h3><b>압축해제된 확장 프로그램을 로드합니다</b> → 1번에서 풀어 둔 폴더를 선택합니다</h3>
+        <p><code>manifest.json</code>이 바로 들어 있는 폴더를 고르세요 (zip 파일이 아니라 <b>폴더</b>입니다).
+          목록에 <b>Commeet → POVIS 자동입력</b>이 나타나면 끝입니다.</p>
+      </li>
+      <li>
+        <h3>툴바에 고정합니다 (선택)</h3>
+        <p>주소창 오른쪽 퍼즐 조각(🧩) 아이콘 → <b>Commeet → POVIS 자동입력</b> 옆의 핀을 누르면 툴바에 아이콘이 보입니다.</p>
+      </li>
+    </ol>
+    <div class="ext-callout">
+      <b>Chrome을 다시 켤 때 "개발자 모드 확장 프로그램 사용 중지" 안내가 뜰 수 있습니다.</b>
+      웹 스토어 밖에서 설치한 확장에 늘 나오는 안내이며, <b>취소</b>(그대로 두기)를 누르면 됩니다.
+    </div>
+  </section>
+
+  <section class="ext-section">
+    <h2>사용법</h2>
+    <ol class="ext-steps">
+      <li>
+        <h3>POVIS에서 입력 화면을 열어 둡니다</h3>
+        <p>POVIS 로그인 → <b>학사 → 지도학생면담 → 지도면담입력</b>. 지도학생 목록이 보이는 화면이면 됩니다. 이 탭을 열어 둔 채 다음으로 갑니다.</p>
+      </li>
+      <li>
+        <h3>확장 아이콘을 눌러 {{ APP_NAME }}에 로그인합니다</h3>
+        <p>가입한 이메일 주소 전체(예: <code>hong@{{ ALLOWED_EMAIL_DOMAIN }}</code>)와 비밀번호. 비밀번호는 저장되지 않습니다.</p>
+      </li>
+      <li>
+        <h3>회의를 고르고 <b>면담 기록 불러오기</b></h3>
+        <p>내가 만든 일정 중 면담 기록이 있는 것이 위에 옵니다. 기록을 고르면 참석 학생 목록과 각자의 상태(입력 예정 / 학번 없음 / 내용 없음)가 보입니다.</p>
+      </li>
+      <li>
+        <h3><b>N명 자동 입력</b>을 누릅니다</h3>
+        <p>POVIS 탭에서 학생마다 자동으로 진행됩니다. 팝업을 닫아도 계속되고, 다시 열면 진행 상황과 학생별 결과(저장됨 / 건너뜀 / 실패)가 보입니다.
+          <b>중단</b>은 지금 학생을 끝낸 뒤 멈춥니다. 작업 중에는 POVIS 탭을 조작하지 마세요.</p>
+      </li>
+    </ol>
+
+    <h3 class="ext-sub">옵션</h3>
+    <ul class="ext-list">
+      <li><b>채우기만 하고 저장하지 않기</b> — 화면에 채웠다가 저장 없이 돌아옵니다. 처음 한 번은 이걸로 확인해 보길 권합니다.</li>
+      <li><b>같은 날짜 면담이 있어도 입력</b> — 기본은 POVIS에 같은 날짜 면담이 이미 있으면 그 학생을 건너뜁니다(두 번 입력 방지).</li>
+      <li><b>입력 화면 스크린샷 저장</b> — 저장 직전 화면을 <code>회의이름_면담일_학생이름.png</code>로 Chrome 다운로드 폴더에 남깁니다. 하위 폴더(예: <code>POVIS/2026-2</code>)를 지정할 수 있습니다.</li>
+    </ul>
+
+    <h3 class="ext-sub">무엇이 어디로 들어가나</h3>
+    <table class="ext-table">
+      <thead><tr><th>{{ APP_NAME }} 면담 기록</th><th>POVIS 면담결과입력</th></tr></thead>
+      <tbody>
+        <tr><td>면담 일자</td><td>면담일</td></tr>
+        <tr><td>학업지도 · 생활지도 · 진로지도 · 기타사항</td><td>같은 이름의 네 칸</td></tr>
+        <tr><td>참석자 학번</td><td>지도학생 목록에서 학번으로 매칭 (학번이 없거나 목록에 없는 학생은 건너뜀)</td></tr>
+      </tbody>
+    </table>
+    <p class="ext-note">"학생별" 기록이면 학생마다 자기 내용이, "공통" 기록이면 같은 내용이 전원에게 들어갑니다. 불참(✕) 처리한 학생은 제외됩니다.</p>
+  </section>
+
+  <section class="ext-section">
+    <h2>업데이트</h2>
+    <p>새 버전이 나오면 설치 파일을 다시 받아 압축을 풀고, 기존 폴더의 내용을 새 것으로 바꾼 뒤
+      <code>chrome://extensions</code>에서 확장 카드의 <b>새로고침(↻)</b>을 누릅니다. 폴더 위치가 바뀌었다면 삭제 후 다시 로드하세요.
+      현재 배포 버전: <b>{{ version or "알 수 없음" }}</b>.</p>
+  </section>
+
+  <section class="ext-section">
+    <h2>문제가 생기면</h2>
+    <ul class="ext-list">
+      <li><b>"POVIS 탭을 찾지 못했습니다"</b> — 같은 Chrome 창(프로필)에 POVIS 지도면담입력 탭이 열려 있어야 합니다.</li>
+      <li><b>"세션이 만료되었습니다"</b> — 팝업에서 다시 로그인하세요.</li>
+      <li><b>학생이 "목록에 없음"</b> — POVIS 지도학생 목록(검색 조건: 지도학생, 학적상태)에 그 학번이 없는 경우입니다. POVIS에서 검색 조건을 넓힌 뒤 다시 실행하세요.</li>
+      <li><b>"실패 — 면담결과를 입력하세요"</b> — POVIS 화면 구조가 바뀌었을 가능성이 큽니다. <a href="mailto:{{ SUPPORT_EMAIL }}">{{ SUPPORT_EMAIL }}</a>로 알려 주세요.</li>
+    </ul>
+    <p class="ext-note">확장은 사용자의 브라우저 안에서 {{ APP_NAME }}와 POVIS 사이만 오갑니다. 면담 내용이 다른 서버로 전송되지 않으며, 비밀번호도 저장하지 않습니다.</p>
+  </section>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+  document.getElementById("ext-copy-address").addEventListener("click", async () => {
+    const text = document.getElementById("ext-address").textContent.trim();
+    if (await copyToClipboard(text)) showSnackbar("주소를 복사했습니다. Chrome 주소창에 붙여 넣으세요.", "success");
+    else showSnackbar("복사하지 못했습니다. 주소를 직접 입력해 주세요.", "error");
+  });
+</script>
+{% endblock %}
