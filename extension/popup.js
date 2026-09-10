@@ -323,7 +323,6 @@ async function startBatch() {
   if (!tab) return show("POVIS 탭을 찾지 못했습니다. 지도면담입력 화면을 열어 두세요.", true);
   clearOut();
   const options = {
-    dryRun: $("dryRun").checked,
     allowDuplicate: $("allowDuplicate").checked,
     screenshot: $("screenshot").checked,
     screenshotFolder: $("screenshotFolder").value.trim(),
@@ -338,7 +337,7 @@ async function startBatch() {
 }
 
 function statusClass(status) {
-  if (status === "저장됨" || status.startsWith("채움")) return "st-ok";
+  if (status === "저장됨") return "st-ok";
   if (status === "실패" || status === "목록에 없음") return "st-bad";
   return "st-warn";
 }
@@ -353,7 +352,7 @@ function renderProgress(batch) {
   const pct = batch.total ? Math.round((batch.done / batch.total) * 100) : 0;
   const head = batch.running
     ? `진행 중 ${batch.done}/${batch.total}${batch.current ? ` — ${batch.current.name} (${batch.current.studentId})` : ""}`
-    : `${batch.stopped ? "중단됨" : "완료"} ${batch.done}/${batch.total}${batch.dryRun ? " (저장 안 함)" : ""}`;
+    : `${batch.stopped ? "중단됨" : "완료"} ${batch.done}/${batch.total}`;
   const counts = {};
   for (const r of batch.results) counts[r.status] = (counts[r.status] || 0) + 1;
   const summary = Object.entries(counts).map(([k, v]) => `${k} ${v}`).join(" · ");

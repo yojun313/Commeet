@@ -6,7 +6,8 @@
   "permissions": [
     "scripting",
     "storage",
-    "downloads"
+    "downloads",
+    "activeTab"
   ],
   "host_permissions": [
     "https://povis.postech.ac.kr/*",

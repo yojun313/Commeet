@@ -67,14 +67,14 @@ async function screenshot(tabId, item, options) {
 }
 
 /** plan: [{studentId, name, date(YYYYMMDD), notes:{academic,life,career,etc}}]
- *  options: { dryRun: 채우기만 하고 저장 안 함, allowDuplicate: 같은 날짜 면담이 있어도 입력 } */
+ *  options: { allowDuplicate: 같은 날짜 면담이 있어도 입력 } */
 async function runBatch(tabId, plan, options) {
   if (current) return { error: "이미 실행 중인 작업이 있습니다." };
   current = { stop: false };
   const state = {
     running: true, startedAt: Date.now(), finishedAt: null, tabId,
     total: plan.length, done: 0, stopped: false, error: null,
-    dryRun: !!options.dryRun, results: [],
+    results: [],
   };
   await publish(state);
 
@@ -140,11 +140,6 @@ async function processOne(tabId, item, options) {
     }
   }
   const detail = (...parts) => parts.filter(Boolean).join(" · ");
-
-  if (options.dryRun) {
-    const back = await step(tabId, "back");
-    return outcome(item, "채움(저장 안 함)", detail(`${filled.filled}개 항목`, dialogText(back.dialogs), shot));
-  }
 
   const saved = await step(tabId, "save");
   const back = await step(tabId, "back");
