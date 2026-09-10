@@ -40,7 +40,9 @@ def _extension_files() -> list[Path]:
 
 def extension_version() -> str:
     try:
-        return json.loads((EXTENSION_DIR / "manifest.json").read_text("utf-8")).get("version", "")
+        return json.loads((EXTENSION_DIR / "manifest.json").read_text("utf-8")).get(
+            "version", ""
+        )
     except (OSError, ValueError):
         return ""
 
@@ -50,7 +52,9 @@ def build_zip() -> tuple[bytes, str]:
     files = _extension_files()
     if not files:
         raise FileNotFoundError(EXTENSION_DIR)
-    key = tuple((p.relative_to(EXTENSION_DIR).as_posix(), p.stat().st_mtime_ns) for p in files)
+    key = tuple(
+        (p.relative_to(EXTENSION_DIR).as_posix(), p.stat().st_mtime_ns) for p in files
+    )
     if _cache["key"] == key:
         return _cache["zip"], _cache["version"]  # type: ignore[return-value]
 
@@ -79,7 +83,9 @@ async def povis_extension_download():
     try:
         data, version = build_zip()
     except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="확장 프로그램 파일이 서버에 없습니다.")
+        raise HTTPException(
+            status_code=404, detail="확장 프로그램 파일이 서버에 없습니다."
+        )
     filename = f"commeet-povis-{version or 'latest'}.zip"
     return Response(
         content=data,

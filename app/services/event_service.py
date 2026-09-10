@@ -706,14 +706,28 @@ def apply_blind_filter(
     is_owner: bool,
     guest_name: str | None,
 ) -> dict:
+    """비공개 일정에서 남에게 보여 줄 응답만 남깁니다.
+
+    숨기는 대상은 **참가자끼리의 응답**입니다 - 서로 보고 따라 적는 것을
+    막자는 옵션이니까요. **주최자의 응답은 남깁니다**: 응답자는 주최자와
+    겹치는 시간을 골라야 하므로 그 시간이 보여야 하고, 이 옵션을 켠 것도
+    주최자 본인입니다. (편집 화면의 "주최자 가능" 점이 여기서 나옵니다.)
+    """
     if not event.get("blindAvailabilityEnabled") or is_owner:
         return responses_map
+
+    kept: dict = {}
+    owner_key = str(event["ownerId"]) if event.get("ownerId") else None
+    if owner_key and owner_key in responses_map:
+        kept[owner_key] = responses_map[owner_key]
+
     if viewer:
         key = str(viewer["_id"])
-        return {key: responses_map[key]} if key in responses_map else {}
-    if guest_name and guest_name in responses_map:
-        return {guest_name: responses_map[guest_name]}
-    return {}
+        if key in responses_map:
+            kept[key] = responses_map[key]
+    elif guest_name and guest_name in responses_map:
+        kept[guest_name] = responses_map[guest_name]
+    return kept
 
 
 def _parse_iso(value: str) -> datetime | None:

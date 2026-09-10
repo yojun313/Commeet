@@ -24,12 +24,12 @@
               <div class="field">
                 <label for="rec-start">시작 시간</label>
                 <input class="input" type="time" id="rec-start" />
-                <span class="hint">실제 면담을 시작한 시각</span>
+                <span class="hint">예정 시각으로 채워져 있습니다. 실제와 다르면 고쳐 주세요.</span>
               </div>
               <div class="field">
                 <label for="rec-end">종료 시간</label>
                 <input class="input" type="time" id="rec-end" />
-                <span class="hint">영수증 상의 시각</span>
+                <span class="hint">예정 종료 시각. 영수증 시각의 기본값이 됩니다.</span>
               </div>
             </div>
             <div class="field">
@@ -78,7 +78,8 @@
           <section class="rec-section">
             <h3 class="rec-section-title">학생지도비 정산</h3>
             <p class="hint" style="margin-top: 0;">
-              컴퓨터공학과와 무은재학부는 각각 따로 결재하므로, 영수증도 소속별로 첨부합니다.
+              컴퓨터공학과와 무은재학부는 각각 따로 결재하므로, 영수증도 소속별로 첨부합니다.<br />
+              대학(교비) 법인카드 영수증만 가능합니다.
             </p>
             <div id="rec-settlements" class="rec-settlement-list"></div>
           </section>
@@ -106,7 +107,7 @@
       <button class="btn btn-ghost btn-sm rec-danger" type="button" id="rec-delete" hidden>삭제</button>
       <span class="rec-footer-spacer"></span>
       <a class="btn btn-ghost" href="/povis-extension" target="_blank" rel="noopener" id="rec-povis-help">POVIS 자동입력 도움말</a>
-      <button class="btn btn-ghost" type="button" id="rec-print" hidden>신청서 열기</button>
+      <button class="btn btn-ghost" type="button" id="rec-print" hidden>학생지도비 신청서 열기</button>
       <button class="btn btn-primary" type="button" id="rec-save">저장</button>
     </div>
   </div>

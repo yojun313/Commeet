@@ -18,17 +18,17 @@
     </div>
   </div>
 
-  <details class="event-description" id="ev-description" style="display: none;">
-    <summary>일정 설명 보기</summary>
+  {# 설명이 있으면 그대로 펼쳐 보입니다 (없으면 통째로 숨김 - event-grid.js). #}
+  <div class="event-description" id="ev-description" style="display: none;">
     <div class="event-description-body md-body" id="ev-description-body"></div>
-  </details>
+  </div>
 
   <div id="guest-owner-banner"></div>
   <div id="event-body-root">
     <div class="empty-state"><span class="spinner"></span></div>
   </div>
 
-  <!-- 확정된 일정에서 호스트에게만 보입니다. #event-body-root 바깥에 두어
+  <!-- 확정된 일정에서 주최자에게만 보입니다. #event-body-root 바깥에 두어
        renderSkeleton()이 그리드를 다시 그려도 지워지지 않습니다. -->
   <div class="card card-pad" id="ev-records-card" style="display: none; margin-top: 16px;">
     <div class="fin-records-head">

@@ -43,7 +43,7 @@ def _as_notes(value) -> dict:
 
     항목이 나뉘기 전에 저장된 기록은 자유 서술 **문자열 하나**입니다. 어느
     갈래였는지 알 수 없으므로 "기타사항"에 넣습니다 - 내용을 잃지 않으면서
-    없는 분류를 지어내지도 않습니다. 필요하면 호스트가 옮기면 됩니다.
+    없는 분류를 지어내지도 않습니다. 필요하면 주최자가 옮기면 됩니다.
     """
     notes = empty_notes()
     if isinstance(value, str):
@@ -464,9 +464,7 @@ async def count_by_event(owner: dict) -> dict[str, dict]:
                 "$group": {
                     "_id": "$eventId",
                     "total": {"$sum": 1},
-                    "draft": {
-                        "$sum": {"$cond": [{"$eq": ["$status", "draft"]}, 1, 0]}
-                    },
+                    "draft": {"$sum": {"$cond": [{"$eq": ["$status", "draft"]}, 1, 0]}},
                 }
             },
         ]

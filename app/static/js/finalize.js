@@ -11,7 +11,7 @@ let choice = {};
 // for a "host unavailable" cell), rebuilt on every renderCalendarGrid()
 // call. Drag-and-drop reads this instead of re-parsing data attributes.
 let cellSlotMap = new WeakMap();
-// 최적화가 배정하지 못한 사람의 사유 (서버 계산). 호스트가 직접 빼낸
+// 최적화가 배정하지 못한 사람의 사유 (서버 계산). 주최자가 직접 빼낸
 // 사람에게는 사유가 없으므로 undefined입니다.
 let unassignedReasons = {};
 // Active drag gesture, or null when nothing is being dragged.
@@ -257,7 +257,7 @@ function renderCalendarGrid(nameOf, meetings, capacity) {
   cellSlotMap = new WeakMap();
 
   if (!proposal.slots.length) {
-    grid.innerHTML = `<p class="hint" style="margin:0;">호스트가 가능한 시간이 없어 표시할 수 없습니다.</p>`;
+    grid.innerHTML = `<p class="hint" style="margin:0;">주최자가 가능한 시간이 없어 표시할 수 없습니다.</p>`;
     return;
   }
 
@@ -281,7 +281,7 @@ function renderCalendarGrid(nameOf, meetings, capacity) {
     days.forEach((d) => {
       const slot = cellIndex.get(`${d.key}__${row.tk}`);
       if (!slot) {
-        const cell = el(`<div class="cal-cell cal-cell-unavailable" title="호스트가 이 시간에 참석할 수 없습니다"></div>`);
+        const cell = el(`<div class="cal-cell cal-cell-unavailable" title="주최자가 이 시간에 참석할 수 없습니다"></div>`);
         cellSlotMap.set(cell, null);
         grid.appendChild(cell);
         return;
@@ -509,7 +509,7 @@ function startChipDrag(e, key, label) {
 
 /** 이 사람들 전부가 옮겨 갈 수 있는 시간인지. 이유까지 돌려줍니다. */
 function groupDropCheck(keys, slot, fromStart, capacity) {
-  if (!slot) return { ok: false, reason: "호스트가 참석할 수 없는 시간입니다." };
+  if (!slot) return { ok: false, reason: "주최자가 참석할 수 없는 시간입니다." };
   if (slot.start === fromStart) return { ok: true, noop: true };
 
   const cannot = keys.filter((k) => !slot.eligible.includes(k));
@@ -745,7 +745,7 @@ function render() {
     box.innerHTML = `<strong>미배정 ${unassigned.length}명</strong>`;
 
     // 같은 사유끼리 묶습니다 - 한 명씩 나열하면 같은 문장이 반복되고,
-    // 호스트가 취할 조치도 사유 단위라 묶어 보는 편이 읽기 쉽습니다.
+    // 주최자가 취할 조치도 사유 단위라 묶어 보는 편이 읽기 쉽습니다.
     const groups = new Map();
     unassigned.forEach((p) => {
       const reason = unassignedReasons[p.key];

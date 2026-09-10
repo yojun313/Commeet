@@ -270,12 +270,19 @@ const RecordDialog = (() => {
       if (!people.length) return;
       const rate = FEE_RATES[value] || 0;
       const old = previous[value] || {};
+      const cap = rate * people.length;
+      // 직접 적은 집행액은 인원이 그대로일 때만 지킵니다 - 인원이 바뀌면
+      // 근거(단가 x 인원)가 달라진 것이라 새 상한으로 다시 시작합니다.
+      const keepCustom =
+        old.headcount === people.length && old.amount != null && old.amount <= cap;
       next.push({
         affiliation: value,
         headcount: people.length,
         unitPrice: rate,
-        amount: rate * people.length,
-        receiptTime: old.receiptTime || "",
+        amount: keepCustom ? old.amount : cap,
+        // 영수증 시각의 기본값은 면담 종료 시각입니다 - 결제는 보통 면담을
+        // 마치며 하니까요. 이미 적어 둔 값이 있으면 그대로 둡니다.
+        receiptTime: old.receiptTime || state.form.endTime || "",
         receiptFile: old.receiptFile || null,
         receiptName: old.receiptName || "",
       });
@@ -307,14 +314,21 @@ const RecordDialog = (() => {
     list.forEach((s, i) => {
       const staged = state.pendingReceipts[i];
       const attached = staged ? staged.name : s.receiptName || (s.receiptFile ? "첨부됨" : "");
+      const cap = (s.unitPrice || 0) * (s.headcount || 0);
       const node = el(`
         <div class="rec-settlement">
           <div class="rec-settlement-head">
             <span class="rec-settlement-aff">${esc(AFF_LABEL[s.affiliation] || s.affiliation)}</span>
             <span class="rec-settlement-amount">${esc(won(s.amount))}</span>
           </div>
-          <div class="rec-settlement-calc">${esc(won(s.unitPrice))} &times; ${s.headcount}명</div>
+          <div class="rec-settlement-calc">상한 ${esc(won(s.unitPrice))} &times; ${s.headcount}명 = ${esc(won(cap))}</div>
           <div class="rec-settlement-fields">
+            <div class="field">
+              <label>집행액 (실제 결제 금액)</label>
+              <input class="input" type="number" data-amount min="0" max="${cap}" step="1"
+                     value="${s.amount ?? cap}" />
+              <span class="hint">실제 결제가 상한보다 적으면 그 금액을 적으세요.</span>
+            </div>
             <div class="field">
               <label>영수증 시각</label>
               <input class="input" type="time" data-time value="${esc(s.receiptTime || "")}" />
@@ -335,6 +349,19 @@ const RecordDialog = (() => {
           </div>
         </div>
       `);
+
+      node.querySelector("[data-amount]").addEventListener("input", (e) => {
+        let v = parseInt(e.target.value, 10);
+        if (Number.isNaN(v) || v < 0) v = 0;
+        // 상한(단가 x 인원)을 넘겨 적으면 상한으로 되돌립니다 - 규정 금액입니다.
+        if (v > cap) {
+          v = cap;
+          e.target.value = String(cap);
+          showSnackbar(`집행액은 상한 ${won(cap)}을 넘을 수 없습니다.`, "error");
+        }
+        list[i].amount = v;
+        node.querySelector(".rec-settlement-amount").textContent = won(v);
+      });
 
       node.querySelector("[data-time]").addEventListener("change", (e) => {
         list[i].receiptTime = e.target.value;
@@ -395,7 +422,7 @@ const RecordDialog = (() => {
       const rect = canvas.getBoundingClientRect();
       signature.ctx.beginPath();
       signature.ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
-      document.getElementById("rec-signature-hint").textContent = "저장하면 신청서에 반영됩니다.";
+      document.getElementById("rec-signature-hint").textContent = "저장하면 학생지도비 신청서에 반영됩니다.";
     });
     canvas.addEventListener("pointermove", draw);
     ["pointerup", "pointercancel", "pointerleave"].forEach((type) =>
@@ -503,7 +530,7 @@ const RecordDialog = (() => {
       signature.empty = false;
       state.signatureDirty = true;
       document.getElementById("rec-signature-hint").textContent =
-        `${file.name} — 저장하면 신청서에 반영됩니다.`;
+        `${file.name} — 저장하면 학생지도비 신청서에 반영됩니다.`;
       URL.revokeObjectURL(url);
     };
     img.onerror = () => {
@@ -550,18 +577,18 @@ const RecordDialog = (() => {
     // here so they read in the host's own timezone. A saved record keeps the
     // strings the host actually confirmed.
     const startedAt = localParts(data.meetingStart || meetingStart);
+    const endedAt = data.meetingEnd ? localParts(data.meetingEnd) : null;
 
     state.form = {
       eventId: data.eventId || eventId,
       meetingStart: data.meetingStart || meetingStart,
       eventName: data.eventName || "",
       date: data.date || startedAt.date,
-      // 시각과 장소는 일정에서 끌어오지 않고 비워 둡니다. 신청서에 적을 것은
-      // **실제로 면담한 시각**과 영수증 시각인데, 잡아 둔 시각이 미리 들어가
-      // 있으면 그대로 두고 넘어가기 쉽습니다. 일정 시각은 창 제목에 그대로
-      // 보이므로 참고할 것이 없어지지는 않습니다.
-      startTime: data.startTime || "",
-      endTime: data.endTime || "",
+      // 확정된 면담의 예정 시각을 기본값으로 채웁니다 - 대부분 예정대로
+      // 진행되므로 그대로 저장하면 되고, 달랐다면 고치면 됩니다.
+      // (영수증 시각도 아래 syncSettlements에서 종료 시각으로 채워집니다.)
+      startTime: data.startTime || startedAt.time,
+      endTime: data.endTime || (endedAt ? endedAt.time : ""),
       place: data.place || "",
       professorName: data.professorName || CFG.professorName || "",
       attendees: (data.attendees || []).map((a) => ({ ...a })),
@@ -572,6 +599,11 @@ const RecordDialog = (() => {
       ),
       settlements: (data.settlements || []).map((s) => ({ ...s })),
     };
+    // 새 초안은 서버가 정산 줄을 만들어 내려주므로(syncSettlements를 안 거침)
+    // 빈 영수증 시각을 여기서도 종료 시각으로 채웁니다.
+    state.form.settlements.forEach((s) => {
+      if (!s.receiptTime) s.receiptTime = state.form.endTime || "";
+    });
     state.recordId = data._id || null;
     state.pendingReceipts = {};
     state.signatureDirty = false;
@@ -736,13 +768,13 @@ const RecordDialog = (() => {
       // 않았으면 열 수 없습니다. 그대로 열면 "페이지를 찾을 수 없습니다"가
       // 뜨고 무엇이 잘못됐는지 알 수 없습니다.
       if (!state.recordId) {
-        showSnackbar("먼저 저장한 뒤에 신청서를 열 수 있습니다.", "error");
+        showSnackbar("먼저 저장한 뒤에 학생지도비 신청서를 열 수 있습니다.", "error");
         return;
       }
       // 신청서는 **저장된** 내용을 서버가 그립니다. 고치는 중에 그냥 열면
       // 방금 적은 것이 빠진 서류가 나오는데, 새 탭이라 눈치채기도 어렵습니다.
       if (hasUnsavedChanges()) {
-        if (!confirm("저장하지 않은 변경이 있습니다.\n저장한 뒤 신청서를 열까요?")) return;
+        if (!confirm("저장하지 않은 변경이 있습니다.\n저장한 뒤 학생지도비 신청서를 열까요?")) return;
         if (!(await saveForm())) return; // 저장이 실패하면 열지 않습니다
       }
       window.open(`/records/${state.recordId}/print`, "_blank", "noopener");

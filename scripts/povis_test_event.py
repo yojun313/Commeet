@@ -117,7 +117,11 @@ async def build(host_email: str) -> None:
                 "capacity": len(attendees),
                 "meetingMinutes": 30,
                 "meetings": [
-                    {"start": start, "end": end, "participants": [a["key"] for a in attendees]}
+                    {
+                        "start": start,
+                        "end": end,
+                        "participants": [a["key"] for a in attendees],
+                    }
                 ],
                 "unassigned": [],
                 "confirmedAt": day - timedelta(days=1),
@@ -147,11 +151,21 @@ async def build(host_email: str) -> None:
         # (eventId, userId)가 유일 인덱스라 한 번 더 넣으면 실패합니다.
         if a["key"] == str(host["_id"]):
             continue
-        response = {"name": a["name"], "email": a["email"], "availability": ticks[8:12], "ifNeeded": []}
+        response = {
+            "name": a["name"],
+            "email": a["email"],
+            "availability": ticks[8:12],
+            "ifNeeded": [],
+        }
         if ObjectId.is_valid(a["key"]):
             response["userId"] = ObjectId(a["key"])
         await event_responses_col.insert_one(
-            {"eventId": event_id, "userId": a["key"], "response": response, "createdAt": day - timedelta(days=2)}
+            {
+                "eventId": event_id,
+                "userId": a["key"],
+                "response": response,
+                "createdAt": day - timedelta(days=2),
+            }
         )
 
     record_id = await record_service.save_record(
@@ -172,11 +186,15 @@ async def build(host_email: str) -> None:
             "status": "saved",
         },
     )
-    await meeting_records_col.update_one({"_id": ObjectId(record_id)}, {"$set": {"demoTag": TAG}})
+    await meeting_records_col.update_one(
+        {"_id": ObjectId(record_id)}, {"$set": {"demoTag": TAG}}
+    )
 
     print(f"호스트   : {host.get('name')} <{host['email']}>")
     print(f"일정     : {EVENT_NAME}  (id {event_id})")
-    print(f"면담     : {start:%Y-%m-%d %H:%M}~{end:%H:%M}  → POVIS 면담일 {start:%Y%m%d}")
+    print(
+        f"면담     : {start:%Y-%m-%d %H:%M}~{end:%H:%M}  → POVIS 면담일 {start:%Y%m%d}"
+    )
     print(f"기록     : {record_id}  (학생별 노트, 작성 완료)")
     for a in attendees:
         print(f"  - {a['name']} ({a['studentId']})  key={a['key']}")
@@ -184,8 +202,12 @@ async def build(host_email: str) -> None:
 
 async def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--host", default=DEFAULT_HOST, help="일정 소유자(교수) 계정 이메일")
-    parser.add_argument("--clean", action="store_true", help="이 스크립트가 만든 것만 삭제")
+    parser.add_argument(
+        "--host", default=DEFAULT_HOST, help="일정 소유자(교수) 계정 이메일"
+    )
+    parser.add_argument(
+        "--clean", action="store_true", help="이 스크립트가 만든 것만 삭제"
+    )
     args = parser.parse_args()
     if args.clean:
         print(f"{await clean()}건 삭제했습니다.")

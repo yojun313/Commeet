@@ -152,7 +152,7 @@ async def build_proposal(
     by_key = {p["key"]: p for p in participants}
 
     def _unassigned_reason(key: str) -> dict:
-        """왜 배정되지 못했는지. 이유마다 호스트가 할 수 있는 일이 다릅니다 -
+        """왜 배정되지 못했는지. 이유마다 주최자가 할 수 있는 일이 다릅니다 -
         정원을 늘릴지, 옵션을 켤지, 본인에게 다시 물어볼지."""
         person = by_key[key]
         both = person["availability"] | person["ifNeeded"]
@@ -182,7 +182,7 @@ async def build_proposal(
         if any(covers_slot(both, s, e, increment) for s, e in all_slots):
             return {
                 "code": "host_busy",
-                "text": "가능하다고 답한 시간에 호스트가 참석할 수 없습니다.",
+                "text": "가능하다고 답한 시간에 주최자가 참석할 수 없습니다.",
             }
 
         return {
@@ -318,7 +318,7 @@ async def confirm(
     for earlier, later in pairwise(stored):
         if later["start"] < earlier["end"]:
             raise InvalidMeeting(
-                "약속 시간이 서로 겹칩니다. 호스트는 동시에 참석할 수 없습니다."
+                "약속 시간이 서로 겹칩니다. 주최자는 동시에 참석할 수 없습니다."
             )
 
     # 지난 배정이 남아 있으면 - 확정 상태든, 확정을 취소해 둔 상태든 - 그것과

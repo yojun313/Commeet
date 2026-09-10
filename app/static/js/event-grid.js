@@ -186,9 +186,9 @@ function renderMeta() {
   document.getElementById("ev-meta").textContent = `${fmt(first)} ~ ${fmt(last)} · 응답 ${respCount}명`;
 }
 
-// Collapsed by default so a long description never pushes the grid off
-// screen; markdown goes through the in-app viewer (see markdown.js, which
-// escapes everything before rendering), plain text keeps its line breaks.
+// 설명이 있으면 항상 펼쳐 보입니다 (없으면 카드째 숨김). markdown은 앱 내
+// 뷰어(markdown.js - 렌더 전에 전부 이스케이프)를 거치고, 일반 텍스트는
+// 줄바꿈을 유지합니다.
 function renderEventDescription() {
   const wrap = document.getElementById("ev-description");
   const body = document.getElementById("ev-description-body");
@@ -265,6 +265,10 @@ function renderSkeleton() {
               <button type="button" data-tool="ifNeeded">가능(비선호)</button>
             </div>
             <span class="edit-hint" id="edit-tool-hint">${TOOL_HINTS.available}</span>
+            <span class="edit-hint edit-host-legend" id="edit-host-legend" style="display: none;">
+              <span class="host-dot"></span> 주최자 가능
+              <span class="host-dot host-dot-soft"></span> 주최자 가능(비선호)
+            </span>
           </div>
           <div style="display: flex; gap: 8px;">
             <button class="btn btn-sm btn-secondary" id="autofill-btn" style="display: none;">캘린더로 자동 채우기</button>
@@ -394,8 +398,17 @@ function renderGridCells() {
     });
   }
 
+  // 편집 중에는 주최자가 표시해 둔 시간을 점으로 함께 보여 줍니다 - 초대받은
+  // 사람이 주최자와 겹치는 칸을 고를 수 있게. 주최자 본인이 편집할 때는 자기
+  // 표시가 곧 그 정보라 뺍니다. 비공개(blind) 일정은 서버가 남의 응답을 아예
+  // 내려 주지 않으므로(apply_blind_filter) 자연히 아무것도 안 나옵니다.
+  const hostSets =
+    ST.editing && !ST.isOwner && ST.event.ownerId
+      ? ST.responseSets[ST.event.ownerId]
+      : null;
+
   cells.forEach((cell) => {
-    cell.classList.remove("available", "if-needed", "dim", "own-preview");
+    cell.classList.remove("available", "if-needed", "dim", "own-preview", "host-avail", "host-ifneeded");
     cell.style.background = "";
     const slot = cell.dataset.slot;
 
@@ -403,6 +416,10 @@ function renderGridCells() {
       const mark = ST.ownMarks[slot];
       if (mark === "available") cell.classList.add("available");
       else if (mark === "ifNeeded") cell.classList.add("if-needed");
+      if (hostSets) {
+        if (hostSets.available.has(slot)) cell.classList.add("host-avail");
+        else if (hostSets.ifNeeded.has(slot)) cell.classList.add("host-ifneeded");
+      }
       return;
     }
 
@@ -558,7 +575,7 @@ function syncRespondentListHeight() {
 }
 
 /* ---------------------------------------------------------------------- */
-/* 면담 기록 · 학생지도비 (호스트 전용, 확정된 뒤에만)                      */
+/* 면담 기록 · 학생지도비 (주최자 전용, 확정된 뒤에만)                      */
 /* ---------------------------------------------------------------------- */
 
 /* 확정된 시간대마다 한 줄씩 보여 주고, 각 줄에서 기록 폼(RecordDialog)을
@@ -656,13 +673,13 @@ function renderEventRecordRows() {
         </div>
         <div class="fin-record-actions">
           <button class="btn btn-ghost btn-sm" type="button" data-write>${
-            record ? "기록 보기" : "기록 작성"
+            record ? "면담 정보 수정" : "기록 작성"
           }</button>
           ${
             record
               ? `<a class="btn btn-ghost btn-sm" href="/records/${encodeURIComponent(
                   record._id
-                )}/print" target="_blank" rel="noopener">신청서</a>`
+                )}/print" target="_blank" rel="noopener">학생지도비 신청서</a>`
               : ""
           }
         </div>
@@ -826,6 +843,11 @@ function startEditing(prefillFromSelf) {
   updateRespondBtnVisibility();
   document.getElementById("avail-grid").classList.add("editing");
   document.getElementById("edit-tool-hint").textContent = TOOL_HINTS[ST.editTool];
+  const hostLegend = document.getElementById("edit-host-legend");
+  if (hostLegend) {
+    const has = !ST.isOwner && ST.event.ownerId && ST.responseSets[ST.event.ownerId];
+    hostLegend.style.display = has ? "" : "none";
+  }
   const autofillBtn = document.getElementById("autofill-btn");
   if (autofillBtn) {
     autofillBtn.style.display = ST.googleCalendarEnabled && ST.currentUser ? "" : "none";
