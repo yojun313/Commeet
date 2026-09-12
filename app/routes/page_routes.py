@@ -3,7 +3,13 @@ import json
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
-from app.config import GOOGLE_CALENDAR_ENABLED, GUIDANCE_FEE_RATES
+from app.config import (
+    ALLOWED_EMAIL_DOMAIN,
+    GOOGLE_CALENDAR_ENABLED,
+    GUIDANCE_FEE_RATES,
+    RESTRICT_TO_POSTECH,
+)
+from app.core.clientip import is_postech_request
 from app.core.redirects import redirect_to_sign_in, safe_next
 from app.core.serialize import jsonable
 from app.core.templates import templates
@@ -39,8 +45,15 @@ def _records_config_json(user: dict | None) -> str:
 @router.get("/")
 async def landing(request: Request):
     user = await get_optional_user(request)
+    # 외부인(교내 IP도, 교내 계정 로그인도 아님)에게는 만들기 버튼 대신
+    # 안내를 보여 줍니다. 실제 차단은 API가 합니다 (event_routes).
+    can_create = not RESTRICT_TO_POSTECH or is_postech_request(
+        request, user, domain=ALLOWED_EMAIL_DOMAIN
+    )
     return templates.TemplateResponse(
-        request=request, name="landing.html", context={"user": user}
+        request=request,
+        name="landing.html",
+        context={"user": user, "can_create": can_create},
     )
 
 
@@ -75,10 +88,13 @@ async def contacts(request: Request):
 
 
 @router.get("/records/{record_id}/print")
-async def record_print_page(record_id: str, request: Request):
-    """Print-ready 학생지도비 신청서. Rendered server-side so Ctrl+P works on
-    a fully laid-out page with no fetch flash - one form per settlement,
-    since 컴공/무은재 amounts are filed separately."""
+async def record_print_page(record_id: str, request: Request, aff: str | None = None):
+    """Print-ready 학생지도비 신청서. Rendered server-side so Ctrl+P works.
+
+    신청서는 제출처별로 한 장씩입니다 - 컴공/무은재는 따로 결재하므로.
+    `?aff=cse|muunjae`를 주면 그 제출처의 신청서만 렌더합니다: 두 곳에 내는
+    경우 각각 별도 파일(PDF)로 저장해야 하기 때문입니다.
+    """
     user = await get_optional_user(request)
     if not user:
         return redirect_to_sign_in(request)
@@ -95,18 +111,33 @@ async def record_print_page(record_id: str, request: Request):
     present = [a for a in record["attendees"] if a.get("present")]
     forms = []
     for index, settlement in enumerate(record["settlements"]):
+        target = settlement.get("affiliation")
+        if aff and target != aff:
+            continue
+
+        # 신청서에 올라갈 사람. 새 방식(lines가 있는 정산)에서는 무은재생이
+        # 컴공 제출분에도 올라갑니다 - 컴공에서 절반을 지원하니까요. 옛
+        # 기록(lines 없음)은 저장 당시 규칙대로 자기 소속 신청서에만.
+        if settlement.get("lines"):
+            if target == "cse":
+                people = [
+                    a for a in present if a.get("affiliation") in ("cse", "muunjae")
+                ]
+            else:
+                people = [a for a in present if a.get("affiliation") == target]
+        else:
+            people = [a for a in present if a.get("affiliation") == target]
+
+        cap = settlement.get("capAmount") or (
+            (settlement.get("unitPrice") or 0) * (settlement.get("headcount") or 0)
+        )
         forms.append(
             {
                 "index": index,
                 "settlement": settlement,
-                "affiliationLabel": record_service.AFFILIATION_LABELS.get(
-                    settlement.get("affiliation"), ""
-                ),
-                "attendees": [
-                    a
-                    for a in present
-                    if a.get("affiliation") == settlement.get("affiliation")
-                ],
+                "capAmount": cap,
+                "affiliationLabel": record_service.AFFILIATION_LABELS.get(target, ""),
+                "attendees": people,
             }
         )
 
@@ -119,6 +150,7 @@ async def record_print_page(record_id: str, request: Request):
             "forms": forms,
             "present": present,
             "note_categories": record_service.NOTE_CATEGORIES,
+            "affiliation_labels": record_service.AFFILIATION_LABELS,
         },
     )
 

@@ -273,7 +273,8 @@
       </table>
 
       <p class="mj-foot">
-        - 학생지도비: {{ "{:,}".format(form.settlement.unitPrice or 0) }}원*{{ form.settlement.headcount }}회 / 대학 법인카드 사용
+        {% set ln = form.settlement.lines[0] if form.settlement.lines else form.settlement %}
+        - 학생지도비: {{ "{:,}".format(ln.unitPrice or 0) }}원*{{ ln.headcount }}회 / 대학 법인카드 사용
       </p>
     </div>
 
@@ -319,11 +320,12 @@
             <th>집행액</th>
             <td class="amount">
               {{ "{:,}".format(form.settlement.amount or 0) }}원
-              {# 상한(단가x인원)대로 집행했을 때만 산식을 함께 적습니다 - 실제
-                 결제가 더 적었다면 산식이 금액과 어긋나 보이기 때문입니다. #}
-              {% if form.settlement.amount == (form.settlement.unitPrice or 0) * (form.settlement.headcount or 0) %}
+              {# 상한대로 집행했을 때만 산식을 함께 적습니다 - 실제 결제가 더
+                 적었다면 산식이 금액과 어긋나 보이기 때문입니다. 무은재생이
+                 섞이면 단가가 두 종류라(lines) 줄별로 적습니다. #}
+              {% if form.settlement.amount == form.capAmount %}
               <span style="font-weight: 400; color: #555;">
-                ({{ "{:,}".format(form.settlement.unitPrice or 0) }}원 &times; {{ form.settlement.headcount }}명)
+                ({% if form.settlement.lines %}{% for ln in form.settlement.lines %}{{ "{:,}".format(ln.unitPrice) }}원 &times; {{ ln.headcount }}명{% if not loop.last %} + {% endif %}{% endfor %}{% else %}{{ "{:,}".format(form.settlement.unitPrice or 0) }}원 &times; {{ form.settlement.headcount }}명{% endif %})
               </span>
               {% endif %}
             </td>
@@ -356,7 +358,8 @@
                   <tr>
                     <td>{{ a.name }}</td>
                     <td>{{ a.studentId or "-" }}</td>
-                    <td>{{ form.affiliationLabel }}</td>
+                    {# 컴공 제출분에 무은재생이 함께 오르므로 소속은 각자 것 #}
+                    <td>{{ affiliation_labels.get(a.affiliation, form.affiliationLabel) }}</td>
                   </tr>
                   {% endfor %}
                 </tbody>

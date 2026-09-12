@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.config import APP_NAME, SESSION_COOKIE_NAME
+from app.core.clientip import get_client_ip
 from app.core.paths import STATIC_DIR
 from app.core.security import read_session_token
 from app.core.templates import templates
@@ -81,7 +82,8 @@ async def access_log_middleware(request: Request, call_next):
             status_code=response.status_code,
             duration_ms=duration_ms,
             user_id=user_id,
-            ip=request.client.host if request.client else None,
+            # nginx 뒤에서는 client.host가 늘 127.0.0.1 - 실제 주소로 기록
+            ip=get_client_ip(request) or None,
             user_agent=request.headers.get("user-agent"),
         )
     )

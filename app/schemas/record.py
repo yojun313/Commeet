@@ -13,11 +13,24 @@ class AttendeeInput(BaseModel):
     present: bool = True
 
 
+class SettlementLine(BaseModel):
+    """신청서 한 장 안의 단가 줄. 무은재생은 컴공·무은재 양쪽에서 절반씩
+    지원받아 컴공 신청서에 단가가 두 종류(3만/1.5만) 섞이므로, 단가×인원을
+    줄 단위로 둡니다."""
+
+    label: str = ""
+    unitPrice: int = 0
+    headcount: int = 0
+
+
 class SettlementInput(BaseModel):
+    # affiliation은 이제 "제출처"입니다 - cse면 컴공에 내는 신청서.
     affiliation: str = "cse"
     headcount: int = 0
-    unitPrice: int = 0
+    unitPrice: int = 0  # 단가가 한 종류일 때만 의미. 섞이면 lines를 보세요.
     amount: int = 0
+    capAmount: int = 0  # 상한 (lines 합). 실제 집행액(amount)은 이하로 조정 가능.
+    lines: list[SettlementLine] = Field(default_factory=list)
     receiptTime: str = ""
     receiptFile: str | None = None
     receiptName: str = ""

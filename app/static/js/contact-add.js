@@ -226,6 +226,7 @@ const ContactAdd = (() => {
       ["manual-degree", CONTACT_DEGREE_OPTIONS],
       ["manual-status", CONTACT_STATUS_OPTIONS],
       ["manual-relation", CONTACT_RELATION_OPTIONS],
+      ["manual-department", CONTACT_DEPARTMENT_OPTIONS],
     ].forEach(([id, opts]) => fillSelect(id, opts));
 
     byId("contact-search").addEventListener("input", (e) => {

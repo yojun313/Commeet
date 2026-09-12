@@ -4332,7 +4332,9 @@ textarea.rec-textarea-sm {
 /* 고정 폭 컬럼: 참석자 이름 길이가 달라도 상태·버튼 열이 흔들리지 않습니다. */
 .fin-record-row {
   display: grid;
-  grid-template-columns: 190px minmax(0, 1fr) 150px 168px;
+  /* 상태(금액)·버튼 열은 내용 폭만큼. 고정폭(150px/168px)이던 시절에는
+     금액이 길어지면 버튼 밑으로 잘려 들어갔습니다. */
+  grid-template-columns: 190px minmax(0, 1fr) max-content max-content;
   align-items: center;
   gap: 12px;
   padding: 10px 0;
@@ -4367,6 +4369,7 @@ textarea.rec-textarea-sm {
   gap: 8px;
 }
 .fin-record-amount {
+  white-space: nowrap;
   font-size: 13px;
   font-weight: 700;
   color: var(--color-primary);
@@ -4375,6 +4378,8 @@ textarea.rec-textarea-sm {
 .fin-record-actions {
   display: flex;
   gap: 6px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   justify-content: flex-end;
 }
 .fin-record-row.is-done .fin-record-time {

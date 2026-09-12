@@ -6,36 +6,26 @@
 const CONTACT_RELATION_OPTIONS = ["지도학생", "공동지도학생", "연구원", "교수", "기타"];
 const CONTACT_DEGREE_OPTIONS = ["박사", "석사", "통합", "학사"];
 const CONTACT_STATUS_OPTIONS = ["재학", "휴학", "제적", "졸업", "수료", "수료(연구생)", "정학", "휴학-수료(연구생)"];
+// 소속학과 선택지. 컴퓨터공학과(주 사용 학과) -> 무은재학부 -> 나머지 가나다순.
+const CONTACT_DEPARTMENT_OPTIONS = [
+  "컴퓨터공학과",
+  "무은재학부",
+  "기계공학과",
+  "물리학과",
+  "반도체공학과",
+  "산업경영공학과",
+  "생명과학과",
+  "수학과",
+  "신소재공학과",
+  "의공학과",
+  "전자전기공학과",
+  "화학공학과",
+  "화학과",
+];
 
-// One shared filter preference across all three surfaces (연락처 page,
-// new-event contact picker, invite dialog) - persisted so it survives a
-// reload/navigation instead of resetting to "everyone" every time.
-const CONTACT_FILTER_STORAGE_KEY = "pcts_contact_filters";
-
-function loadSavedContactFilters() {
-  try {
-    const raw = localStorage.getItem(CONTACT_FILTER_STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    return {
-      degrees: Array.isArray(parsed.degrees) ? parsed.degrees : null,
-      statuses: Array.isArray(parsed.statuses) ? parsed.statuses : null,
-    };
-  } catch (e) {
-    return null;
-  }
-}
-
-function saveContactFilters(selectedDegrees, selectedStatuses) {
-  try {
-    localStorage.setItem(
-      CONTACT_FILTER_STORAGE_KEY,
-      JSON.stringify({ degrees: [...selectedDegrees], statuses: [...selectedStatuses] })
-    );
-  } catch (e) {
-    // localStorage unavailable (private mode, quota, etc.) - just don't persist.
-  }
-}
+// 필터는 화면을 열 때마다 전체 선택으로 시작합니다. 예전에는 localStorage에
+// 저장해 복원했는데, 지난번에 좁혀 둔 필터가 남아 있으면 "연락처가 사라졌다"
+// 고 보이는 문제가 잦아 저장을 없앴습니다.
 
 /* 선택 목록을 채웁니다. 연락처 "수정" 창과 "추가" 패널이 같은 항목을 쓰므로
    한 곳에 둡니다 (contacts.js / contact-add.js). */
@@ -110,12 +100,6 @@ function setupContactFilterBar(root, contacts, onChange) {
   root.innerHTML = "";
   const selectedDegrees = new Set();
   const selectedStatuses = new Set();
-  const saved = loadSavedContactFilters();
-
-  const persistAndNotify = () => {
-    saveContactFilters(selectedDegrees, selectedStatuses);
-    onChange();
-  };
 
   const makeGroup = (labelText) => {
     const group = document.createElement("div");
@@ -131,12 +115,10 @@ function setupContactFilterBar(root, contacts, onChange) {
   };
 
   buildContactFilterCheckboxes(
-    makeGroup("과정"), CONTACT_DEGREE_OPTIONS, selectedDegrees, persistAndNotify,
-    saved ? saved.degrees : null
+    makeGroup("과정"), CONTACT_DEGREE_OPTIONS, selectedDegrees, onChange, null
   );
   buildContactFilterCheckboxes(
-    makeGroup("학적상태"), CONTACT_STATUS_OPTIONS, selectedStatuses, persistAndNotify,
-    saved ? saved.statuses : null
+    makeGroup("학적상태"), CONTACT_STATUS_OPTIONS, selectedStatuses, onChange, null
   );
 
   return (c) => contactMatchesFilters(c, selectedDegrees, selectedStatuses);

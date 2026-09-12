@@ -677,9 +677,16 @@ function renderEventRecordRows() {
           }</button>
           ${
             record
-              ? `<a class="btn btn-ghost btn-sm" href="/records/${encodeURIComponent(
-                  record._id
-                )}/print" target="_blank" rel="noopener">학생지도비 신청서</a>`
+              ? (record.settlements || [])
+                  .map(
+                    (s) =>
+                      `<a class="btn btn-ghost btn-sm" href="/records/${encodeURIComponent(
+                        record._id
+                      )}/print?aff=${encodeURIComponent(s.affiliation)}" target="_blank" rel="noopener">${
+                        s.affiliation === "muunjae" ? "무은재" : "컴공"
+                      } 신청서</a>`
+                  )
+                  .join("")
               : ""
           }
         </div>

@@ -140,8 +140,8 @@ function persistContactOrder() {
 const DETAIL_LABELS = [
   ["relation", "구분"],
   ["degree", "과정"],
-  ["gradSchool", "대학원"],
-  ["department", "학과"],
+  ["gradSchool", "소속"],
+  ["department", "소속학과"],
   ["year", "학년"],
   ["semester", "학기"],
   ["studentId", "학번"],
@@ -201,7 +201,8 @@ const EDIT_FIELD_IDS = {
 // 수정 창의 선택 목록만 채웁니다 - 추가 패널 쪽은 ContactAdd.init()이 맡습니다.
 function populateEditDropdowns() {
   [["ec-degree", CONTACT_DEGREE_OPTIONS], ["ec-status", CONTACT_STATUS_OPTIONS],
-   ["ec-relation", CONTACT_RELATION_OPTIONS]].forEach(([id, opts]) => fillSelect(id, opts));
+   ["ec-relation", CONTACT_RELATION_OPTIONS],
+   ["ec-department", CONTACT_DEPARTMENT_OPTIONS]].forEach(([id, opts]) => fillSelect(id, opts));
 }
 
 let editingContactId = null;
@@ -212,7 +213,17 @@ function openEditContact(contact) {
   document.getElementById("ec-name").value = contact.name || "";
   document.getElementById("ec-email").value = contact.email || "";
   Object.entries(EDIT_FIELD_IDS).forEach(([field, id]) => {
-    document.getElementById(id).value = contact[field] || "";
+    const el = document.getElementById(id);
+    const value = contact[field] || "";
+    // 소속학과가 드롭다운이 되면서, 목록에 없는 기존 값("컴공", 옛 표기 등)은
+    // 그냥 대입하면 조용히 사라집니다 - 그 값을 선택지로 덧붙여 보존합니다.
+    if (el.tagName === "SELECT" && value && ![...el.options].some((o) => o.value === value)) {
+      const opt = document.createElement("option");
+      opt.value = value;
+      opt.textContent = `${value} (목록 외)`;
+      el.appendChild(opt);
+    }
+    el.value = value;
   });
   openDialog("edit-contact-dialog");
 }

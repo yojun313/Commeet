@@ -3,6 +3,8 @@ from datetime import datetime
 from bson import ObjectId
 from fastapi import APIRouter, HTTPException, Request, status
 
+from app.config import ALLOWED_EMAIL_DOMAIN, RESTRICT_TO_POSTECH
+from app.core.clientip import is_postech_request
 from app.core.ids import to_object_id
 from app.core.serialize import jsonable
 from app.db import events_col
@@ -21,9 +23,28 @@ from app.services.auth_service import get_optional_user, get_user_by_id, require
 router = APIRouter(prefix="/api/events", tags=["events"])
 
 
+def _require_member_to_create(request: Request, user: dict | None) -> None:
+    """외부인의 일정 생성을 막습니다 (RESTRICT_TO_POSTECH).
+
+    응답·수정은 그대로 둡니다 - 외부 참가자가 초대받은 일정에 시간을 적는
+    것이 이 서비스의 핵심 흐름이라서요. 막는 것은 "새 일정을 만드는 것"
+    뿐입니다.
+    """
+    if not RESTRICT_TO_POSTECH:
+        return
+    if is_postech_request(request, user, domain=ALLOWED_EMAIL_DOMAIN):
+        return
+    raise HTTPException(
+        status_code=403,
+        detail=f"교내 네트워크 또는 @{ALLOWED_EMAIL_DOMAIN} 계정으로 로그인해야 "
+        "일정을 만들 수 있습니다. 초대받은 일정에는 그대로 응답할 수 있습니다.",
+    )
+
+
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_event(payload: EventPayload, request: Request):
     owner = await get_optional_user(request)
+    _require_member_to_create(request, owner)
     event = await event_service.create_event(payload, owner)
     return {
         "eventId": str(event["_id"]),
@@ -336,6 +357,8 @@ async def duplicate_event(
     event_id: str, payload: DuplicateEventPayload, request: Request
 ):
     user = await require_user(request)
+    # 복제도 새 일정을 만드는 것이므로 같은 제한을 받습니다.
+    _require_member_to_create(request, user)
     event = await event_service.get_event_by_either_id(event_id)
     if event is None:
         raise HTTPException(status_code=404, detail="이벤트를 찾을 수 없습니다")

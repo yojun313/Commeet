@@ -27,7 +27,19 @@ SESSION_MAX_AGE = 60 * 60 * 24 * 30  # 30 days
 # RESTRICT_SIGNUP_DOMAIN is on (the default), it is additionally limited to
 # ALLOWED_EMAIL_DOMAIN; turn it off to let any email address register.
 ALLOWED_EMAIL_DOMAIN = os.getenv("ALLOWED_EMAIL_DOMAIN", "postech.ac.kr")
-RESTRICT_SIGNUP_DOMAIN = _bool("RESTRICT_SIGNUP_DOMAIN", "true")
+# 포스텍 구성원 제한. 켜면 두 가지가 잠깁니다:
+#   1) 가입: ALLOWED_EMAIL_DOMAIN 주소로만 (기존 동작)
+#   2) 일정 생성: 교내 IP(141.223.*)이거나 그 도메인 계정으로 로그인한 경우만.
+#      외부인은 초대받은 일정에 응답만 할 수 있습니다.
+# 예전 이름(RESTRICT_SIGNUP_DOMAIN)도 계속 읽으므로 기존 .env는 그대로 동작합니다.
+RESTRICT_TO_POSTECH = _bool(
+    "RESTRICT_TO_POSTECH", os.getenv("RESTRICT_SIGNUP_DOMAIN", "true")
+)
+# 이전 이름을 쓰던 코드·템플릿을 위한 별칭.
+RESTRICT_SIGNUP_DOMAIN = RESTRICT_TO_POSTECH
+
+# 교내로 인정하는 IP 접두어 (pcss와 같은 기준).
+POSTECH_IP_PREFIXES = ("141.223.",)
 OTP_TTL_MINUTES = 10
 OTP_MAX_TRIES = 5
 

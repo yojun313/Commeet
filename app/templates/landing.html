@@ -12,9 +12,16 @@
     <div class="cta-row">
       {% if user %}
       <a class="btn btn-primary" href="/home" style="padding: 14px 28px; font-size: 15px;">대시보드 열기</a>
-      {% else %}
+      {% elif can_create %}
       <button class="btn btn-primary" id="landing-create-btn" style="padding: 14px 28px; font-size: 15px;">일정 만들기</button>
       <span class="cta-caption">무료입니다. 로그인 없이 바로 만들 수 있어요.</span>
+      {% else %}
+      {# 외부 네트워크의 비로그인 사용자. 만들기는 막히지만 초대 응답은 됩니다. #}
+      <a class="btn btn-primary" href="{{ sign_in_url(request) }}" style="padding: 14px 28px; font-size: 15px;">로그인</a>
+      <span class="cta-caption">
+        일정 만들기는 교내 네트워크 또는 @{{ ALLOWED_EMAIL_DOMAIN }} 계정 로그인이 필요합니다.
+        초대받은 일정에는 링크로 바로 응답할 수 있습니다.
+      </span>
       {% endif %}
     </div>
   </div>
@@ -92,7 +99,7 @@
 {% endblock %}
 
 {% block extra_scripts %}
-{% if not user %}
+{% if not user and can_create %}
 <script src="{{ asset('js/markdown.js') }}"></script>
 <script src="{{ asset('js/new-event.js') }}"></script>
 <script>

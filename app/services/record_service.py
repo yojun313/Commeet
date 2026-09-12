@@ -134,22 +134,55 @@ async def _resolve_attendees(
 
 
 def compute_settlements(attendees: list[dict]) -> list[dict]:
-    """Groups present attendees by 소속 into one settlement each, since the
-    two are paid on separate cards and filed as separate 신청서."""
+    """제출처(컴공/무은재)별로 신청서 하나씩 만듭니다.
+
+    지원 규칙:
+      - 컴공 학생: 컴공에서 30,000원
+      - 무은재 학생: 컴공 15,000원 + 무은재 15,000원 (반반)
+
+    그래서 무은재 학생은 **두 신청서에 모두** 올라갑니다. 예: 컴공생 1명 +
+    무은재생 1명이면 컴공 제출분 상한 45,000원, 무은재 제출분 15,000원.
+    """
+    present = [a for a in attendees if a.get("present")]
+    cse = [a for a in present if a.get("affiliation") == "cse"]
+    mj = [a for a in present if a.get("affiliation") == "muunjae"]
+    rate_cse = GUIDANCE_FEE_RATES.get("cse", 0)
+    rate_mj = GUIDANCE_FEE_RATES.get("muunjae", 0)
+
     out = []
-    for aff in ("cse", "muunjae"):
-        people = [
-            a for a in attendees if a.get("present") and a.get("affiliation") == aff
-        ]
-        if not people:
-            continue
-        rate = GUIDANCE_FEE_RATES.get(aff, 0)
+
+    # 컴공 제출분 - 컴공생 전액 + 무은재생 절반
+    lines = []
+    if cse:
+        lines.append({"label": "컴퓨터공학과 학생", "unitPrice": rate_cse, "headcount": len(cse)})
+    if mj:
+        lines.append({"label": "무은재학부 학생", "unitPrice": rate_mj, "headcount": len(mj)})
+    if lines:
+        cap = sum(ln["unitPrice"] * ln["headcount"] for ln in lines)
         out.append(
             {
-                "affiliation": aff,
-                "headcount": len(people),
-                "unitPrice": rate,
-                "amount": rate * len(people),
+                "affiliation": "cse",
+                "headcount": len(cse) + len(mj),
+                "unitPrice": lines[0]["unitPrice"] if len(lines) == 1 else 0,
+                "amount": cap,
+                "capAmount": cap,
+                "lines": lines,
+                "receiptFile": None,
+                "receiptTime": "",
+            }
+        )
+
+    # 무은재 제출분 - 무은재생 절반
+    if mj:
+        cap = rate_mj * len(mj)
+        out.append(
+            {
+                "affiliation": "muunjae",
+                "headcount": len(mj),
+                "unitPrice": rate_mj,
+                "amount": cap,
+                "capAmount": cap,
+                "lines": [{"label": "무은재학부 학생", "unitPrice": rate_mj, "headcount": len(mj)}],
                 "receiptFile": None,
                 "receiptTime": "",
             }

@@ -30,6 +30,33 @@ function show(value, isError = false) {
   out.classList.toggle("error", isError);
   out.textContent = typeof value === "string" ? value : JSON.stringify(value, null, 2);
 }
+
+/* 필드 경로 -> 사람이 읽는 항목 이름. 결과를 보여 줄 때 씁니다. */
+const FIELD_LABEL = {
+  [FIELD_MAP.academic]: "학업지도",
+  [FIELD_MAP.life]: "생활지도",
+  [FIELD_MAP.career]: "진로지도",
+  [FIELD_MAP.etc]: "기타사항",
+};
+
+/* pageFill의 결과를 한 줄 요약으로 바꿉니다.
+
+   예전에는 결과 객체(JSON)를 그대로 회색 상자에 덤프해서, 성공해도 내부
+   경로(/GS_DT_LIST/...)가 잔뜩 뜨는 것이 오류처럼 보였습니다. 전부 OK면
+   짧은 성공 문구만, 문제가 있는 항목이 있으면 그 항목만 이름으로 짚습니다. */
+function showFillResult(result) {
+  if (!result || result.error) {
+    return show((result && result.error) || "실행하지 못했습니다.", true);
+  }
+  const bad = (result.report || []).filter((r) => r.status !== "OK");
+  if (!bad.length) {
+    return show(`${result.filled}개 항목을 채웠습니다. 확인 후 POVIS에서 저장을 눌러 주세요.`);
+  }
+  const names = bad
+    .map((r) => `${FIELD_LABEL[r.path] || r.path}: ${r.status}`)
+    .join(", ");
+  show(`${result.filled}개 항목을 채웠지만 문제가 있습니다 — ${names}`, true);
+}
 function clearOut() { out.hidden = true; out.textContent = ""; }
 function view(id, on) { $(id).hidden = !on; }
 
@@ -262,7 +289,7 @@ async function fillPovis() {
     return show("이 학생의 면담 내용이 비어 있어 채울 것이 없습니다.", true);
   }
   show("채우는 중…");
-  show(await runInPage(pageFill, [mapping]));
+  showFillResult(await runInPage(pageFill, [mapping]));
 }
 
 // ---------------------------------------------------------------------------
@@ -454,7 +481,11 @@ $("students").addEventListener("change", (e) => {
 });
 
 $("fill").addEventListener("click", fillPovis);
-$("restore").addEventListener("click", async () => show(await runInPage(pageRestore)));
+$("restore").addEventListener("click", async () => {
+  const r = await runInPage(pageRestore);
+  if (r && r.error) show(r.error, true);
+  else show(`${(r && r.restored) || 0}개 항목을 원래 값으로 되돌렸습니다.`);
+});
 $("scan").addEventListener("click", async () => {
   show("스캔 중…");
   show(await runInPage(pageScan));

@@ -135,6 +135,17 @@ const RecordDialog = (() => {
     updateAttendeeCount();
   }
 
+  /* 제출처별 신청서 버튼. 그 제출분이 실제로 있고 기록이 저장된 뒤에만
+     보입니다. 정산이 바뀔 때마다(renderSettlements) 다시 맞춥니다. */
+  function syncPrintButtons() {
+    const has = (aff) => (state.form.settlements || []).some((s) => s.affiliation === aff);
+    const saved = !!state.recordId;
+    const cse = document.getElementById("rec-print-cse");
+    const mj = document.getElementById("rec-print-mj");
+    if (cse) cse.hidden = !(saved && has("cse"));
+    if (mj) mj.hidden = !(saved && has("muunjae"));
+  }
+
   function updateAttendeeCount() {
     const present = state.form.attendees.filter((a) => a.present).length;
     document.getElementById("rec-attendee-count").textContent =
@@ -258,34 +269,61 @@ const RecordDialog = (() => {
 
   /* Recomputes the 소속별 settlements from who is present, keeping whatever the
      host already entered (receipt time, uploaded file) for groups that survive. */
+  /* 제출처(컴공/무은재)별 정산을 참석자에서 다시 계산합니다. 서버
+     record_service.compute_settlements와 같은 규칙입니다:
+       컴공생 = 컴공에서 30,000 / 무은재생 = 컴공 15,000 + 무은재 15,000 (반반)
+     그래서 무은재생은 두 신청서에 모두 올라갑니다. 이미 적어 둔 것(영수증
+     시각·첨부, 직접 줄인 집행액)은 인원이 그대로인 제출분에 한해 지킵니다. */
+  function computeSheets() {
+    const present = state.form.attendees.filter((a) => a.present);
+    const cse = present.filter((a) => a.affiliation === "cse");
+    const mj = present.filter((a) => a.affiliation === "muunjae");
+    const rateCse = FEE_RATES.cse || 0;
+    const rateMj = FEE_RATES.muunjae || 0;
+
+    const sheets = [];
+    const lines = [];
+    if (cse.length) lines.push({ label: "컴퓨터공학과 학생", unitPrice: rateCse, headcount: cse.length });
+    if (mj.length) lines.push({ label: "무은재학부 학생", unitPrice: rateMj, headcount: mj.length });
+    if (lines.length) {
+      sheets.push({ affiliation: "cse", headcount: cse.length + mj.length, lines });
+    }
+    if (mj.length) {
+      sheets.push({
+        affiliation: "muunjae",
+        headcount: mj.length,
+        lines: [{ label: "무은재학부 학생", unitPrice: rateMj, headcount: mj.length }],
+      });
+    }
+    return sheets;
+  }
+
   function syncSettlements() {
     const previous = {};
     (state.form.settlements || []).forEach((s) => {
       previous[s.affiliation] = s;
     });
 
-    const next = [];
-    AFFILIATIONS.forEach(({ value }) => {
-      const people = state.form.attendees.filter((a) => a.present && a.affiliation === value);
-      if (!people.length) return;
-      const rate = FEE_RATES[value] || 0;
-      const old = previous[value] || {};
-      const cap = rate * people.length;
+    const next = computeSheets().map((sheet) => {
+      const cap = sheet.lines.reduce((sum, ln) => sum + ln.unitPrice * ln.headcount, 0);
+      const old = previous[sheet.affiliation] || {};
       // 직접 적은 집행액은 인원이 그대로일 때만 지킵니다 - 인원이 바뀌면
       // 근거(단가 x 인원)가 달라진 것이라 새 상한으로 다시 시작합니다.
       const keepCustom =
-        old.headcount === people.length && old.amount != null && old.amount <= cap;
-      next.push({
-        affiliation: value,
-        headcount: people.length,
-        unitPrice: rate,
+        old.headcount === sheet.headcount && old.amount != null && old.amount <= cap;
+      return {
+        affiliation: sheet.affiliation,
+        headcount: sheet.headcount,
+        unitPrice: sheet.lines.length === 1 ? sheet.lines[0].unitPrice : 0,
         amount: keepCustom ? old.amount : cap,
+        capAmount: cap,
+        lines: sheet.lines,
         // 영수증 시각의 기본값은 면담 종료 시각입니다 - 결제는 보통 면담을
         // 마치며 하니까요. 이미 적어 둔 값이 있으면 그대로 둡니다.
         receiptTime: old.receiptTime || state.form.endTime || "",
         receiptFile: old.receiptFile || null,
         receiptName: old.receiptName || "",
-      });
+      };
     });
 
     // Staged uploads are keyed by index, which just shifted under them.
@@ -314,14 +352,22 @@ const RecordDialog = (() => {
     list.forEach((s, i) => {
       const staged = state.pendingReceipts[i];
       const attached = staged ? staged.name : s.receiptName || (s.receiptFile ? "첨부됨" : "");
-      const cap = (s.unitPrice || 0) * (s.headcount || 0);
+      // 새 정산은 lines에 단가별 줄이 있고(무은재생 반반 지원), 옛 기록은
+      // 단가 x 인원 하나뿐입니다.
+      const lines = s.lines && s.lines.length
+        ? s.lines
+        : [{ label: "", unitPrice: s.unitPrice || 0, headcount: s.headcount || 0 }];
+      const cap = s.capAmount || lines.reduce((t, ln) => t + ln.unitPrice * ln.headcount, 0);
+      const calcText = lines
+        .map((ln) => `${won(ln.unitPrice)} × ${ln.headcount}명`)
+        .join(" + ");
       const node = el(`
         <div class="rec-settlement">
           <div class="rec-settlement-head">
-            <span class="rec-settlement-aff">${esc(AFF_LABEL[s.affiliation] || s.affiliation)}</span>
+            <span class="rec-settlement-aff">${esc(AFF_LABEL[s.affiliation] || s.affiliation)} 제출분</span>
             <span class="rec-settlement-amount">${esc(won(s.amount))}</span>
           </div>
-          <div class="rec-settlement-calc">상한 ${esc(won(s.unitPrice))} &times; ${s.headcount}명 = ${esc(won(cap))}</div>
+          <div class="rec-settlement-calc">상한 ${esc(calcText)} = ${esc(won(cap))}</div>
           <div class="rec-settlement-fields">
             <div class="field">
               <label>집행액 (실제 결제 금액)</label>
@@ -385,6 +431,7 @@ const RecordDialog = (() => {
 
       root.appendChild(node);
     });
+    syncPrintButtons();
   }
 
   /* ------------------------------------------------------------------ */
@@ -617,7 +664,7 @@ const RecordDialog = (() => {
     document.getElementById("rec-place").value = state.form.place;
     document.getElementById("rec-professor").value = state.form.professorName;
     document.getElementById("rec-delete").hidden = !state.recordId;
-    document.getElementById("rec-print").hidden = !state.recordId;
+    syncPrintButtons();
 
     renderAttendees();
     renderNotes();
@@ -693,7 +740,7 @@ const RecordDialog = (() => {
       state.pendingReceipts = {};
 
       document.getElementById("rec-delete").hidden = false;
-      document.getElementById("rec-print").hidden = false;
+      syncPrintButtons();
       showSnackbar("면담 기록을 저장했습니다.", "success");
       if (onSaved) await onSaved();
       // Re-read so uploaded receipts come back with their stored filenames.
@@ -763,22 +810,27 @@ const RecordDialog = (() => {
 
     document.getElementById("rec-save").addEventListener("click", saveForm);
     document.getElementById("rec-delete").addEventListener("click", deleteRecord);
-    document.getElementById("rec-print").addEventListener("click", async () => {
+    // 신청서는 제출처(컴공/무은재)마다 별도 파일이어야 해서 버튼이 둘입니다.
+    const openPrint = async (aff) => {
       // 신청서는 **저장된** 기록을 서버가 그려 주는 화면이라, 아직 저장하지
-      // 않았으면 열 수 없습니다. 그대로 열면 "페이지를 찾을 수 없습니다"가
-      // 뜨고 무엇이 잘못됐는지 알 수 없습니다.
+      // 않았으면 열 수 없습니다.
       if (!state.recordId) {
         showSnackbar("먼저 저장한 뒤에 학생지도비 신청서를 열 수 있습니다.", "error");
         return;
       }
-      // 신청서는 **저장된** 내용을 서버가 그립니다. 고치는 중에 그냥 열면
-      // 방금 적은 것이 빠진 서류가 나오는데, 새 탭이라 눈치채기도 어렵습니다.
+      // 고치는 중에 그냥 열면 방금 적은 것이 빠진 서류가 나옵니다.
       if (hasUnsavedChanges()) {
         if (!confirm("저장하지 않은 변경이 있습니다.\n저장한 뒤 학생지도비 신청서를 열까요?")) return;
         if (!(await saveForm())) return; // 저장이 실패하면 열지 않습니다
       }
-      window.open(`/records/${state.recordId}/print`, "_blank", "noopener");
-    });
+      window.open(
+        `/records/${state.recordId}/print?aff=${encodeURIComponent(aff)}`,
+        "_blank",
+        "noopener"
+      );
+    };
+    document.getElementById("rec-print-cse").addEventListener("click", () => openPrint("cse"));
+    document.getElementById("rec-print-mj").addEventListener("click", () => openPrint("muunjae"));
   }
 
   /** 한 면담의 기록 폼을 엽니다. `changed`는 저장/삭제 후 불립니다. */
