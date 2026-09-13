@@ -33,11 +33,14 @@
   <div class="card card-pad" id="ev-records-card" style="display: none; margin-top: 16px;">
     <div class="fin-records-head">
       <h2 style="font-size: 17px; margin: 0;">면담 기록 · 학생지도비</h2>
-      <span class="hint" id="ev-records-summary"></span>
+      <span style="display: inline-flex; align-items: center; gap: 10px;">
+        <span class="hint" id="ev-records-summary"></span>
+        <button class="btn btn-secondary btn-sm" type="button" id="ev-records-add">면담 기록 직접 추가</button>
+      </span>
     </div>
     <p class="hint" style="margin-top: 0;">
       확정된 시간대별로 면담 내용을 기록하고 정산 요청 양식을 만듭니다.
-      기록은 면담이 끝난 뒤에 작성하는 것을 권합니다.
+      일정이 확정되기 전이라도 "면담 기록 직접 추가"로 작성할 수 있습니다.
     </p>
     <div id="ev-records-list" class="fin-records-list"></div>
   </div>

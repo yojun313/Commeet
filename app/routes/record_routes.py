@@ -62,9 +62,10 @@ async def get_draft(request: Request, eventId: str, meetingStart: datetime):
 
     try:
         return jsonable(await record_service.build_draft(event, user, meetingStart))
-    except record_service.MeetingNotFound as exc:
+    except record_service.RecordsDisabled as exc:
         raise HTTPException(
-            status_code=404, detail="확정된 약속을 찾을 수 없습니다."
+            status_code=409,
+            detail="이 일정은 지도 면담 기능이 꺼져 있습니다. 일정 정보 수정에서 켜 주세요.",
         ) from exc
 
 

@@ -11,7 +11,7 @@ produce two forms, and a record holds a list of settlements rather than a
 single amount.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from bson import ObjectId
 
@@ -154,9 +154,13 @@ def compute_settlements(attendees: list[dict]) -> list[dict]:
     # 컴공 제출분 - 컴공생 전액 + 무은재생 절반
     lines = []
     if cse:
-        lines.append({"label": "컴퓨터공학과 학생", "unitPrice": rate_cse, "headcount": len(cse)})
+        lines.append(
+            {"label": "컴퓨터공학과 학생", "unitPrice": rate_cse, "headcount": len(cse)}
+        )
     if mj:
-        lines.append({"label": "무은재학부 학생", "unitPrice": rate_mj, "headcount": len(mj)})
+        lines.append(
+            {"label": "무은재학부 학생", "unitPrice": rate_mj, "headcount": len(mj)}
+        )
     if lines:
         cap = sum(ln["unitPrice"] * ln["headcount"] for ln in lines)
         out.append(
@@ -182,7 +186,13 @@ def compute_settlements(attendees: list[dict]) -> list[dict]:
                 "unitPrice": rate_mj,
                 "amount": cap,
                 "capAmount": cap,
-                "lines": [{"label": "무은재학부 학생", "unitPrice": rate_mj, "headcount": len(mj)}],
+                "lines": [
+                    {
+                        "label": "무은재학부 학생",
+                        "unitPrice": rate_mj,
+                        "headcount": len(mj),
+                    }
+                ],
                 "receiptFile": None,
                 "receiptTime": "",
             }
@@ -234,8 +244,24 @@ def find_meeting(event: dict, meeting_start: datetime) -> dict:
 
 
 async def build_draft(event: dict, owner: dict, meeting_start: datetime) -> dict:
-    """The prefilled form for a meeting that has no record yet."""
-    meeting = find_meeting(event, meeting_start)
+    """The prefilled form for a meeting that has no record yet.
+
+    확정된 약속이면 참석자·예정 시각을 미리 채우고, 확정된 약속이 아니면
+    (아무도 응답하기 전이거나 확정 전) **빈 초안**을 내어 줍니다 - 지도 면담
+    기능을 켠 일정에서는 실제 면담이 앱 밖에서 먼저 잡히는 일이 흔해서,
+    기록은 일정 확정을 기다리지 않습니다. save_record는 원래 확정 여부를
+    보지 않으므로 저장 경로는 그대로입니다.
+    """
+    if not event_service.records_enabled(event):
+        raise RecordsDisabled()
+    try:
+        meeting = find_meeting(event, meeting_start)
+    except MeetingNotFound:
+        meeting = {
+            "start": meeting_start,
+            "end": meeting_start + timedelta(minutes=30),
+            "participants": [],
+        }
     attendees = await _resolve_attendees(
         event, owner, meeting.get("participants") or []
     )

@@ -459,6 +459,31 @@ function renderGridCells() {
   });
 }
 
+/* 초대만 받고 아직 응답하지 않은 사람들 (주최자에게만 서버가 내려 줌 -
+   event_routes의 pendingInvitees, "메일 보내기"의 리마인더 대상과 같은 계산).
+   응답자 아래에 회색으로 붙여, 누구를 재촉해야 하는지 목록에서 바로 보입니다. */
+function appendPendingInvitees(list) {
+  const pending = ST.event.pendingInvitees || [];
+  if (!pending.length) return;
+
+  const head = document.createElement("div");
+  head.className = "respondent-pending-head";
+  head.textContent = `미응답 (${pending.length})`;
+  list.appendChild(head);
+
+  pending.forEach((p) => {
+    const row = document.createElement("div");
+    // 클릭할 것이 없습니다 - 표시할 가용시간이 아직 없으니까요.
+    row.className = "respondent-row respondent-pending";
+    row.title = `${p.email} - 아직 응답하지 않았습니다`;
+    row.innerHTML = `
+      <span class="avatar sm">${escapeHtml((p.name || p.email || "?")[0].toUpperCase())}</span>
+      <span class="name">${escapeHtml(p.name || p.email)}<span class="respondent-pending-tag">미응답</span></span>
+    `;
+    list.appendChild(row);
+  });
+}
+
 function renderRespondents() {
   const list = document.getElementById("respondents-list");
   const responses = ST.event.responses || {};
@@ -467,6 +492,7 @@ function renderRespondents() {
 
   if (!keys.length) {
     list.innerHTML = `<p class="hint">아직 응답이 없습니다. 첫 응답자가 되어보세요!</p>`;
+    appendPendingInvitees(list);
     // Still size the calendar - it has to fit the viewport whether or not
     // anyone has answered yet.
     syncLayoutHeights();
@@ -506,6 +532,7 @@ function renderRespondents() {
     list.appendChild(row);
   });
 
+  appendPendingInvitees(list);
   syncLayoutHeights();
 }
 
@@ -621,8 +648,9 @@ function recordsEnabled() {
 async function loadEventRecords() {
   const card = document.getElementById("ev-records-card");
   if (!card) return;
-  // 기능을 끈 일정, 남의 일정에서는 보이지 않고, 확정 전에는 걸 약속이 없습니다.
-  if (!recordsEnabled() || !ST.isOwner || !confirmedMeetings().length) {
+  // 기능을 끈 일정과 남의 일정에서만 숨깁니다. 확정 전에도 보입니다 -
+  // "면담 기록 직접 추가"로 확정을 기다리지 않고 쓸 수 있습니다.
+  if (!recordsEnabled() || !ST.isOwner) {
     card.style.display = "none";
     return;
   }
@@ -644,6 +672,52 @@ function renderEventRecordRows() {
   let done = 0;
 
   root.innerHTML = "";
+
+  // 확정된 약속에 걸리지 않은 기록(직접 추가분). 확정 전에 쓴 기록이거나,
+  // 재확정으로 시간대가 바뀌어 떨어져 나온 기록입니다 - 안 보이면 지울 수도
+  // 고칠 수도 없게 되므로 반드시 목록에 남깁니다.
+  const meetingKeys = new Set(meetings.map((m) => slotKey(m.start)));
+  const adhoc = [...recordsByStart.entries()]
+    .filter(([k]) => !meetingKeys.has(k))
+    .map(([, r]) => r)
+    .sort((a, b) => new Date(a.meetingStart) - new Date(b.meetingStart));
+
+  adhoc.forEach((record) => {
+    const names = (record.attendees || []).map((a) => a.name).filter(Boolean);
+    const amount = (record.settlements || []).reduce((sum, x) => sum + (x.amount || 0), 0);
+    const row = el(`
+      <div class="fin-record-row is-done">
+        <div class="fin-record-when">
+          <span class="fin-record-time">${escapeHtml(record.date || "")} ${escapeHtml(record.startTime || "")}</span>
+          <span class="badge badge-muted">직접 추가</span>
+        </div>
+        <div class="fin-record-people" title="${escapeHtml(names.join(", "))}">${escapeHtml(names.join(", ")) || "-"}</div>
+        <div class="fin-record-state">
+          <span class="badge badge-muted">작성됨</span><span class="fin-record-amount">${escapeHtml(amount.toLocaleString("ko-KR"))}원</span>
+        </div>
+        <div class="fin-record-actions">
+          <button class="btn btn-ghost btn-sm" type="button" data-write>면담 정보 수정</button>
+          ${(record.settlements || [])
+            .map(
+              (s) =>
+                `<a class="btn btn-ghost btn-sm" href="/records/${encodeURIComponent(record._id)}/print?aff=${encodeURIComponent(s.affiliation)}" target="_blank" rel="noopener">${s.affiliation === "muunjae" ? "무은재" : "컴공"} 신청서</a>`
+            )
+            .join("")}
+        </div>
+      </div>
+    `);
+    row.querySelector("[data-write]").addEventListener("click", () =>
+      RecordDialog.open(ST.eventId, record.meetingStart, loadEventRecords)
+    );
+    root.appendChild(row);
+  });
+
+  if (!meetings.length && !adhoc.length) {
+    root.appendChild(
+      el('<p class="hint" style="margin:0;">아직 기록이 없습니다. 위의 "면담 기록 직접 추가"로 시작하세요.</p>')
+    );
+  }
+
   meetings.forEach((m) => {
     const record = recordsByStart.get(slotKey(m.start));
     if (record) done++;
@@ -698,8 +772,9 @@ function renderEventRecordRows() {
     root.appendChild(row);
   });
 
+  const total = meetings.length + adhoc.length;
   document.getElementById("ev-records-summary").textContent =
-    `${meetings.length}건 중 ${done}건 작성됨`;
+    total ? `${total}건 중 ${done + adhoc.length}건 작성됨` : "";
 }
 
 /* ---------------------------------------------------------------------- */
@@ -1528,6 +1603,17 @@ function wireDynamicButtons() {
     const messageBtn = document.getElementById("message-btn");
     messageBtn.style.display = "";
     messageBtn.addEventListener("click", openMessageDialog);
+    const addRecordBtn = document.getElementById("ev-records-add");
+    if (addRecordBtn) {
+      addRecordBtn.addEventListener("click", () => {
+        // 확정된 약속 없이 쓰는 기록. 식별자(meetingStart)는 "지금"으로 잡고
+        // - (일정, 시각) 고유 키라 겹칠 일이 사실상 없습니다 - 실제 면담
+        // 일시·시간은 폼에서 고칩니다.
+        const now = new Date();
+        now.setSeconds(0, 0);
+        RecordDialog.open(ST.eventId, now.toISOString(), loadEventRecords);
+      });
+    }
     document.getElementById("finalize-link-btn").style.display = "";
     // Only swap the label span's text, not the whole button - the button
     // also contains an SVG icon that a plain .textContent assignment here

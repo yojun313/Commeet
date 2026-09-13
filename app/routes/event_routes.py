@@ -119,6 +119,14 @@ async def get_event(event_id: str, request: Request, guestName: str | None = Non
     result["isOwner"] = is_owner
     result["isClosed"] = bool(event.get("isClosed"))
 
+    if is_owner:
+        # 사이드바의 "미응답" 섹션용. 초대는 받았는데 아직 응답하지 않은
+        # 사람들 - "메일 보내기"가 쓰는 것과 같은 계산(mail_targets)이라
+        # 리마인더 대상과 화면 목록이 어긋나지 않습니다. 초대 이메일이
+        # 드러나므로 주최자에게만 내려 줍니다.
+        targets = await event_service.mail_targets(event, viewer)
+        result["pendingInvitees"] = targets["pending"]
+
     if event.get("blindAvailabilityEnabled") and not is_owner:
         result["numResponses"] = None
         result["remindees"] = None

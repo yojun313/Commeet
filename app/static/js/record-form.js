@@ -823,10 +823,33 @@ const RecordDialog = (() => {
         if (!confirm("저장하지 않은 변경이 있습니다.\n저장한 뒤 학생지도비 신청서를 열까요?")) return;
         if (!(await saveForm())) return; // 저장이 실패하면 열지 않습니다
       }
-      window.open(
-        `/records/${state.recordId}/print?aff=${encodeURIComponent(aff)}`,
-        "_blank",
-        "noopener"
+      const url = `/records/${state.recordId}/print?aff=${encodeURIComponent(aff)}`;
+      // 저장 직후에는 방금 올라간 서명·영수증 파일 때문에 서버가 재시작
+      // 중일 수 있습니다(감시 재시작이 남아 있는 배포 환경). 그대로 새 탭을
+      // 열면 브라우저의 Bad Gateway 화면이 떠서 뭐가 잘못됐는지 알 수
+      // 없으므로, 먼저 서버가 응답하는지 확인하고 몇 초 재시도한 뒤 엽니다.
+      //
+      // 탭은 클릭 시점에(동기로) 미리 열어 둡니다 - fetch를 기다린 뒤의
+      // window.open은 팝업 차단에 걸립니다.
+      const win = window.open("about:blank", "_blank");
+      for (let attempt = 0; attempt < 4; attempt++) {
+        try {
+          const r = await fetch(url, { method: "HEAD", credentials: "same-origin" });
+          if (r.ok) {
+            if (win) win.location.href = url;
+            else window.open(url, "_blank"); // 팝업이 막혔다면 차선책
+            return;
+          }
+        } catch (e) {
+          /* 재시작 중 - 접속 자체가 안 됨. 잠시 뒤 다시. */
+        }
+        if (attempt === 0) showSnackbar("학생지도비 신청서를 여는 중입니다…");
+        await new Promise((res) => setTimeout(res, 1500));
+      }
+      if (win) win.close();
+      showSnackbar(
+        "서버가 잠시 준비 중입니다 (저장한 파일 반영). 몇 초 뒤 다시 시도해 주세요.",
+        "error"
       );
     };
     document.getElementById("rec-print-cse").addEventListener("click", () => openPrint("cse"));

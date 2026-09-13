@@ -2150,6 +2150,30 @@ textarea.input {
   min-height: 40px;
   overflow-y: auto;
 }
+/* 초대만 받고 아직 응답하지 않은 사람 - 응답자 아래 회색 구역. */
+.respondent-pending-head {
+  margin: 10px 0 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--color-text-faint);
+  text-transform: uppercase;
+  border-top: 1px solid var(--color-border-light);
+  padding-top: 10px;
+}
+.respondent-row.respondent-pending {
+  opacity: 0.6;
+  cursor: default;
+}
+.respondent-pending-tag {
+  margin-left: 6px;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-faint);
+}
+
 /* 응답자 목록에서 내 줄 표시. 이름과 붙되 이름 자체보다는 흐리게 - 찾기 위한
    표지이지 이름의 일부가 아닙니다. */
 .respondent-me {
