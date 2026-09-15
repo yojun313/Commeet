@@ -12,6 +12,10 @@
     <div class="card card-pad admin-grid-main">
       <div class="admin-card-head">
         <h2>일별 트래픽</h2>
+        <div class="admin-chart-legend">
+          <span><i class="legend-dot legend-bar"></i>요청</span>
+          <span><i class="legend-dot legend-line"></i>순사용자</span>
+        </div>
         <div class="toggle-group" id="admin-traffic-range">
           <button type="button" data-days="7">7일</button>
           <button type="button" class="active" data-days="30">30일</button>
@@ -19,11 +23,51 @@
         </div>
       </div>
       <div id="admin-traffic-chart"></div>
+      <div class="admin-subchart">
+        <h3 class="admin-subhead">시간대별 분포 <span class="hint-inline">(한국 시간)</span></h3>
+        <div id="admin-hourly-chart"></div>
+      </div>
+    </div>
+
+    <div class="card card-pad admin-grid-side">
+      <div class="admin-card-head"><h2>상태코드</h2></div>
+      <div id="admin-status-dist"></div>
+      <h3 class="admin-subhead" style="margin-top: 16px;">최근 오류</h3>
+      <div id="admin-recent-errors"></div>
     </div>
 
     <div class="card card-pad admin-grid-side">
       <div class="admin-card-head"><h2>많이 호출된 경로</h2></div>
       <div class="admin-top-paths" id="admin-top-paths"></div>
+    </div>
+  </div>
+
+  <div class="admin-grid admin-grid-thirds">
+    <div class="card card-pad">
+      <div class="admin-card-head"><h2>느린 엔드포인트</h2><span class="hint-inline">정상 응답 평균, 5회 이상</span></div>
+      <div id="admin-slowest"></div>
+    </div>
+    <div class="card card-pad">
+      <div class="admin-card-head"><h2>활동 상위 사용자</h2></div>
+      <div id="admin-top-users"></div>
+    </div>
+    <div class="card card-pad">
+      <div class="admin-card-head"><h2>브라우저 · 기기</h2></div>
+      <div id="admin-browsers"></div>
+      <div id="admin-devices" style="margin-top: 12px;"></div>
+    </div>
+  </div>
+
+  <div class="admin-grid">
+    <div class="card card-pad admin-grid-main">
+      <div class="admin-card-head">
+        <h2>성장 추이</h2>
+        <div class="admin-chart-legend">
+          <span><i class="legend-dot legend-bar"></i>신규 일정</span>
+          <span><i class="legend-dot legend-bar2"></i>신규 가입</span>
+        </div>
+      </div>
+      <div id="admin-growth-chart"></div>
     </div>
 
     <div class="card card-pad admin-grid-side">

@@ -5,6 +5,7 @@ from fastapi import HTTPException, Request, Response, status
 
 from app.config import (
     ALLOWED_EMAIL_DOMAIN,
+    COOKIE_SECURE,
     OTP_MAX_TRIES,
     OTP_TTL_MINUTES,
     RESTRICT_SIGNUP_DOMAIN,
@@ -268,6 +269,7 @@ def set_session_cookie(response: Response, user_id) -> None:
         max_age=SESSION_MAX_AGE,
         httponly=True,
         samesite="lax",
+        secure=COOKIE_SECURE,
     )
 
 

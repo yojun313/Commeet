@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.config import APP_NAME, SESSION_COOKIE_NAME
+from app.config import APP_NAME, COOKIE_SECURE, SESSION_COOKIE_NAME
 from app.core.clientip import get_client_ip
 from app.core.paths import STATIC_DIR
 from app.core.security import read_session_token
@@ -33,7 +33,9 @@ from app.routes import (
 from app.services import access_log_service, event_service
 from app.services.auth_service import get_optional_user
 
-app = FastAPI(title=APP_NAME)
+# API 문서(/docs, /redoc)와 스키마(/openapi.json)는 노출하지 않습니다 -
+# 운영 서비스라 엔드포인트 목록 자체가 정찰 자료가 됩니다.
+app = FastAPI(title=APP_NAME, docs_url=None, redoc_url=None, openapi_url=None)
 
 app.add_middleware(
     CORSMiddleware,
@@ -58,6 +60,37 @@ async def no_store_api_middleware(request: Request, call_next):
     response = await call_next(request)
     if request.url.path.startswith("/api/"):
         response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    """모든 응답에 붙는 보안 헤더.
+
+    - CSP: 외부 출처의 스크립트/스타일을 차단합니다. 이 앱은 CDN 없이 전부
+      self-host라 잃는 것이 없고, XSS가 생겨도 외부 코드 로드와 데이터 반출
+      경로가 막힙니다. 템플릿에 인라인 <script>가 있어 'unsafe-inline'은
+      허용합니다 - 걷어내려면 모든 인라인 스크립트를 파일로 빼야 합니다.
+    - frame-ancestors/X-Frame-Options: 다른 사이트가 이 앱을 iframe에 넣어
+      클릭을 가로채는 것(클릭재킹)을 막습니다. 앱 자신도 iframe을 안 씁니다.
+    - HSTS는 운영(https)에서만 - http 로컬 개발에 붙이면 브라우저가
+      localhost를 https로 강제해 개발이 멈춥니다.
+    """
+    response = await call_next(request)
+    h = response.headers
+    h.setdefault("X-Content-Type-Options", "nosniff")
+    h.setdefault("X-Frame-Options", "DENY")
+    h.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    h.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    h.setdefault(
+        "Content-Security-Policy",
+        "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+        "font-src 'self' data:; connect-src 'self'; object-src 'none'; "
+        "base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+    )
+    if COOKIE_SECURE:
+        h.setdefault("Strict-Transport-Security", "max-age=31536000")
     return response
 
 

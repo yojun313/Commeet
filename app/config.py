@@ -22,6 +22,9 @@ PROFESSOR_EMAIL = os.getenv("PROFESSOR_EMAIL", "g.kim@postech.ac.kr")
 SESSION_SECRET = os.getenv("SESSION_SECRET", "dev-insecure-secret-change-me")
 SESSION_COOKIE_NAME = "pcts_session"
 SESSION_MAX_AGE = 60 * 60 * 24 * 30  # 30 days
+# 운영(https) 배포에서는 쿠키에 Secure를 붙여 평문 HTTP로 새지 않게 합니다.
+# 로컬 개발(http://localhost)은 BASE_URL이 http라 자동으로 꺼집니다.
+COOKIE_SECURE = BASE_URL.startswith("https://")
 
 # Sign-up is always verified by an emailed OTP code. When
 # RESTRICT_SIGNUP_DOMAIN is on (the default), it is additionally limited to

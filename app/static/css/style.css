@@ -3820,6 +3820,9 @@ body.dragging-active * {
   height: 200px;
   display: block;
 }
+/* 메인 트래픽 차트는 옆의 두 카드(상태코드+경로) 높이에 맞춰 여유 있게. */
+#admin-traffic-chart .admin-chart-svg { height: 300px; }
+
 .admin-chart-gridline {
   stroke: var(--color-grid-faint-border);
   stroke-width: 1;
@@ -3831,6 +3834,234 @@ body.dragging-active * {
 .admin-chart-bar {
   fill: var(--color-primary);
 }
+
+/* ---- 대시보드 확장 (지표 카드 부제·차트 범례·상태/오류/막대 목록) ---- */
+.admin-stat-card .admin-stat-label {
+  margin-top: 0;
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+.admin-stat-card .admin-stat-value {
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.admin-stat-sub {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.admin-stat-card.danger {
+  border-color: color-mix(in srgb, var(--color-danger) 35%, var(--color-border-light));
+}
+.admin-stat-card.danger .admin-stat-value {
+  color: var(--color-danger);
+}
+.admin-delta {
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 1px 7px;
+  margin-left: 4px;
+  white-space: nowrap;
+}
+.admin-delta.up { color: var(--color-success); background: color-mix(in srgb, var(--color-success) 12%, transparent); }
+.admin-delta.down { color: var(--color-danger); background: color-mix(in srgb, var(--color-danger) 10%, transparent); }
+.admin-delta.flat { color: var(--color-text-faint); background: var(--color-surface-muted, rgba(0,0,0,0.04)); }
+
+.admin-grid-thirds {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+@media (max-width: 1100px) {
+  .admin-grid-thirds { grid-template-columns: minmax(0, 1fr); }
+}
+
+.admin-chart-legend {
+  display: flex;
+  gap: 14px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  align-items: center;
+}
+.legend-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  margin-right: 5px;
+  vertical-align: -1px;
+}
+.legend-dot.legend-bar { background: var(--color-primary); }
+.legend-dot.legend-bar2 { background: var(--color-success); }
+.legend-dot.legend-line { background: var(--color-warning, #e8a13c); border-radius: 999px; height: 3px; width: 14px; }
+.admin-chart-line {
+  fill: none;
+  stroke: var(--color-warning, #e8a13c);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+  stroke-linejoin: round;
+  opacity: 0.9;
+  pointer-events: none;
+}
+.admin-chart-bar2 { fill: var(--color-success); }
+.admin-chart-bar2:hover { fill: color-mix(in srgb, var(--color-success) 80%, #000); }
+
+.admin-subchart { margin-top: 14px; }
+.admin-subhead {
+  font-size: 13px;
+  margin: 0 0 8px;
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+.hint-inline { font-size: 12px; color: var(--color-text-faint); font-weight: 400; }
+
+.admin-hourly {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 96px;
+}
+.admin-hourly-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+  height: 100%;
+  position: relative;
+}
+.admin-hourly-bar {
+  width: 100%;
+  border-radius: 3px 3px 0 0;
+  background: color-mix(in srgb, var(--color-primary) 75%, transparent);
+  transition: background 0.15s;
+}
+.admin-hourly-bar:hover { background: var(--color-primary); }
+.admin-hourly-label {
+  position: absolute;
+  bottom: -16px;
+  font-size: 10px;
+  color: var(--color-text-faint);
+  white-space: nowrap;
+}
+.admin-subchart .admin-hourly { margin-bottom: 18px; }
+
+.admin-status-bar {
+  display: flex;
+  height: 14px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--color-border-light);
+}
+.admin-status-seg.s2xx, .legend-dot.s2xx, .admin-status-pill.s2xx { background: var(--color-success); }
+.admin-status-seg.s3xx, .legend-dot.s3xx, .admin-status-pill.s3xx { background: var(--color-text-faint); }
+.admin-status-seg.s4xx, .legend-dot.s4xx, .admin-status-pill.s4xx { background: var(--color-warning, #e8a13c); }
+.admin-status-seg.s5xx, .legend-dot.s5xx, .admin-status-pill.s5xx { background: var(--color-danger); }
+.admin-status-legend {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 12px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.admin-status-legend b { color: var(--color-heading); font-weight: 700; }
+.admin-status-legend em { font-style: normal; color: var(--color-text-faint); }
+
+.admin-status-pill {
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 6px;
+  padding: 1px 6px;
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+.admin-error-row, .admin-slow-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--color-border-light);
+  font-size: 13px;
+}
+.admin-error-row:last-child, .admin-slow-row:last-child { border-bottom: none; }
+.admin-error-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+}
+.admin-error-time {
+  color: var(--color-text-faint);
+  font-size: 12px;
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+.admin-method-badge {
+  flex: none;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+  border-radius: 5px;
+  padding: 1px 5px;
+}
+.admin-slow-ms {
+  flex: none;
+  font-weight: 700;
+  color: var(--color-heading);
+  font-variant-numeric: tabular-nums;
+}
+.admin-slow-count {
+  flex: none;
+  color: var(--color-text-faint);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 0;
+  font-size: 13px;
+}
+.admin-bar-name {
+  flex: 0 0 96px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.admin-bar-track {
+  flex: 1;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--color-border-light);
+  overflow: hidden;
+}
+.admin-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--color-primary);
+}
+.admin-bar-count {
+  flex: none;
+  min-width: 52px;
+  text-align: right;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+
 .admin-chart-bar:hover {
   fill: var(--color-primary-hover);
 }

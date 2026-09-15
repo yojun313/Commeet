@@ -4,7 +4,7 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
-from app.config import BASE_URL, GOOGLE_CALENDAR_ENABLED
+from app.config import BASE_URL, COOKIE_SECURE, GOOGLE_CALENDAR_ENABLED
 from app.core.serialize import jsonable
 from app.services import calendar_service
 from app.services.auth_service import require_user
@@ -34,7 +34,10 @@ async def google_connect(request: Request):
 
     state = secrets.token_urlsafe(24)
     response = RedirectResponse(calendar_service.build_authorize_url(state))
-    response.set_cookie(STATE_COOKIE, state, max_age=600, httponly=True, samesite="lax")
+    response.set_cookie(
+        STATE_COOKIE, state, max_age=600, httponly=True, samesite="lax",
+        secure=COOKIE_SECURE,
+    )
     return response
 
 

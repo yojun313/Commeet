@@ -22,19 +22,64 @@ function fmtDateTime(iso) {
 
 let currentDays = 30;
 
+function deltaBadge(today, yesterday) {
+  if (!yesterday) return "";
+  const pct = Math.round(((today - yesterday) / yesterday) * 100);
+  if (pct === 0) return `<span class="admin-delta flat">전일과 동일</span>`;
+  const cls = pct > 0 ? "up" : "down";
+  const arrow = pct > 0 ? "▲" : "▼";
+  return `<span class="admin-delta ${cls}">${arrow} ${Math.abs(pct)}% 전일 대비</span>`;
+}
+
 function renderStatCards(stats) {
   const root = document.getElementById("admin-stat-cards");
+  const g = stats.growth || {};
+  const err4 = (stats.statusGroups && stats.statusGroups["4xx"]) || 0;
+  const err5 = (stats.statusGroups && stats.statusGroups["5xx"]) || 0;
   const cards = [
-    { label: "전체 사용자", value: stats.totalUsers },
-    { label: "관리자", value: stats.totalAdmins },
-    { label: "전체 방", value: stats.totalEvents },
-    { label: `최근 ${stats.windowDays}일 요청`, value: stats.requestsInWindow },
+    {
+      label: "전체 사용자",
+      value: stats.totalUsers,
+      sub: g.newUsers7d ? `최근 7일 +${g.newUsers7d}` : "최근 7일 신규 없음",
+    },
+    {
+      label: "전체 방",
+      value: stats.totalEvents,
+      sub: `확정 ${Number(stats.closedEvents || 0).toLocaleString()} · 7일 +${g.newEvents7d || 0}`,
+    },
+    {
+      label: `최근 ${stats.windowDays}일 요청`,
+      value: stats.requestsInWindow,
+      sub: `오늘 ${Number(stats.requestsToday || 0).toLocaleString()}건 ` +
+        deltaBadge(stats.requestsToday, stats.requestsYesterday),
+    },
+    {
+      label: "순사용자",
+      value: stats.uniques ? stats.uniques.users : 0,
+      sub: stats.uniques ? `방문 IP ${stats.uniques.ips.toLocaleString()}개` : "",
+    },
+    {
+      label: "평균 응답",
+      value: stats.perf ? `${stats.perf.avgMs}ms` : "-",
+      raw: true,
+      sub: stats.perf ? `상위 5% 이내 ${stats.perf.p95Ms}ms` : "",
+    },
+    {
+      label: "오류 응답",
+      value: err4 + err5,
+      sub: `4xx ${err4.toLocaleString()} · 5xx ${err5.toLocaleString()}`,
+      danger: err5 > 0,
+    },
   ];
   root.innerHTML = "";
   cards.forEach((c) => {
     const div = document.createElement("div");
-    div.className = "admin-stat-card";
-    div.innerHTML = `<div class="admin-stat-value">${c.value.toLocaleString()}</div><div class="admin-stat-label">${esc(c.label)}</div>`;
+    div.className = "admin-stat-card" + (c.danger ? " danger" : "");
+    const val = c.raw ? esc(c.value) : Number(c.value).toLocaleString();
+    div.innerHTML =
+      `<div class="admin-stat-label">${esc(c.label)}</div>` +
+      `<div class="admin-stat-value">${val}</div>` +
+      (c.sub ? `<div class="admin-stat-sub">${c.sub}</div>` : "");
     root.appendChild(div);
   });
 }
@@ -109,6 +154,213 @@ function renderTrafficChart(container, daily) {
     }
   });
 
+  // 순사용자 꺾은선 - 요청 수와 축이 달라(수십 vs 수천) 같은 축에 그리면
+  // 바닥에 붙어 버리므로, 자기 최대값 기준으로 따로 정규화해 "모양"만
+  // 겹쳐 보입니다. 정확한 수치는 막대의 툴팁에 있습니다.
+  const maxUsers = Math.max(1, ...daily.map((d) => d.uniqueUsers));
+  const points = daily
+    .map((d, i) => {
+      const x = padding.left + i * barWidth + barWidth / 2;
+      const y = padding.top + chartH * (1 - d.uniqueUsers / maxUsers);
+      return `${x},${y}`;
+    })
+    .join(" ");
+  const line = document.createElementNS(svgNS, "polyline");
+  line.setAttribute("points", points);
+  line.setAttribute("class", "admin-chart-line");
+  svg.appendChild(line);
+
+  container.appendChild(svg);
+}
+
+/* 24개의 짧은 막대 - 시간대별 사용 패턴. 심야 봇과 낮 사용자의 구분이
+ * 한눈에 보입니다. */
+function renderHourlyChart(container, hourly) {
+  container.innerHTML = "";
+  const max = Math.max(1, ...hourly);
+  const wrap = document.createElement("div");
+  wrap.className = "admin-hourly";
+  hourly.forEach((count, h) => {
+    const col = document.createElement("div");
+    col.className = "admin-hourly-col";
+    const bar = document.createElement("div");
+    bar.className = "admin-hourly-bar";
+    bar.style.height = `${Math.max(2, (count / max) * 78)}px`;
+    bar.title = `${h}시: ${count.toLocaleString()}건`;
+    col.appendChild(bar);
+    if (h % 6 === 0) {
+      const lb = document.createElement("span");
+      lb.className = "admin-hourly-label";
+      lb.textContent = `${h}시`;
+      col.appendChild(lb);
+    }
+    wrap.appendChild(col);
+  });
+  container.appendChild(wrap);
+}
+
+/* 2xx/3xx/4xx/5xx를 하나의 누적 막대 + 색 범례로. */
+function renderStatusDist(container, groups) {
+  container.innerHTML = "";
+  const order = ["2xx", "3xx", "4xx", "5xx"];
+  const total = order.reduce((a, k) => a + (groups[k] || 0), 0);
+  if (!total) {
+    container.innerHTML = `<p class="hint" style="margin:0;">아직 기록이 없습니다.</p>`;
+    return;
+  }
+  const bar = document.createElement("div");
+  bar.className = "admin-status-bar";
+  order.forEach((k) => {
+    const n = groups[k] || 0;
+    if (!n) return;
+    const seg = document.createElement("div");
+    seg.className = `admin-status-seg s${k}`;
+    seg.style.width = `${(n / total) * 100}%`;
+    seg.title = `${k}: ${n.toLocaleString()}건`;
+    bar.appendChild(seg);
+  });
+  container.appendChild(bar);
+  const legend = document.createElement("div");
+  legend.className = "admin-status-legend";
+  order.forEach((k) => {
+    const n = groups[k] || 0;
+    legend.insertAdjacentHTML(
+      "beforeend",
+      `<span><i class="legend-dot s${k}"></i>${k} <b>${n.toLocaleString()}</b> <em>${total ? Math.round((n / total) * 100) : 0}%</em></span>`
+    );
+  });
+  container.appendChild(legend);
+}
+
+function statusPill(code) {
+  const cls = code >= 500 ? "s5xx" : code >= 400 ? "s4xx" : code >= 300 ? "s3xx" : "s2xx";
+  return `<span class="admin-status-pill ${cls}">${code}</span>`;
+}
+
+function renderRecentErrors(container, errors) {
+  container.innerHTML = "";
+  if (!errors.length) {
+    container.innerHTML = `<p class="hint" style="margin:0;">이 기간에는 오류 응답이 없습니다.</p>`;
+    return;
+  }
+  errors.forEach((e) => {
+    container.insertAdjacentHTML(
+      "beforeend",
+      `<div class="admin-error-row">${statusPill(e.statusCode)}
+        <span class="admin-error-path" title="${esc(e.path)}">${esc(e.method)} ${esc(e.path)}</span>
+        <span class="admin-error-time">${fmtDateTime(e.ts).slice(5)}</span>
+      </div>`
+    );
+  });
+}
+
+/* 라벨 + 수평 비율 막대 목록 (브라우저·기기·상위 사용자 공용). */
+function renderBarList(container, rows, { valueLabel } = {}) {
+  container.innerHTML = "";
+  if (!rows.length) {
+    container.innerHTML = `<p class="hint" style="margin:0;">아직 기록이 없습니다.</p>`;
+    return;
+  }
+  const max = Math.max(1, ...rows.map((r) => r.count));
+  rows.forEach((r) => {
+    container.insertAdjacentHTML(
+      "beforeend",
+      `<div class="admin-bar-row" ${r.title ? `title="${esc(r.title)}"` : ""}>
+        <span class="admin-bar-name">${esc(r.name)}</span>
+        <span class="admin-bar-track"><span class="admin-bar-fill" style="width:${(r.count / max) * 100}%"></span></span>
+        <span class="admin-bar-count">${r.count.toLocaleString()}${valueLabel || ""}</span>
+      </div>`
+    );
+  });
+}
+
+function renderSlowest(container, slowest) {
+  container.innerHTML = "";
+  if (!slowest.length) {
+    container.innerHTML = `<p class="hint" style="margin:0;">표본이 부족합니다 (5회 이상 호출된 경로만).</p>`;
+    return;
+  }
+  slowest.forEach((r) => {
+    container.insertAdjacentHTML(
+      "beforeend",
+      `<div class="admin-slow-row">
+        <span class="admin-method-badge">${esc(r.method)}</span>
+        <span class="admin-error-path" title="${esc(r.path)}">${esc(r.path)}</span>
+        <span class="admin-slow-ms">${r.avgMs.toLocaleString()}ms</span>
+        <span class="admin-slow-count">${r.count.toLocaleString()}회</span>
+      </div>`
+    );
+  });
+}
+
+/* 신규 가입/일정 - 날짜 합집합 위에 두 계열 묶음 막대. */
+function renderGrowthChart(container, growth) {
+  container.innerHTML = "";
+  const users = growth.newUsersDaily || [];
+  const events = growth.newEventsDaily || [];
+  const byDate = {};
+  users.forEach((r) => { (byDate[r.date] = byDate[r.date] || { u: 0, e: 0 }).u = r.count; });
+  events.forEach((r) => { (byDate[r.date] = byDate[r.date] || { u: 0, e: 0 }).e = r.count; });
+  const dates = Object.keys(byDate).sort();
+  if (!dates.length) {
+    container.innerHTML = `<p class="hint" style="margin:0;">이 기간에는 신규 가입/일정이 없습니다.</p>`;
+    return;
+  }
+  const width = 900, height = 170;
+  const padding = { top: 10, right: 10, bottom: 24, left: 30 };
+  const chartW = width - padding.left - padding.right;
+  const chartH = height - padding.top - padding.bottom;
+  const maxVal = Math.max(1, ...dates.map((d) => Math.max(byDate[d].u, byDate[d].e)));
+  const group = chartW / dates.length;
+
+  const svgNS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(svgNS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("class", "admin-chart-svg");
+  svg.setAttribute("preserveAspectRatio", "none");
+
+  [0, 0.5, 1].forEach((frac) => {
+    const y = padding.top + chartH * (1 - frac);
+    const line = document.createElementNS(svgNS, "line");
+    line.setAttribute("x1", padding.left); line.setAttribute("x2", width - padding.right);
+    line.setAttribute("y1", y); line.setAttribute("y2", y);
+    line.setAttribute("class", "admin-chart-gridline");
+    svg.appendChild(line);
+    const label = document.createElementNS(svgNS, "text");
+    label.setAttribute("x", padding.left - 6); label.setAttribute("y", y + 4);
+    label.setAttribute("text-anchor", "end");
+    label.setAttribute("class", "admin-chart-axis-label");
+    label.textContent = Math.round(maxVal * frac);
+    svg.appendChild(label);
+  });
+
+  const stride = Math.max(1, Math.ceil(dates.length / 10));
+  dates.forEach((date, i) => {
+    const { u, e } = byDate[date];
+    const x0 = padding.left + i * group;
+    [[e, "admin-chart-bar", 0], [u, "admin-chart-bar2", 1]].forEach(([v, cls, slot]) => {
+      const h = (v / maxVal) * chartH;
+      const rect = document.createElementNS(svgNS, "rect");
+      rect.setAttribute("x", x0 + group * (0.15 + slot * 0.36));
+      rect.setAttribute("y", padding.top + chartH - h);
+      rect.setAttribute("width", Math.max(1, group * 0.32));
+      rect.setAttribute("height", Math.max(0, h));
+      rect.setAttribute("class", cls);
+      const t = document.createElementNS(svgNS, "title");
+      t.textContent = `${date}: 신규 일정 ${e}건, 신규 가입 ${u}명`;
+      rect.appendChild(t);
+      svg.appendChild(rect);
+    });
+    if (dates.length <= 14 || i % stride === 0) {
+      const label = document.createElementNS(svgNS, "text");
+      label.setAttribute("x", x0 + group / 2);
+      label.setAttribute("y", height - 6);
+      label.setAttribute("text-anchor", "middle");
+      label.setAttribute("class", "admin-chart-axis-label");
+      label.textContent = date.slice(5);
+      svg.appendChild(label);
+    }
+  });
   container.appendChild(svg);
 }
 
@@ -132,6 +384,21 @@ async function loadStats() {
     renderStatCards(stats);
     renderTrafficChart(document.getElementById("admin-traffic-chart"), stats.dailyTraffic);
     renderTopPaths(document.getElementById("admin-top-paths"), stats.topPaths);
+    renderHourlyChart(document.getElementById("admin-hourly-chart"), stats.hourly || []);
+    renderStatusDist(document.getElementById("admin-status-dist"), stats.statusGroups || {});
+    renderRecentErrors(document.getElementById("admin-recent-errors"), stats.recentErrors || []);
+    renderSlowest(document.getElementById("admin-slowest"), (stats.perf && stats.perf.slowest) || []);
+    renderBarList(
+      document.getElementById("admin-top-users"),
+      (stats.topUsers || []).map((u) => ({
+        name: u.name || u.email, count: u.count,
+        title: `${u.email} · 마지막 활동 ${fmtDateTime(u.lastSeen)}`,
+      })),
+      { valueLabel: "건" }
+    );
+    renderBarList(document.getElementById("admin-browsers"), stats.browsers || []);
+    renderBarList(document.getElementById("admin-devices"), stats.devices || []);
+    renderGrowthChart(document.getElementById("admin-growth-chart"), stats.growth || {});
   } catch (err) {
     showSnackbar(err.message, "error");
   }
