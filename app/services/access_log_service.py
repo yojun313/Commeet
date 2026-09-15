@@ -40,6 +40,8 @@ async def record_request(
     ip: str | None,
     user_agent: str | None,
 ) -> None:
+    if status_code in (404, 405):
+        return
     await access_logs_col.insert_one(
         {
             "ts": datetime.now(UTC),
