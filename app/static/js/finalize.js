@@ -84,6 +84,10 @@ function populateSettings() {
   if (fin && (fin.meetings || []).length) {
     capacity.value = String(fin.capacity);
     minutes.value = String(fin.meetingMinutes);
+    // 지난 확정 때 캘린더 초대를 껐다면 그 선택을 기억합니다.
+    if (fin.calendarInvite === false) {
+      document.getElementById("fin-calendar-invite").checked = false;
+    }
   }
   // 배너와 "확정 취소" 버튼은 **지금 확정 상태일 때만** 의미가 있습니다.
   if (fin && fin.status === "confirmed") {
@@ -906,6 +910,7 @@ async function confirmSchedule() {
       capacity: Number(document.getElementById("fin-capacity").value),
       meetingMinutes: Number(document.getElementById("fin-minutes").value),
       meetings,
+      calendarInvite: document.getElementById("fin-calendar-invite").checked,
     });
     // 메일은 서버가 백그라운드로 보냅니다. 발송이 끝나기 전에 페이지를 떠나도
     // 계속 나가므로, 기다릴 필요가 없다는 걸 분명히 알려 줍니다.

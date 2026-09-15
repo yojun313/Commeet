@@ -46,6 +46,7 @@ async def confirm(event_id: str, payload: ConfirmRequest, request: Request):
                 {"start": m.start, "participants": m.participants}
                 for m in payload.meetings
             ],
+            calendar_invite=payload.calendarInvite,
         )
     except (
         finalize_service.InvalidMeetingLength,

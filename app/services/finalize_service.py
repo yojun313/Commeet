@@ -11,7 +11,7 @@ from itertools import pairwise
 
 from app.config import APP_NAME, BASE_URL
 from app.db import event_responses_col, events_col, users_col
-from app.services import calendar_service, email_service
+from app.services import calendar_service, email_service, ical_service
 from app.services.scheduling import assign_participants, build_slots, covers_slot
 
 
@@ -285,7 +285,13 @@ async def _sync_to_google_calendar(
 
 
 async def confirm(
-    event: dict, host: dict, capacity: int, meeting_minutes: int, meetings: list[dict]
+    event: dict,
+    host: dict,
+    capacity: int,
+    meeting_minutes: int,
+    meetings: list[dict],
+    *,
+    calendar_invite: bool = True,
 ) -> dict:
     """Stores the host's final schedule, closes the event and notifies people."""
     validate_meeting_minutes(event, meeting_minutes)
@@ -336,6 +342,8 @@ async def confirm(
         "unassigned": [k for k in by_key if k not in seen],
         "confirmedAt": datetime.now(UTC),
         "confirmedBy": host["_id"],
+        # 다음 확정 화면이 체크박스 기본값으로 되살립니다.
+        "calendarInvite": calendar_invite,
     }
 
     # Clear out whatever a previous confirm() wrote to Google Calendar before
@@ -369,6 +377,7 @@ async def confirm(
         by_key,
         previous=previous_finalization,
         updated=had_assignment,
+        calendar_invite=calendar_invite,
     )
     return finalization
 
@@ -413,6 +422,7 @@ def _notify(
     *,
     previous: dict | None = None,
     updated: bool = False,
+    calendar_invite: bool = True,
 ) -> int:
     """예약이 달라진 사람에게만 안내를 보냅니다. 발송에 넘긴 통수를 반환합니다.
 
@@ -426,6 +436,29 @@ def _notify(
     before = _booking_by_key(previous)
     after = _booking_by_key(finalization)
     mails = []
+
+    # 캘린더 초대(.ics)에 쓰는 값들. SEQUENCE는 확정 시각(epoch 초) - 재확정
+    # 때마다 커지므로 클라이언트가 항상 "더 새 버전"으로 받아들입니다.
+    event_id = str(event["_id"])
+    ics_sequence = int(finalization["confirmedAt"].timestamp())
+    event_url = f"{BASE_URL}/e/{event.get('shortId') or event_id}"
+
+    def invite_ics(person: dict, key: str, meeting: dict) -> str | None:
+        if not calendar_invite:
+            return None
+        return ical_service.build_ics(
+            method="REQUEST",
+            uid=ical_service.event_uid(event_id, key),
+            sequence=ics_sequence,
+            start=meeting["start"],
+            end=meeting["end"],
+            summary=event.get("name", ""),
+            description=f"주최: {(host or {}).get('name') or ''}\n{event_url}",
+            organizer_name=(host or {}).get("name") or "",
+            attendee_name=person.get("name") or "",
+            attendee_email=person["email"],
+            stamp=finalization["confirmedAt"],
+        )
 
     # 확정된 전체 명단 (시간 순). 각자 자기 시간과 같은 자리에 오는 사람만
     # 알아서는 서로 시간을 바꾸기 어려워, 안내에 전체를 함께 싣습니다.
@@ -465,6 +498,7 @@ def _notify(
                     # 새로 들어온 사람에게는 첫 확정 안내가 맞습니다.
                     updated=updated and key in before,
                     roster=roster,
+                    ics=invite_ics(person, key, meeting),
                 )
             )
 
@@ -476,8 +510,31 @@ def _notify(
         # 원래도 미배정이었다면 달라진 것이 없습니다.
         if previous is not None and key not in before:
             continue
+        # 예전에 배정이 있었다면 그때 보낸 캘린더 초대를 지워야 합니다 -
+        # 같은 UID의 CANCEL이 캘린더에서 그 항목을 취소합니다. 종료 시각은
+        # _booking_by_key에 없으므로 이전 확정본의 약속 길이로 되구합니다.
+        cancel = None
+        if calendar_invite and previous is not None and key in before:
+            old_start = before[key][0]
+            old_end = old_start + timedelta(
+                minutes=int(previous.get("meetingMinutes") or 30)
+            )
+            cancel = ical_service.build_ics(
+                method="CANCEL",
+                uid=ical_service.event_uid(event_id, key),
+                sequence=ics_sequence,
+                start=old_start,
+                end=old_end,
+                summary=event.get("name", ""),
+                organizer_name=(host or {}).get("name") or "",
+                attendee_name=person.get("name") or "",
+                attendee_email=person["email"],
+                stamp=finalization["confirmedAt"],
+            )
         mails.append(
-            email_service.build_meeting_unassigned_mail(person["email"], host, event)
+            email_service.build_meeting_unassigned_mail(
+                person["email"], host, event, ics=cancel
+            )
         )
 
     return email_service.send_many_detached(mails)

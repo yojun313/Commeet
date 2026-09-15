@@ -133,6 +133,41 @@ async def _resolve_attendees(
     return attendees
 
 
+async def _invited_attendees(event: dict, owner: dict) -> list[dict]:
+    """응답자 전원 + 아직 응답하지 않은 초대 대상(remindees)을 참석자 행으로.
+
+    "메일 보내기"의 대상 계산(mail_targets)과 같은 재료를 쓰므로 사이드바의
+    응답자/미응답 목록과 여기 프리필이 어긋나지 않습니다.
+    """
+    from app.services.finalize_service import _load_people
+
+    _host, people = await _load_people(event)
+    attendees = await _resolve_attendees(event, owner, [p["key"] for p in people])
+
+    contacts = await _contacts_by_email(owner["_id"])
+    seen = {(a.get("email") or "").lower() for a in attendees if a.get("email")}
+    owner_email = (owner.get("email") or "").lower()
+    for entry in event.get("remindees") or []:
+        email = (entry.get("email") or "").strip()
+        low = email.lower()
+        if not email or low == owner_email or low in seen:
+            continue
+        seen.add(low)
+        contact = contacts.get(email)
+        attendees.append(
+            {
+                "key": email,
+                "name": (contact or {}).get("name") or email.split("@")[0],
+                "email": email,
+                "studentId": (contact or {}).get("studentId") or "",
+                "affiliation": _guess_affiliation(contact),
+                "present": True,
+            }
+        )
+    attendees.sort(key=lambda a: a["name"])
+    return attendees
+
+
 def compute_settlements(attendees: list[dict]) -> list[dict]:
     """제출처(컴공/무은재)별로 신청서 하나씩 만듭니다.
 
@@ -256,15 +291,15 @@ async def build_draft(event: dict, owner: dict, meeting_start: datetime) -> dict
         raise RecordsDisabled()
     try:
         meeting = find_meeting(event, meeting_start)
+        attendees = await _resolve_attendees(
+            event, owner, meeting.get("participants") or []
+        )
     except MeetingNotFound:
-        meeting = {
-            "start": meeting_start,
-            "end": meeting_start + timedelta(minutes=30),
-            "participants": [],
-        }
-    attendees = await _resolve_attendees(
-        event, owner, meeting.get("participants") or []
-    )
+        # 확정된 약속이 없는 직접 추가. 빈 폼 대신 **응답한 사람 + 초대만
+        # 받은 사람**을 미리 채워 줍니다 - 실제 면담 상대는 대개 그들이고,
+        # 아니면 체크만 풀면 됩니다.
+        meeting = {"start": meeting_start, "end": meeting_start + timedelta(minutes=30)}
+        attendees = await _invited_attendees(event, owner)
     return {
         "eventId": str(event["_id"]),
         "eventName": event.get("name", ""),

@@ -167,6 +167,10 @@ class Mail:
     sender_name: str | None = None
     extra_to: tuple[str, ...] = ()
     cc: tuple[str, ...] = ()
+    # iCalendar 초대(.ics). 넣으면 text/calendar 파트로 함께 나가고, Gmail 등이
+    # 메일 안에 일정 카드(수락/거절)를 그립니다. method는 REQUEST/CANCEL.
+    ics: str | None = None
+    ics_method: str = "REQUEST"
 
 
 def _recipients(mail: Mail) -> list[str]:
@@ -276,6 +280,15 @@ def _build_message(mail: Mail, file_path: str | None = None) -> MIMEMultipart:
         msg["Reply-To"] = MAIL_REPLY_TO
 
     msg.attach(MIMEText(mail.body, "plain"))
+
+    if mail.ics:
+        # Gmail이 초대 카드를 그리려면 content-type이 text/calendar이고
+        # method 파라미터가 있어야 합니다. 파일명은 다른 클라이언트에서
+        # 첨부로 저장할 때를 위한 것입니다.
+        cal = MIMEText(mail.ics, "calendar", "utf-8")
+        cal.set_param("method", mail.ics_method)
+        cal.add_header("Content-Disposition", 'attachment; filename="invite.ics"')
+        msg.attach(cal)
 
     # 파일 첨부 (file_path가 제공된 경우)
     if file_path and os.path.exists(file_path):
@@ -429,6 +442,25 @@ def _host_sender_name(owner: dict | None) -> str:
 # 한 명뿐이면 바로 아래의 send_*_email() 편의 함수를 쓰면 됩니다.
 
 
+def _host_cc(
+    owner: dict | None,
+    to: str,
+    cc: tuple[str, ...] = (),
+    extra_to: tuple[str, ...] = (),
+) -> tuple[str, ...]:
+    """주최자를 참조(Cc)에 넣습니다.
+
+    초대·안내·확정 등 일정에서 나가는 모든 메일의 사본이 주최자 편지함에도
+    남게 합니다 - 무엇이 언제 나갔는지 주최자가 앱에 들어오지 않고도 알 수
+    있습니다. 주최자 자신에게 가는 메일이거나 이미 수신자에 있으면 그대로
+    둡니다."""
+    email = ((owner or {}).get("email") or "").strip()
+    seen = {addr.lower() for addr in (to, *cc, *extra_to) if addr}
+    if not email or email.lower() in seen:
+        return cc
+    return (*cc, email)
+
+
 def build_event_invite_mail(
     to: str, owner: dict | None, event: dict, message: str = ""
 ) -> Mail:
@@ -442,6 +474,7 @@ def build_event_invite_mail(
         subject=f"[{APP_NAME}] {host}님이 '{event['name']}' 일정에 초대했습니다",
         body=body,
         sender_name=_host_sender_name(owner),
+        cc=_host_cc(owner, to),
     )
 
 
@@ -472,7 +505,7 @@ def build_event_message_mail(
         body=body,
         sender_name=_host_sender_name(host),
         extra_to=extra_to,
-        cc=cc,
+        cc=_host_cc(host, to, cc, extra_to),
     )
 
 
@@ -526,6 +559,7 @@ def build_meeting_confirmed_mail(
     *,
     updated: bool = False,
     roster: list[tuple[datetime, datetime, list[str]]] | None = None,
+    ics: str | None = None,
 ) -> Mail:
     """확정 안내. `roster`를 주면 전체 참가자 명단을 함께 싣습니다.
 
@@ -557,10 +591,14 @@ def build_meeting_confirmed_mail(
         subject=f"[{APP_NAME}] '{event['name']}' {headline}",
         body=body,
         sender_name=_host_sender_name(host),
+        cc=_host_cc(host, to),
+        ics=ics,
     )
 
 
-def build_meeting_unassigned_mail(to: str, host: dict | None, event: dict) -> Mail:
+def build_meeting_unassigned_mail(
+    to: str, host: dict | None, event: dict, *, ics: str | None = None
+) -> Mail:
     return Mail(
         to=to,
         subject=f"[{APP_NAME}] '{event['name']}' 일정 배정 안내",
@@ -569,6 +607,10 @@ def build_meeting_unassigned_mail(to: str, host: dict | None, event: dict) -> Ma
             f"주최자({_owner_name(host)}님)에게 문의해 주세요.\n{_event_url(event)}\n"
         ),
         sender_name=_host_sender_name(host),
+        cc=_host_cc(host, to),
+        ics=ics,
+        # 예전 배정을 캘린더에서 지우는 취소장입니다.
+        ics_method="CANCEL",
     )
 
 
@@ -584,6 +626,7 @@ def build_meeting_cancelled_mail(
             f"다시 확정되면 새로 안내드리겠습니다.\n{_event_url(event)}\n"
         ),
         sender_name=_host_sender_name(host),
+        cc=_host_cc(host, to),
     )
 
 
@@ -618,6 +661,7 @@ def build_event_cancelled_mail(
         subject=f"[{APP_NAME}] '{event['name']}' 일정이 {word}되었습니다",
         body=body,
         sender_name=_host_sender_name(owner),
+        cc=_host_cc(owner, to),
     )
 
 
@@ -634,6 +678,7 @@ def build_event_reopened_mail(to: str, owner: dict | None, event: dict) -> Mail:
             f"아래 링크에서 확인하실 수 있습니다.\n{_event_url(event)}\n"
         ),
         sender_name=_host_sender_name(owner),
+        cc=_host_cc(owner, to),
     )
 
 

@@ -287,6 +287,7 @@ function renderSkeleton() {
           <div id="respondents-list"></div>
           <button class="btn btn-primary btn-block" id="invite-btn" style="display: none; margin-top: 14px;">초대 보내기</button>
           <button class="btn btn-secondary btn-block" id="message-btn" style="display: none; margin-top: 8px;">메일 보내기</button>
+          <button class="btn btn-secondary btn-block" id="enable-records-btn" style="display: none; margin-top: 8px;">지도면담 기록 입력</button>
           <button class="btn btn-ghost btn-block" id="delete-response-btn" style="display: none; margin-top: 8px; color: var(--color-danger);">
             내 응답 삭제
           </button>
@@ -648,8 +649,8 @@ function recordsEnabled() {
 async function loadEventRecords() {
   const card = document.getElementById("ev-records-card");
   if (!card) return;
-  // 기능을 끈 일정과 남의 일정에서만 숨깁니다. 확정 전에도 보입니다 -
-  // "면담 기록 직접 추가"로 확정을 기다리지 않고 쓸 수 있습니다.
+  // 기능을 끈 일정에서는 카드 대신 사이드바의 "지도면담 기록 입력" 버튼이
+  // 보입니다 (wireDynamicButtons) - 누르면 기능을 켜고 이 카드가 나타납니다.
   if (!recordsEnabled() || !ST.isOwner) {
     card.style.display = "none";
     return;
@@ -1603,6 +1604,24 @@ function wireDynamicButtons() {
     const messageBtn = document.getElementById("message-btn");
     messageBtn.style.display = "";
     messageBtn.addEventListener("click", openMessageDialog);
+    // 지도면담 기능을 안 켠 일정 - 사이드바에서 바로 켤 수 있게.
+    // ("일정 정보 수정"의 체크박스를 못 찾는 문제 방지)
+    const enableBtn = document.getElementById("enable-records-btn");
+    if (enableBtn && !recordsEnabled()) {
+      enableBtn.style.display = "";
+      enableBtn.addEventListener("click", async () => {
+        try {
+          await api.post(`/api/events/` + ST.eventId + `/guidance-records?enabled=true`);
+          ST.event.guidanceRecordsEnabled = true;
+          enableBtn.style.display = "none";
+          showSnackbar("지도 면담 기능을 켰습니다.", "success");
+          await loadEventRecords();
+          document.getElementById("ev-records-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        } catch (err) {
+          showSnackbar(err.message || "켜지 못했습니다.", "error");
+        }
+      });
+    }
     const addRecordBtn = document.getElementById("ev-records-add");
     if (addRecordBtn) {
       addRecordBtn.addEventListener("click", () => {

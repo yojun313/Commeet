@@ -419,6 +419,28 @@ async def purge_event(event_id: str, request: Request):
     return {"removed": await event_service.purge_event(event, user)}
 
 
+@router.post("/{event_id}/guidance-records")
+async def set_guidance_records(event_id: str, request: Request, enabled: bool = True):
+    """지도 면담 기능을 켜고 끕니다 (주최자 전용).
+
+    만들 때 체크하지 않았던 주최자가 일정 페이지에서 바로 켤 수 있게 한
+    것입니다 - "일정 정보 수정"까지 가서 체크박스를 찾게 하면, 애초에
+    그 옵션의 존재를 몰랐던 사람은 왜 기록 기능이 없는지 알 수 없습니다.
+    """
+    user = await require_user(request)
+    event = await event_service.get_event_by_either_id(event_id)
+    if event is None:
+        raise HTTPException(status_code=404, detail="이벤트를 찾을 수 없습니다")
+    if event.get("ownerId") != user["_id"]:
+        raise HTTPException(
+            status_code=403, detail="일정을 만든 사람만 바꿀 수 있습니다"
+        )
+    await events_col.update_one(
+        {"_id": event["_id"]}, {"$set": {"guidanceRecordsEnabled": enabled}}
+    )
+    return {"guidanceRecordsEnabled": enabled}
+
+
 @router.post("/{event_id}/archive")
 async def archive_event(event_id: str, request: Request, archived: bool = True):
     user = await require_user(request)
