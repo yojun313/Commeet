@@ -539,13 +539,21 @@ async def send_threshold_reached_email(
     )
 
 
-def _format_meeting_time(start: datetime, end: datetime | None = None) -> str:
-    """Renders a meeting slot in the host's local wall time."""
+def _format_meeting_time(
+    start: datetime, end: datetime | None = None, *, with_tz: bool = False
+) -> str:
+    """Renders a meeting slot in the host's local wall time.
+
+    `with_tz`는 시간대 이름(Asia/Seoul)을 덧붙입니다 - 해외 수신자가 본문의
+    시각을 자기 시간대로 오해하지 않도록, 대표 시각(■ 일시) 한 줄에만
+    붙입니다. 명단의 모든 줄마다 반복하면 소음이라 거기서는 뺍니다."""
     local_start = start.astimezone(MEETING_TZ)
     weekday = "월화수목금토일"[local_start.weekday()]
     text = f"{local_start.year}년 {local_start.month}월 {local_start.day}일({weekday}) {local_start:%H:%M}"
     if end is not None:
         text += f" ~ {end.astimezone(MEETING_TZ):%H:%M}"
+    if with_tz:
+        text += f" ({MEETING_TZ.key})"
     return text
 
 
@@ -571,7 +579,7 @@ def build_meeting_confirmed_mail(
     headline = "일정이 변경되었습니다" if updated else "일정이 확정되었습니다"
 
     body = f"'{event['name']}' {headline}.\n\n"
-    body += f"■ 일시: {_format_meeting_time(start, end)}\n"
+    body += f"■ 일시: {_format_meeting_time(start, end, with_tz=True)}\n"
     if other_names:
         body += f"■ 함께하는 분: {', '.join(other_names)}\n"
     body += f"■ 주최: {host_name}님\n"
@@ -622,7 +630,7 @@ def build_meeting_cancelled_mail(
         subject=f"[{APP_NAME}] '{event['name']}' 일정 확정이 취소되었습니다",
         body=(
             f"'{event['name']}' 일정 확정이 취소되었습니다.\n\n"
-            f"■ 취소된 일시: {_format_meeting_time(start)}\n\n"
+            f"■ 취소된 일시: {_format_meeting_time(start, with_tz=True)}\n\n"
             f"다시 확정되면 새로 안내드리겠습니다.\n{_event_url(event)}\n"
         ),
         sender_name=_host_sender_name(host),

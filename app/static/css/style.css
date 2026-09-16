@@ -2248,6 +2248,29 @@ textarea.input {
   transform: translateX(16px);
 }
 
+/* 시간대 안내줄 - 격자 바로 위, 조용한 한 줄. */
+.tz-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 6px 0 8px;
+  font-size: 12.5px;
+  color: var(--color-text-muted);
+}
+.tz-select-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.tz-select-wrap select {
+  max-width: 240px;
+  font-size: 12.5px;
+  padding: 3px 6px;
+}
+
 .edit-bar {
   position: sticky;
   bottom: 0;

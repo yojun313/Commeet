@@ -172,7 +172,8 @@ function computeDayColumns() {
     refDate,
     displayDate: refDate,
   }));
-  ST.startHour = uniqueRefTimes.length ? uniqueRefTimes[0].getHours() + uniqueRefTimes[0].getMinutes() / 60 : 9;
+  // 행 라벨의 기준 시각. 보기 시간대(TZView)가 바뀌면 여기부터 다시 계산됩니다.
+  ST.startHour = uniqueRefTimes.length ? TZView.hourFrac(uniqueRefTimes[0]) : 9;
   ST.slotCount = Math.max(1, Math.round((ST.event.duration * 60) / (ST.event.timeIncrement || 15)));
 }
 
@@ -181,7 +182,10 @@ function renderMeta() {
   if (!cols.length) return;
   const first = cols[0].displayDate;
   const last = cols[cols.length - 1].displayDate;
-  const fmt = (d) => `${d.getMonth() + 1}/${d.getDate()}`;
+  const fmt = (d) => {
+    const p = TZView.parts(d);
+    return `${p.month}/${p.day}`;
+  };
   const respCount = Object.keys(ST.event.responses || {}).length;
   document.getElementById("ev-meta").textContent = `${fmt(first)} ~ ${fmt(last)} · 응답 ${respCount}명`;
 }
@@ -234,6 +238,13 @@ function renderSkeleton() {
         <button class="btn btn-sm btn-ghost" id="toggle-best-times">최적 시간만 보기</button>
         <button class="btn btn-sm btn-ghost" id="toggle-hide-ifneeded">가능(비선호) 숨기기</button>
       </div>
+    </div>
+
+    <div class="tz-bar">
+      <span class="tz-note" id="tz-note"></span>
+      <label class="tz-select-wrap">시간대
+        <select class="input input-sm" id="tz-select"></select>
+      </label>
     </div>
 
     <details class="term-help">
@@ -310,12 +321,12 @@ function buildGridDom() {
 
   grid.appendChild(el(`<div class="avail-grid-corner"></div>`));
   cols.forEach((col) => {
-    const d = col.displayDate;
+    const p = TZView.parts(col.displayDate);
     grid.appendChild(
       el(`
         <div class="day-col-header">
-          <div class="dow">${DOW_LABELS[d.getDay()]}</div>
-          <div class="dnum">${d.getMonth() + 1}/${d.getDate()}</div>
+          <div class="dow">${DOW_LABELS[p.dow]}</div>
+          <div class="dnum">${p.month}/${p.day}</div>
         </div>
       `)
     );
@@ -629,12 +640,10 @@ function participantDisplayName(key) {
 }
 
 function fmtMeetingRange(startIso, endIso) {
-  const s = new Date(startIso);
-  const e = new Date(endIso);
   const days = ["일", "월", "화", "수", "목", "금", "토"];
-  return `${s.getMonth() + 1}/${s.getDate()}(${days[s.getDay()]}) ${pad2(s.getHours())}:${pad2(
-    s.getMinutes()
-  )} ~ ${pad2(e.getHours())}:${pad2(e.getMinutes())}`;
+  const sp = TZView.parts(startIso);
+  const ep = TZView.parts(endIso);
+  return `${sp.month}/${sp.day}(${days[sp.dow]}) ${pad2(sp.hour)}:${pad2(sp.minute)} ~ ${pad2(ep.hour)}:${pad2(ep.minute)}`;
 }
 
 /* 이 일정에서 "면담 기록 · 학생지도비"를 쓰는가.
@@ -1571,6 +1580,26 @@ function wireDynamicButtons() {
     ST.hideIfNeeded = !ST.hideIfNeeded;
     e.target.classList.toggle("active", ST.hideIfNeeded);
     renderGridCells();
+  });
+
+  // 시간대 보기: 안내("기기 시간대 기준으로 자동 표시") + 직접 선택.
+  // 칸은 절대 시각으로 저장되어 있어, 바꾸면 라벨/머리글만 다시 그리면
+  // 됩니다 - 편집 중이던 선택(ownMarks)도 그대로 살아 있습니다.
+  const tzNote = document.getElementById("tz-note");
+  const syncTzNote = () => {
+    tzNote.textContent = TZView.isAuto()
+      ? `시간은 내 기기 시간대(${TZView.deviceZone()}) 기준으로 자동 표시됩니다.`
+      : `시간을 ${TZView.zone()} 기준으로 표시하고 있습니다.`;
+  };
+  syncTzNote();
+  TZView.buildSelector(document.getElementById("tz-select"), () => {
+    syncTzNote();
+    computeDayColumns();
+    buildGridDom();
+    renderGridCells();
+    renderMeta();
+    syncLayoutHeights();
+    if (ST.editing) document.getElementById("avail-grid").classList.add("editing");
   });
 
   document.getElementById("respond-btn").addEventListener("click", () => {

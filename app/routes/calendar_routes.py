@@ -35,7 +35,11 @@ async def google_connect(request: Request):
     state = secrets.token_urlsafe(24)
     response = RedirectResponse(calendar_service.build_authorize_url(state))
     response.set_cookie(
-        STATE_COOKIE, state, max_age=600, httponly=True, samesite="lax",
+        STATE_COOKIE,
+        state,
+        max_age=600,
+        httponly=True,
+        samesite="lax",
         secure=COOKIE_SECURE,
     )
     return response

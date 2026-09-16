@@ -152,6 +152,12 @@
           <span class="cal-legend-item"><span class="cal-swatch cal-swatch-none"></span>가능한 사람 없음</span>
           <span class="cal-legend-item"><span class="cal-swatch cal-swatch-unavailable"></span>주최자 불가</span>
         </div>
+        <div class="tz-bar">
+          <span class="tz-note" id="tz-note"></span>
+          <label class="tz-select-wrap">시간대
+            <select class="input input-sm" id="tz-select"></select>
+          </label>
+        </div>
         <div class="grid-scroll">
           <div class="cal-grid" id="fin-calendar"></div>
         </div>
@@ -176,5 +182,6 @@
 
 {% block extra_scripts %}
 <script>window.COMMEET_FINALIZE = {{ config_json | safe }};</script>
+<script src="{{ asset('js/timezone.js') }}"></script>
 <script src="{{ asset('js/finalize.js') }}"></script>
 {% endblock %}

@@ -65,7 +65,10 @@ def _parse_user_agent(ua: str) -> tuple[str, str]:
     low = s.lower()
     if not s:
         browser = "알 수 없음"
-    elif any(t in low for t in ("bot", "spider", "crawler", "curl", "python", "wget", "httpclient")):
+    elif any(
+        t in low
+        for t in ("bot", "spider", "crawler", "curl", "python", "wget", "httpclient")
+    ):
         browser = "봇/스크립트"
     elif "edg/" in low:
         browser = "Edge"
@@ -81,7 +84,11 @@ def _parse_user_agent(ua: str) -> tuple[str, str]:
         browser = "Safari"
     else:
         browser = "기타"
-    device = "모바일" if any(t in s for t in ("Mobile", "Android", "iPhone", "iPad")) else "데스크톱"
+    device = (
+        "모바일"
+        if any(t in s for t in ("Mobile", "Android", "iPhone", "iPad"))
+        else "데스크톱"
+    )
     return browser, device
 
 
@@ -150,7 +157,11 @@ async def get_stats(days: int = 30) -> dict:
                 "$group": {
                     "_id": {
                         "$concat": [
-                            {"$toString": {"$floor": {"$divide": ["$statusCode", 100]}}},
+                            {
+                                "$toString": {
+                                    "$floor": {"$divide": ["$statusCode", 100]}
+                                }
+                            },
                             "xx",
                         ]
                     },
@@ -181,7 +192,9 @@ async def get_stats(days: int = 30) -> dict:
                     "avg": {"$avg": "$durationMs"},
                     "p95": {
                         "$percentile": {
-                            "input": "$durationMs", "p": [0.95], "method": "approximate",
+                            "input": "$durationMs",
+                            "p": [0.95],
+                            "method": "approximate",
                         }
                     },
                 }
@@ -226,13 +239,23 @@ async def get_stats(days: int = 30) -> dict:
         hourly[r["_id"]] = r["count"]
 
     # ---- 순사용자 / 활동 상위 사용자 -----------------------------------
-    unique_users = len(await access_logs_col.distinct("userId", {**in_window, "userId": {"$ne": None}}))
-    unique_ips = len(await access_logs_col.distinct("ip", {**in_window, "ip": {"$ne": None}}))
+    unique_users = len(
+        await access_logs_col.distinct("userId", {**in_window, "userId": {"$ne": None}})
+    )
+    unique_ips = len(
+        await access_logs_col.distinct("ip", {**in_window, "ip": {"$ne": None}})
+    )
 
     top_user_rows = await access_logs_col.aggregate(
         [
             {"$match": {**in_window, "userId": {"$ne": None}}},
-            {"$group": {"_id": "$userId", "count": {"$sum": 1}, "last": {"$max": "$ts"}}},
+            {
+                "$group": {
+                    "_id": "$userId",
+                    "count": {"$sum": 1},
+                    "last": {"$max": "$ts"},
+                }
+            },
             {"$sort": {"count": -1}},
             {"$limit": 8},
         ]
@@ -279,7 +302,9 @@ async def get_stats(days: int = 30) -> dict:
                     "$group": {
                         "_id": {
                             "$dateToString": {
-                                "format": "%Y-%m-%d", "date": "$createdAt", "timezone": _TZ,
+                                "format": "%Y-%m-%d",
+                                "date": "$createdAt",
+                                "timezone": _TZ,
                             }
                         },
                         "count": {"$sum": 1},
@@ -312,7 +337,9 @@ async def get_stats(days: int = 30) -> dict:
         "statusGroups": status_groups,
         "recentErrors": [
             {
-                "ts": e["ts"], "method": e["method"], "path": e["path"],
+                "ts": e["ts"],
+                "method": e["method"],
+                "path": e["path"],
                 "statusCode": e["statusCode"],
             }
             for e in recent_errors
@@ -322,8 +349,10 @@ async def get_stats(days: int = 30) -> dict:
             "p95Ms": round((perf.get("p95") or [0])[0], 1),
             "slowest": [
                 {
-                    "method": r["_id"]["method"], "path": r["_id"]["path"],
-                    "avgMs": round(r["avgMs"], 1), "count": r["count"],
+                    "method": r["_id"]["method"],
+                    "path": r["_id"]["path"],
+                    "avgMs": round(r["avgMs"], 1),
+                    "count": r["count"],
                 }
                 for r in slowest
             ],

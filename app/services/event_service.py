@@ -360,7 +360,8 @@ async def mail_targets(event: dict, owner: dict) -> dict:
 
     # 아직 응답하지 않은 사람은 응답 기록에 이름이 없으므로, 주최자의
     # 연락처(초대할 때 거의 항상 등록되어 있음)와 가입 계정에서 이름을
-    # 찾습니다. 둘 다 없을 때만 이메일 앞부분으로 보여 줍니다.
+    # 찾습니다. 둘 다 없으면 이메일 **전체**를 보여 줍니다 - 앞부분만 잘라
+    # 보여 주면 이름처럼 보여서, 진짜 이름과 구별이 안 됩니다.
     names: dict[str, str] = {}
     if pending_emails:
         from app.db import contacts_col, users_col
@@ -377,7 +378,7 @@ async def mail_targets(event: dict, owner: dict) -> dict:
             names.setdefault(u["email"].lower(), u.get("name") or "")
 
     pending = [
-        {"name": names.get(email.lower()) or email.split("@")[0], "email": email}
+        {"name": names.get(email.lower()) or email, "email": email}
         for email in pending_emails
     ]
 

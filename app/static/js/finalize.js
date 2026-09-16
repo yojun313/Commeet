@@ -38,19 +38,17 @@ function el(html) {
   return wrap.firstElementChild;
 }
 
+// 시각 표시는 전부 보기 시간대(TZView)를 거칩니다 - 칸 자체는 절대
+// 시각이라, 시간대를 바꾸면 라벨만 달라집니다.
 function fmtTime(iso) {
-  const d = new Date(iso);
+  const p = TZView.parts(iso);
   const days = ["일", "월", "화", "수", "목", "금", "토"];
-  const h = String(d.getHours()).padStart(2, "0");
-  const m = String(d.getMinutes()).padStart(2, "0");
-  return `${d.getMonth() + 1}/${d.getDate()}(${days[d.getDay()]}) ${h}:${m}`;
+  return `${p.month}/${p.day}(${days[p.dow]}) ${String(p.hour).padStart(2, "0")}:${String(p.minute).padStart(2, "0")}`;
 }
 
 function fmtRange(startIso, endIso) {
-  const e = new Date(endIso);
-  const h = String(e.getHours()).padStart(2, "0");
-  const m = String(e.getMinutes()).padStart(2, "0");
-  return `${fmtTime(startIso)} ~ ${h}:${m}`;
+  const p = TZView.parts(endIso);
+  return `${fmtTime(startIso)} ~ ${String(p.hour).padStart(2, "0")}:${String(p.minute).padStart(2, "0")}`;
 }
 
 /* ------------------------------------------------------------------ */
@@ -206,19 +204,21 @@ function eligibleSlots(key) {
 /* ------------------------------------------------------------------ */
 
 function dayKeyOf(date) {
-  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+  const p = TZView.parts(date);
+  return `${p.year}-${p.month}-${p.day}`;
 }
 function dayLabelOf(date) {
   const days = ["일", "월", "화", "수", "목", "금", "토"];
-  return `${date.getMonth() + 1}/${date.getDate()}(${days[date.getDay()]})`;
+  const p = TZView.parts(date);
+  return `${p.month}/${p.day}(${days[p.dow]})`;
 }
 function timeKeyOfDay(date) {
-  return date.getHours() * 60 + date.getMinutes();
+  const p = TZView.parts(date);
+  return p.hour * 60 + p.minute;
 }
 function timeLabelOf(date) {
-  const h = String(date.getHours()).padStart(2, "0");
-  const m = String(date.getMinutes()).padStart(2, "0");
-  return `${h}:${m}`;
+  const p = TZView.parts(date);
+  return `${String(p.hour).padStart(2, "0")}:${String(p.minute).padStart(2, "0")}`;
 }
 
 /**
@@ -990,6 +990,24 @@ const live = createLiveRefresh({
 
 document.addEventListener("DOMContentLoaded", () => {
   populateSettings();
+
+  // 시간대 보기: 기본은 기기 시간대 자동, 원하면 직접 선택. 칸은 절대
+  // 시각이라 바꾸면 라벨과 날짜 경계만 다시 그리면 됩니다.
+  const tzNote = document.getElementById("tz-note");
+  const syncTzNote = () => {
+    if (!tzNote) return;
+    tzNote.textContent = TZView.isAuto()
+      ? `시간은 내 기기 시간대(${TZView.deviceZone()}) 기준으로 자동 표시됩니다.`
+      : `시간을 ${TZView.zone()} 기준으로 표시하고 있습니다.`;
+  };
+  syncTzNote();
+  const tzSelect = document.getElementById("tz-select");
+  if (tzSelect) {
+    TZView.buildSelector(tzSelect, () => {
+      syncTzNote();
+      if (proposal) render();
+    });
+  }
   document.getElementById("fin-stale-rerun").addEventListener("click", () => runOptimizer(false));
   // 지금 화면이 어느 시점의 응답으로 만들어졌는지 기준점을 잡아 둡니다.
   api
