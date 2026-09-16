@@ -683,6 +683,12 @@ function renderEventRecordRows() {
     .map(([, r]) => r)
     .sort((a, b) => new Date(a.meetingStart) - new Date(b.meetingStart));
 
+  // "직접 추가"는 매번 **새** 기록을 만드는 버튼이라, 이미 직접 추가한
+  // 기록이 있으면 숨깁니다 - 남겨 두면 이어서 쓰려고 눌렀다가 빈 폼을
+  // 만나게 됩니다. 수정은 각 기록의 "면담 정보 수정"으로 합니다.
+  const addBtn = document.getElementById("ev-records-add");
+  if (addBtn) addBtn.style.display = adhoc.length ? "none" : "";
+
   adhoc.forEach((record) => {
     const names = (record.attendees || []).map((a) => a.name).filter(Boolean);
     const amount = (record.settlements || []).reduce((sum, x) => sum + (x.amount || 0), 0);

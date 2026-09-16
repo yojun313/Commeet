@@ -483,8 +483,21 @@ function startChipDrag(e, key, label) {
     } else if (target.slot && target.slot.eligible.includes(draggedKey)) {
       choice[draggedKey] = target.slot.start;
       render();
-    } else {
-      showSnackbar("이 참가자는 해당 시간에 참석할 수 없습니다.", "error");
+    } else if (target.slot) {
+      // 강제 배정. 가능 표시가 없는 사람(응답을 안 했거나 시간을 안 찍은
+      // 사람)은 어느 칸에도 적격이 아니라서, 이 길이 없으면 주최자가
+      // 아예 배정할 방법이 없습니다. 실수 방지로 한 번 물어봅니다.
+      const person = (proposal.participants || []).find((x) => x.key === draggedKey);
+      const nm = (person && person.name) || draggedKey;
+      if (
+        confirm(
+          `${nm}님은 이 시간에 가능하다고 표시하지 않았습니다.\n그래도 이 시간에 배정할까요?\n\n(본인에게 참석 가능한지 따로 확인해 주세요.)`
+        )
+      ) {
+        choice[draggedKey] = target.slot.start;
+        render();
+        showSnackbar(`${nm}님을 가능 표시가 없는 시간에 배정했습니다.`, "success");
+      }
     }
   };
 
@@ -517,9 +530,6 @@ function groupDropCheck(keys, slot, fromStart, capacity) {
   if (slot.start === fromStart) return { ok: true, noop: true };
 
   const cannot = keys.filter((k) => !slot.eligible.includes(k));
-  if (cannot.length) {
-    return { ok: false, reason: `${cannot.length}명이 이 시간에 참석할 수 없습니다.` };
-  }
   // 이미 다른 사람이 잡혀 있는 시간이면 합쳐집니다 - 정원을 넘기면 안 됩니다.
   const already = Object.entries(choice).filter(
     ([k, start]) => start === slot.start && !keys.includes(k)
@@ -530,7 +540,9 @@ function groupDropCheck(keys, slot, fromStart, capacity) {
       reason: `정원 ${capacity}명을 넘습니다 (이미 ${already}명 배정됨).`,
     };
   }
-  return { ok: true, merged: already > 0 };
+  // 가능 표시가 없는 사람이 섞여 있어도 막지 않고, 놓을 때 확인을 받습니다
+  // (개인 칩의 강제 배정과 같은 규칙).
+  return { ok: true, merged: already > 0, forced: cannot.length };
 }
 
 /** 전원이 갈 수 있는 칸을 칠합니다 (한 명짜리 markEligibleCells의 그룹판). */
@@ -619,6 +631,14 @@ function startGroupDrag(e, fromStart, keys, nameOf) {
     if (check.noop) return;
     if (!check.ok) {
       showSnackbar(check.reason, "error");
+      return;
+    }
+    if (
+      check.forced &&
+      !confirm(
+        `${check.forced}명이 이 시간에 가능하다고 표시하지 않았습니다.\n그래도 함께 배정할까요?`
+      )
+    ) {
       return;
     }
     keys.forEach((k) => (choice[k] = target.slot.start));

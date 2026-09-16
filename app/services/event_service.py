@@ -348,7 +348,7 @@ async def mail_targets(event: dict, owner: dict) -> dict:
             responded_emails.add(email.lower())
         responded.append({"name": person.get("name") or email, "email": email})
 
-    pending = []
+    pending_emails = []
     for entry in event.get("remindees") or []:
         email = (entry.get("email") or "").strip()
         if not email:
@@ -356,7 +356,30 @@ async def mail_targets(event: dict, owner: dict) -> dict:
         low = email.lower()
         if low == owner_email or low in responded_emails:
             continue
-        pending.append({"name": email.split("@")[0], "email": email})
+        pending_emails.append(email)
+
+    # 아직 응답하지 않은 사람은 응답 기록에 이름이 없으므로, 주최자의
+    # 연락처(초대할 때 거의 항상 등록되어 있음)와 가입 계정에서 이름을
+    # 찾습니다. 둘 다 없을 때만 이메일 앞부분으로 보여 줍니다.
+    names: dict[str, str] = {}
+    if pending_emails:
+        from app.db import contacts_col, users_col
+
+        async for c in contacts_col.find(
+            {"ownerId": owner["_id"], "email": {"$in": pending_emails}},
+            {"email": 1, "name": 1},
+        ):
+            if c.get("name"):
+                names[c["email"].lower()] = c["name"]
+        async for u in users_col.find(
+            {"email": {"$in": pending_emails}}, {"email": 1, "name": 1}
+        ):
+            names.setdefault(u["email"].lower(), u.get("name") or "")
+
+    pending = [
+        {"name": names.get(email.lower()) or email.split("@")[0], "email": email}
+        for email in pending_emails
+    ]
 
     return {"responded": responded, "pending": pending}
 

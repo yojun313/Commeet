@@ -107,6 +107,11 @@ document.addEventListener("click", (e) => {
   const closeBtn = e.target.closest("[data-dialog-close]");
   if (closeBtn) {
     const backdrop = closeBtn.closest(".dialog-backdrop");
+    // 닫기 전에 확인이 필요한 다이얼로그(면담 기록처럼 긴 입력을 담는 창)는
+    // window.dialogCloseGuards[id]에 함수를 걸어 둡니다. false를 돌려주면
+    // 닫지 않습니다.
+    const guard = backdrop && (window.dialogCloseGuards || {})[backdrop.id];
+    if (guard && guard() === false) return;
     if (backdrop) backdrop.classList.remove("open");
   }
 });

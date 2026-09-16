@@ -135,17 +135,6 @@ const RecordDialog = (() => {
     updateAttendeeCount();
   }
 
-  /* 제출처별 신청서 버튼. 그 제출분이 실제로 있고 기록이 저장된 뒤에만
-     보입니다. 정산이 바뀔 때마다(renderSettlements) 다시 맞춥니다. */
-  function syncPrintButtons() {
-    const has = (aff) => (state.form.settlements || []).some((s) => s.affiliation === aff);
-    const saved = !!state.recordId;
-    const cse = document.getElementById("rec-print-cse");
-    const mj = document.getElementById("rec-print-mj");
-    if (cse) cse.hidden = !(saved && has("cse"));
-    if (mj) mj.hidden = !(saved && has("muunjae"));
-  }
-
   function updateAttendeeCount() {
     const present = state.form.attendees.filter((a) => a.present).length;
     document.getElementById("rec-attendee-count").textContent =
@@ -431,7 +420,6 @@ const RecordDialog = (() => {
 
       root.appendChild(node);
     });
-    syncPrintButtons();
   }
 
   /* ------------------------------------------------------------------ */
@@ -664,7 +652,6 @@ const RecordDialog = (() => {
     document.getElementById("rec-place").value = state.form.place;
     document.getElementById("rec-professor").value = state.form.professorName;
     document.getElementById("rec-delete").hidden = !state.recordId;
-    syncPrintButtons();
 
     renderAttendees();
     renderNotes();
@@ -710,6 +697,29 @@ const RecordDialog = (() => {
     return form;
   }
 
+  /* 파일 업로드 한 번. 서버가 잠시 재시작 중이면(첫 파일 쓰기가 감시
+     재시작을 부르는 배포 환경) 502/접속 불가가 나오므로 몇 초 재시도해
+     흡수합니다 - 사용자에게는 실패로 보였다가 다시 누르면 되던 증상. */
+  async function uploadWithRetry(url, makeOptions, failMessage) {
+    let lastDetail = "";
+    for (let attempt = 0; attempt < 4; attempt++) {
+      if (attempt > 0) await new Promise((res) => setTimeout(res, 1500));
+      try {
+        const res = await fetch(url, makeOptions());
+        if (res.ok) return;
+        if (![502, 503, 504].includes(res.status)) {
+          const data = await res.json().catch(() => null);
+          throw new Error((data && data.detail) || failMessage);
+        }
+        lastDetail = `(${res.status})`;
+      } catch (err) {
+        if (err instanceof TypeError) lastDetail = "(연결 안 됨)";
+        else throw err; // 진짜 오류 - 재시도해도 같습니다
+      }
+    }
+    throw new Error(`${failMessage} 잠시 후 다시 저장해 주세요. ${lastDetail}`);
+  }
+
   async function saveForm() {
     const btn = document.getElementById("rec-save");
     const form = collectForm();
@@ -720,28 +730,38 @@ const RecordDialog = (() => {
 
       if (state.signatureDirty) {
         // An empty pad clears the stored signature instead of saving a blank.
-        await api.put(`/api/records/${id}/signature`, {
-          dataUrl: signature.empty ? "" : signature.canvas.toDataURL("image/png"),
-        });
+        await uploadWithRetry(
+          `/api/records/${id}/signature`,
+          () => ({
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({
+              dataUrl: signature.empty ? "" : signature.canvas.toDataURL("image/png"),
+            }),
+          }),
+          "서명 저장에 실패했습니다."
+        );
         state.hasSignature = !signature.empty;
         state.signatureDirty = false;
       }
 
       for (const [index, file] of Object.entries(state.pendingReceipts)) {
-        const body = new FormData();
-        body.append("file", file);
-        const res = await fetch(`/api/records/${id}/receipt/${index}`, {
-          method: "PUT",
-          body,
-          credentials: "same-origin",
-        });
-        if (!res.ok) throw new Error("영수증 업로드에 실패했습니다.");
+        await uploadWithRetry(
+          `/api/records/${id}/receipt/${index}`,
+          () => {
+            const body = new FormData();
+            body.append("file", file);
+            return { method: "PUT", body, credentials: "same-origin" };
+          },
+          "영수증 업로드에 실패했습니다."
+        );
+        delete state.pendingReceipts[index];
       }
       state.pendingReceipts = {};
 
       document.getElementById("rec-delete").hidden = false;
-      syncPrintButtons();
-      showSnackbar("면담 기록을 저장했습니다.", "success");
+        showSnackbar("면담 기록을 저장했습니다.", "success");
       if (onSaved) await onSaved();
       // Re-read so uploaded receipts come back with their stored filenames.
       await refreshOpenForm();
@@ -809,51 +829,18 @@ const RecordDialog = (() => {
     });
 
     document.getElementById("rec-save").addEventListener("click", saveForm);
+    // X로 닫을 때 저장 안 한 입력이 있으면 한 번 물어봅니다 - 이 창은
+    // 면담 내용을 길게 적는 곳이라 실수로 닫으면 잃는 것이 큽니다.
+    window.dialogCloseGuards = window.dialogCloseGuards || {};
+    window.dialogCloseGuards["rec-form-dialog"] = () =>
+      !hasUnsavedChanges() ||
+      confirm("저장하지 않은 변경이 있습니다. 저장하지 않고 닫을까요?");
     document.getElementById("rec-delete").addEventListener("click", deleteRecord);
     // 신청서는 제출처(컴공/무은재)마다 별도 파일이어야 해서 버튼이 둘입니다.
-    const openPrint = async (aff) => {
-      // 신청서는 **저장된** 기록을 서버가 그려 주는 화면이라, 아직 저장하지
-      // 않았으면 열 수 없습니다.
-      if (!state.recordId) {
-        showSnackbar("먼저 저장한 뒤에 학생지도비 신청서를 열 수 있습니다.", "error");
-        return;
-      }
-      // 고치는 중에 그냥 열면 방금 적은 것이 빠진 서류가 나옵니다.
-      if (hasUnsavedChanges()) {
-        if (!confirm("저장하지 않은 변경이 있습니다.\n저장한 뒤 학생지도비 신청서를 열까요?")) return;
-        if (!(await saveForm())) return; // 저장이 실패하면 열지 않습니다
-      }
-      const url = `/records/${state.recordId}/print?aff=${encodeURIComponent(aff)}`;
-      // 저장 직후에는 방금 올라간 서명·영수증 파일 때문에 서버가 재시작
-      // 중일 수 있습니다(감시 재시작이 남아 있는 배포 환경). 그대로 새 탭을
-      // 열면 브라우저의 Bad Gateway 화면이 떠서 뭐가 잘못됐는지 알 수
-      // 없으므로, 먼저 서버가 응답하는지 확인하고 몇 초 재시도한 뒤 엽니다.
-      //
-      // 탭은 클릭 시점에(동기로) 미리 열어 둡니다 - fetch를 기다린 뒤의
-      // window.open은 팝업 차단에 걸립니다.
-      const win = window.open("about:blank", "_blank");
-      for (let attempt = 0; attempt < 4; attempt++) {
-        try {
-          const r = await fetch(url, { method: "HEAD", credentials: "same-origin" });
-          if (r.ok) {
-            if (win) win.location.href = url;
-            else window.open(url, "_blank"); // 팝업이 막혔다면 차선책
-            return;
-          }
-        } catch (e) {
-          /* 재시작 중 - 접속 자체가 안 됨. 잠시 뒤 다시. */
-        }
-        if (attempt === 0) showSnackbar("학생지도비 신청서를 여는 중입니다…");
-        await new Promise((res) => setTimeout(res, 1500));
-      }
-      if (win) win.close();
-      showSnackbar(
-        "서버가 잠시 준비 중입니다 (저장한 파일 반영). 몇 초 뒤 다시 시도해 주세요.",
-        "error"
-      );
-    };
-    document.getElementById("rec-print-cse").addEventListener("click", () => openPrint("cse"));
-    document.getElementById("rec-print-mj").addEventListener("click", () => openPrint("muunjae"));
+    // 신청서 열기 버튼은 이 창에 두지 않습니다 - 저장 직후에는 방금 올린
+    // 서명·영수증 파일 반영으로 서버가 잠시 재시작하는 배포 환경이 있어
+    // (pm2 감시 재시작) 바로 열면 Bad Gateway를 만나곤 했습니다. 신청서는
+    // 창을 닫은 뒤 기록 목록의 "컴공/무은재 신청서" 버튼으로 엽니다.
   }
 
   /** 한 면담의 기록 폼을 엽니다. `changed`는 저장/삭제 후 불립니다. */
