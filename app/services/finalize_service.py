@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 from itertools import pairwise
 
 from app.config import APP_NAME, BASE_URL
-from app.db import event_responses_col, events_col, users_col
+from app.db import contacts_col, event_responses_col, events_col, users_col
 from app.services import calendar_service, email_service, ical_service
 from app.services.scheduling import assign_participants, build_slots, covers_slot
 
@@ -107,6 +107,67 @@ async def _load_people(event: dict) -> tuple[dict | None, list[dict]]:
     return host_response, participants
 
 
+async def _pending_invitees(event: dict, participants: list[dict]) -> list[dict]:
+    """초대만 받고 아직 응답하지 않은 사람들.
+
+    확정 화면에서 이들도 참가자로 다뤄, 주최자가 달력에 끌어다 직접(강제)
+    배정할 수 있게 합니다. 전형적인 이유: 초대받은 사람이 링크에서 다른
+    이름으로, 이메일 없이 응답해 버려서 - 응답자 쪽 정체성으로는 확정
+    메일을 보낼 수 없고, 이메일을 아는 초대자 쪽 정체성은 응답이 없어
+    후보에 안 뜨는 상황. 이 목록이 그 구멍을 메웁니다.
+
+    가용시간은 빈 집합입니다 - 최적화가 이들을 임의 배정하는 일은 없고,
+    주최자의 수동 배정으로만 약속에 들어갑니다.
+    """
+    remindees = event.get("remindees") or []
+    if not remindees:
+        return []
+
+    owner_id = event.get("ownerId")
+    owner = (
+        await users_col.find_one({"_id": owner_id}, {"email": 1}) if owner_id else None
+    )
+    owner_email = ((owner or {}).get("email") or "").lower()
+    responded = {p["email"].lower() for p in participants if p.get("email")}
+
+    emails: list[str] = []
+    for entry in remindees:
+        email = (entry.get("email") or "").strip()
+        low = email.lower()
+        if not email or low == owner_email or low in responded:
+            continue
+        emails.append(email)
+    if not emails:
+        return []
+
+    # 이름은 미응답 목록(event_service.mail_targets)과 같은 규칙으로:
+    # 주최자 연락처 -> 가입 계정 -> 이메일 전체.
+    names: dict[str, str] = {}
+    if owner_id:
+        async for c in contacts_col.find(
+            {"ownerId": owner_id, "email": {"$in": emails}}, {"email": 1, "name": 1}
+        ):
+            if c.get("name"):
+                names[c["email"].lower()] = c["name"]
+    async for u in users_col.find(
+        {"email": {"$in": emails}}, {"email": 1, "name": 1}
+    ):
+        names.setdefault(u["email"].lower(), u.get("name") or "")
+
+    return [
+        {
+            # 응답 키(사용자 id 문자열/게스트 이름)와 절대 겹치지 않는 모양.
+            "key": f"invite:{email.lower()}",
+            "name": names.get(email.lower()) or email,
+            "email": email,
+            "availability": set(),
+            "ifNeeded": set(),
+            "pending": True,
+        }
+        for email in emails
+    ]
+
+
 async def build_proposal(
     event: dict, capacity: int, meeting_minutes: int, allow_if_needed: bool
 ) -> dict:
@@ -118,6 +179,7 @@ async def build_proposal(
         event.get("dates") or [], float(event.get("duration") or 0), meeting_minutes
     )
     host_response, participants = await _load_people(event)
+    participants += await _pending_invitees(event, participants)
 
     # The host attends every meeting, so drop blocks they cannot make.
     if host_response:
@@ -156,6 +218,12 @@ async def build_proposal(
         정원을 늘릴지, 옵션을 켤지, 본인에게 다시 물어볼지."""
         person = by_key[key]
         both = person["availability"] | person["ifNeeded"]
+
+        if person.get("pending"):
+            return {
+                "code": "pending_invitee",
+                "text": "초대만 받고 아직 응답하지 않았습니다. 달력에 끌어다 직접 배정할 수 있습니다.",
+            }
 
         if not both:
             return {
@@ -231,7 +299,12 @@ async def build_proposal(
             for index, (start, end) in enumerate(usable)
         ],
         "participants": [
-            {"key": p["key"], "name": p["name"], "hasEmail": bool(p["email"])}
+            {
+                "key": p["key"],
+                "name": p["name"],
+                "hasEmail": bool(p["email"]),
+                "pending": bool(p.get("pending")),
+            }
             for p in participants
         ],
     }
@@ -297,6 +370,7 @@ async def confirm(
     validate_meeting_minutes(event, meeting_minutes)
 
     _host_response, participants = await _load_people(event)
+    participants += await _pending_invitees(event, participants)
     by_key = {p["key"]: p for p in participants}
 
     length = timedelta(minutes=meeting_minutes)
@@ -509,6 +583,11 @@ def _notify(
             continue
         # 원래도 미배정이었다면 달라진 것이 없습니다.
         if previous is not None and key not in before:
+            continue
+        # 초대만 받고 응답하지 않은 사람에게 "맞는 시간을 못 찾았습니다"는
+        # 앞뒤가 안 맞는 메일입니다 - 응답 자체가 없었으니까요. 이전 확정에
+        # 배정됐다가 빠진 경우만 (위 조건을 통과한 경우) 취소를 알립니다.
+        if person.get("pending") and not (previous is not None and key in before):
             continue
         # 예전에 배정이 있었다면 그때 보낸 캘린더 초대를 지워야 합니다 -
         # 같은 UID의 CANCEL이 캘린더에서 그 항목을 취소합니다. 종료 시각은

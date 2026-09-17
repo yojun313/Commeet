@@ -14,6 +14,9 @@ let cellSlotMap = new WeakMap();
 // 최적화가 배정하지 못한 사람의 사유 (서버 계산). 주최자가 직접 빼낸
 // 사람에게는 사유가 없으므로 undefined입니다.
 let unassignedReasons = {};
+// 초대만 받고 아직 응답하지 않은 사람들 (서버 proposal.participants의 pending).
+// 트레이/명단에 "미응답" 배지를 달고, 수동 배정으로만 약속에 들어갑니다.
+let pendingKeys = new Set();
 // Active drag gesture, or null when nothing is being dragged.
 let dragState = null;
 
@@ -155,6 +158,9 @@ async function runOptimizer(restoreStored = false) {
     unassignedReasons = Object.fromEntries(
       (proposal.unassigned || []).filter((u) => u.reason).map((u) => [u.key, u.reason])
     );
+    pendingKeys = new Set(
+      (proposal.participants || []).filter((p) => p.pending).map((p) => p.key)
+    );
 
     choice = {};
     const stored = restoreStored && CFG.finalization ? CFG.finalization.meetings || [] : null;
@@ -252,6 +258,13 @@ function buildChip(key, nameOf) {
   chip.className = "cal-chip";
   chip.textContent = nameOf[key] || key;
   chip.dataset.key = key;
+  if (pendingKeys.has(key)) {
+    chip.classList.add("cal-chip-pending");
+    chip.title = "초대만 받고 아직 응답하지 않았습니다";
+    chip.appendChild(
+      el('<span class="cal-chip-tag">미응답</span>')
+    );
+  }
   chip.addEventListener("pointerdown", (e) => startChipDrag(e, key, nameOf[key] || key));
   return chip;
 }
@@ -689,6 +702,9 @@ function render() {
     if (!p.hasEmail) {
       label.innerHTML += ` <span class="badge badge-muted" title="이메일이 없어 안내 메일을 보낼 수 없습니다">메일 없음</span>`;
     }
+    if (p.pending) {
+      label.innerHTML += ` <span class="badge badge-muted" title="초대만 받고 아직 응답하지 않았습니다. 달력에 끌어다 직접 배정할 수 있습니다">미응답</span>`;
+    }
 
     const select = document.createElement("select");
     select.className = "input";
@@ -704,11 +720,22 @@ function render() {
       o.textContent = fmtRange(s.start, s.end);
       select.appendChild(o);
     });
-    select.value = choice[p.key] || "";
+    // 강제 배정(가능 표시가 없는 시간에 끌어다 놓은 경우)은 적격 목록에
+    // 없으므로, 현재 배정을 항목으로 만들어 드롭다운이 실제 상태를 보여
+    // 주게 합니다.
+    const chosen = choice[p.key] || "";
+    if (chosen && !options.some((s) => s.start === chosen)) {
+      const forcedSlot = proposal.slots.find((s) => s.start === chosen);
+      const o = document.createElement("option");
+      o.value = chosen;
+      o.textContent = (forcedSlot ? fmtRange(forcedSlot.start, forcedSlot.end) : fmtTime(chosen)) + " (직접 배정)";
+      select.appendChild(o);
+    }
+    select.value = chosen;
 
-    if (!options.length) {
+    if (!options.length && !chosen) {
       select.disabled = true;
-      none.textContent = "가능한 시간 없음";
+      none.textContent = p.pending ? "미응답 - 달력에서 끌어 배정" : "가능한 시간 없음";
     }
 
     // 왜 배정되지 못했는지 그 사람 줄에서 바로 보이게 합니다.

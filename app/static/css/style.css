@@ -2249,6 +2249,22 @@ textarea.input {
 }
 
 /* 시간대 안내줄 - 격자 바로 위, 조용한 한 줄. */
+/* 미응답 초대자 칩 - 점선 테두리 + 작은 배지로 "직접 배정 전용"임을 표시. */
+.cal-chip-pending {
+  border-style: dashed;
+  opacity: 0.85;
+}
+.cal-chip-tag {
+  font-size: 9px;
+  font-weight: 700;
+  margin-left: 4px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--color-border-light);
+  color: var(--color-text-muted);
+  vertical-align: 1px;
+}
+
 .tz-bar {
   display: flex;
   align-items: center;
