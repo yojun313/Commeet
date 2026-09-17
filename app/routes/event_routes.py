@@ -4,7 +4,8 @@ from bson import ObjectId
 from fastapi import APIRouter, HTTPException, Request, status
 
 from app.config import ALLOWED_EMAIL_DOMAIN, RESTRICT_TO_POSTECH
-from app.core.clientip import is_postech_request
+from app.core import ratelimit
+from app.core.clientip import get_client_ip, is_postech_request
 from app.core.ids import to_object_id
 from app.core.serialize import jsonable
 from app.db import events_col
@@ -127,9 +128,14 @@ async def get_event(event_id: str, request: Request, guestName: str | None = Non
         targets = await event_service.mail_targets(event, viewer)
         result["pendingInvitees"] = targets["pending"]
 
+    if not is_owner:
+        # 초대 명단은 이메일 목록입니다 - 링크만 가진 사람에게 다른
+        # 초대자들의 이메일을 보여 줄 이유가 없습니다. 화면에서도 이 값은
+        # 주최자만 씁니다 (초대 권유 배너).
+        result["remindees"] = None
+
     if event.get("blindAvailabilityEnabled") and not is_owner:
         result["numResponses"] = None
-        result["remindees"] = None
 
     return jsonable(result)
 
@@ -158,10 +164,26 @@ async def get_responses(
     return jsonable(responses_map)
 
 
+def _limit_link_writes(request: Request, bucket: str, *, limit: int) -> None:
+    """링크만 알면 되는 쓰기(게스트 응답·이름 변경)의 IP당 속도 제한.
+
+    링크가 곧 권한인 설계라 인증으로는 못 막고, 정상 사용자는 몇 분에
+    몇 번이면 충분합니다 - 한 IP가 기계적으로 응답을 쌓아 일정을 쓰레기로
+    채우는 것만 걸러냅니다.
+    """
+    ip = get_client_ip(request) or "?"
+    if not ratelimit.allow(f"{bucket}:{ip}", limit=limit, per_seconds=300):
+        raise HTTPException(
+            status_code=429,
+            detail="요청이 너무 잦습니다. 잠시 후 다시 시도해 주세요.",
+        )
+
+
 @router.post("/{event_id}/response")
 async def update_event_response(
     event_id: str, payload: EventResponsePayload, request: Request
 ):
+    _limit_link_writes(request, "response", limit=60)
     event = await event_service.get_event_by_either_id(event_id)
     if event is None:
         raise HTTPException(status_code=404, detail="이벤트를 찾을 수 없습니다")
@@ -237,7 +259,8 @@ async def delete_event_response(
 
 
 @router.post("/{event_id}/rename-user")
-async def rename_user(event_id: str, payload: RenameGuestPayload):
+async def rename_user(event_id: str, payload: RenameGuestPayload, request: Request):
+    _limit_link_writes(request, "rename", limit=20)
     event = await event_service.get_event_by_either_id(event_id)
     if event is None:
         raise HTTPException(status_code=404, detail="이벤트를 찾을 수 없습니다")

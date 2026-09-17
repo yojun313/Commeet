@@ -11,6 +11,7 @@ produce two forms, and a record holds a list of settlements rather than a
 single amount.
 """
 
+import re
 from datetime import UTC, datetime, timedelta
 
 from bson import ObjectId
@@ -392,6 +393,14 @@ async def save_record(owner: dict, data: dict) -> str:
 
     attendees = data.get("attendees") or []
     settlements = data.get("settlements") or compute_settlements(attendees)
+    # receiptFile은 서버가 붙이는 값이지만 저장 요청에도 실려 돌아옵니다.
+    # 서버가 만들 수 있는 모양이 아니면 버립니다 - 조작된 이름이 파일
+    # 삭제/읽기 경로에 흘러들지 않게 (crypto_service._safe_path와 같은 규칙).
+    for settlement in settlements:
+        name = settlement.get("receiptFile")
+        if name and not re.match(r"^receipt-\d{1,2}\.(png|jpg|jpeg|webp|pdf)$", name):
+            settlement["receiptFile"] = None
+            settlement["receiptName"] = ""
 
     now = datetime.now(UTC)
     existing = await meeting_records_col.find_one(

@@ -4,10 +4,10 @@ from pydantic import BaseModel, Field
 
 
 class AttendeeInput(BaseModel):
-    key: str = ""
-    name: str = ""
-    email: str = ""
-    studentId: str = ""
+    key: str = Field(default="", max_length=200)
+    name: str = Field(default="", max_length=100)
+    email: str = Field(default="", max_length=254)
+    studentId: str = Field(default="", max_length=40)
     # 학생지도비 rate depends on this, so the host can correct the guess.
     affiliation: str = "cse"
     present: bool = True
@@ -43,10 +43,10 @@ class NoteFields(BaseModel):
     따로 요구해서, 한 칸에 몰아 쓴 다음 옮겨 적어야 했습니다.
     """
 
-    academic: str = ""  # 학업지도
-    life: str = ""  # 생활지도
-    career: str = ""  # 진로지도
-    etc: str = ""  # 기타사항
+    academic: str = Field(default="", max_length=20000)  # 학업지도
+    life: str = Field(default="", max_length=20000)  # 생활지도
+    career: str = Field(default="", max_length=20000)  # 진로지도
+    etc: str = Field(default="", max_length=20000)  # 기타사항
 
 
 class SaveRecordRequest(BaseModel):
@@ -57,13 +57,13 @@ class SaveRecordRequest(BaseModel):
     endTime: str = ""
     place: str = ""
     professorName: str = ""
-    attendees: list[AttendeeInput] = Field(default_factory=list)
+    attendees: list[AttendeeInput] = Field(default_factory=list, max_length=100)
     # "shared" applies one set of notes to everyone; "individual" keeps
     # a separate set per student (perStudentNotes).
     notesMode: str = "shared"
     sharedNotes: NoteFields = Field(default_factory=NoteFields)
     perStudentNotes: dict[str, NoteFields] = Field(default_factory=dict)
-    settlements: list[SettlementInput] = Field(default_factory=list)
+    settlements: list[SettlementInput] = Field(default_factory=list, max_length=6)
     status: str = "draft"
 
 

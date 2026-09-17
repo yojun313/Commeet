@@ -152,6 +152,9 @@ async def record_print_page(record_id: str, request: Request, aff: str | None = 
             "note_categories": record_service.NOTE_CATEGORIES,
             "affiliation_labels": record_service.AFFILIATION_LABELS,
         },
+        # 학생 개인정보(학번·면담 내용)가 담긴 화면 - 공용 PC의 캐시나
+        # 뒤로가기 복원에 남지 않게 합니다.
+        headers={"Cache-Control": "no-store"},
     )
 
 

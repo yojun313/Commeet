@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.config import APP_NAME, COOKIE_SECURE, SESSION_COOKIE_NAME
+from app.config import APP_NAME, BASE_URL, COOKIE_SECURE, SESSION_COOKIE_NAME
 from app.core.clientip import get_client_ip
 from app.core.paths import STATIC_DIR
 from app.core.security import read_session_token
@@ -37,12 +37,15 @@ from app.services.auth_service import get_optional_user
 # 운영 서비스라 엔드포인트 목록 자체가 정찰 자료가 됩니다.
 app = FastAPI(title=APP_NAME, docs_url=None, redoc_url=None, openapi_url=None)
 
+# 이 앱을 다른 출처에서 fetch로 쓸 곳은 없습니다 - 화면과 API가 같은
+# 도메인이고, 크롬 확장도 content script의 same-origin 요청을 씁니다.
+# 와일드카드는 공격 표면만 넓히므로 자기 자신(BASE_URL)만 허용합니다.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[BASE_URL.rstrip("/")],
     allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+    allow_headers=["Content-Type"],
 )
 
 
@@ -61,6 +64,19 @@ async def no_store_api_middleware(request: Request, call_next):
     if request.url.path.startswith("/api/"):
         response.headers["Cache-Control"] = "no-store"
     return response
+
+
+# nginx가 client_max_body_size 1024M으로 열려 있어, 본문 크기는 앱이
+# 직접 지킵니다. 가장 큰 정상 요청은 영수증 업로드(8MB + multipart 오버헤드).
+_MAX_BODY_BYTES = 12 * 1024 * 1024
+
+
+@app.middleware("http")
+async def body_size_limit_middleware(request: Request, call_next):
+    length = request.headers.get("content-length")
+    if length and length.isdigit() and int(length) > _MAX_BODY_BYTES:
+        return JSONResponse(status_code=413, content={"detail": "요청이 너무 큽니다."})
+    return await call_next(request)
 
 
 @app.middleware("http")

@@ -22,7 +22,7 @@ class AddContactRequest(ContactDetailsMixin):
 
 
 class UpdateContactRequest(ContactDetailsMixin):
-    name: str = Field(min_length=1)
+    name: str = Field(min_length=1, max_length=100)
     email: EmailStr
 
 

@@ -18,13 +18,14 @@ class EventType(str, Enum):
 class EventPayload(BaseModel):
     """Shared shape for create + edit."""
 
-    name: str = Field(min_length=1)
-    description: str | None = None
+    name: str = Field(min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=10000)
     # "markdown" renders through the in-app viewer; anything else is shown
     # as plain text with line breaks preserved.
     descriptionFormat: str = "text"
     duration: float = Field(gt=0)
-    dates: list[datetime] = Field(min_length=1)
+    # 하루 1열이므로 1년치도 수십 개 - 그 이상은 실수이거나 공격입니다.
+    dates: list[datetime] = Field(min_length=1, max_length=120)
     type: EventType
 
     startOnMonday: bool = False
@@ -38,16 +39,17 @@ class EventPayload(BaseModel):
     timeIncrement: int = 15
     sendEmailAfterXResponses: int | None = None
 
-    remindees: list[str] = Field(default_factory=list)
+    remindees: list[str] = Field(default_factory=list, max_length=300)
 
 
 class EventResponsePayload(BaseModel):
-    availability: list[datetime] = Field(default_factory=list)
-    ifNeeded: list[datetime] = Field(default_factory=list)
+    # 15분 간격 x 12시간 x 120일 = 5,760칸이 물리적 상한 근처입니다.
+    availability: list[datetime] = Field(default_factory=list, max_length=8000)
+    ifNeeded: list[datetime] = Field(default_factory=list, max_length=8000)
 
     guest: bool
-    name: str | None = None
-    email: str | None = None
+    name: str | None = Field(default=None, max_length=100)
+    email: str | None = Field(default=None, max_length=254)
 
     useCalendarAvailability: bool | None = None
     enabledCalendars: dict[str, list[str]] | None = None
@@ -71,7 +73,7 @@ class UserRespondedPayload(BaseModel):
 
 
 class DuplicateEventPayload(BaseModel):
-    eventName: str = Field(min_length=1)
+    eventName: str = Field(min_length=1, max_length=200)
     copyAvailability: bool = False
 
 

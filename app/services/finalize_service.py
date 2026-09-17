@@ -149,9 +149,7 @@ async def _pending_invitees(event: dict, participants: list[dict]) -> list[dict]
         ):
             if c.get("name"):
                 names[c["email"].lower()] = c["name"]
-    async for u in users_col.find(
-        {"email": {"$in": emails}}, {"email": 1, "name": 1}
-    ):
+    async for u in users_col.find({"email": {"$in": emails}}, {"email": 1, "name": 1}):
         names.setdefault(u["email"].lower(), u.get("name") or "")
 
     return [

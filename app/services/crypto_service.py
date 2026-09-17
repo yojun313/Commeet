@@ -14,6 +14,7 @@ records. `key_is_derived()` lets the UI point that out.
 
 import base64
 import json
+import re
 from pathlib import Path
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -89,26 +90,52 @@ def decrypt_json(token: bytes | None, default=None):
     return json.loads(decrypt_bytes(token).decode("utf-8"))
 
 
+# 첨부 파일명은 서버가 만드는 두 가지 모양뿐입니다. 저장 문서의 파일명은
+# 클라이언트 저장 요청(SettlementInput.receiptFile)을 거쳐 온 값일 수 있어
+# 신뢰할 수 없습니다 - "../"가 섞인 이름이 삭제/읽기 경로에 들어가면 기록
+# 폴더 밖의 파일을 건드리게 되므로, 경로를 만들기 전에 반드시 거릅니다.
+_SAFE_NAME_RE = re.compile(
+    r"^(signature\.png|receipt-\d{1,2}\.(png|jpg|jpeg|webp|pdf))$"
+)
+_SAFE_RECORD_ID_RE = re.compile(r"^[0-9a-f]{24}$")
+
+
+def _safe_path(record_id: str, name: str):
+    """기록 폴더 안의 검증된 경로. 모양이 어긋나면 None - 호출자는 없는
+    파일처럼 다룹니다 (그런 이름은 애초에 저장된 적이 없습니다)."""
+    if not _SAFE_RECORD_ID_RE.match(record_id or ""):
+        return None
+    if not _SAFE_NAME_RE.match(name or ""):
+        return None
+    return storage_dir() / record_id / name
+
+
 def write_encrypted_file(record_id: str, name: str, raw: bytes) -> str:
     """Stores one encrypted attachment and returns its stored filename."""
-    folder = storage_dir() / record_id
-    folder.mkdir(parents=True, exist_ok=True)
-    (folder / name).write_bytes(encrypt_bytes(raw))
+    path = _safe_path(record_id, name)
+    if path is None:
+        raise ValueError(f"attachment name rejected: {name!r}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(encrypt_bytes(raw))
     return name
 
 
 def read_encrypted_file(record_id: str, name: str) -> bytes | None:
-    path = storage_dir() / record_id / name
-    if not path.is_file():
+    path = _safe_path(record_id, name)
+    if path is None or not path.is_file():
         return None
     return decrypt_bytes(path.read_bytes())
 
 
 def delete_file(record_id: str, name: str) -> None:
-    (storage_dir() / record_id / name).unlink(missing_ok=True)
+    path = _safe_path(record_id, name)
+    if path is not None:
+        path.unlink(missing_ok=True)
 
 
 def delete_record_files(record_id: str) -> None:
+    if not _SAFE_RECORD_ID_RE.match(record_id or ""):
+        return
     folder = storage_dir() / record_id
     if not folder.is_dir():
         return

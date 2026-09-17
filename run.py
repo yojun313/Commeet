@@ -5,13 +5,16 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-PORT = int(os.getenv("PORT", 8000))
+PORT = int(os.getenv("PORT", "8000"))
 
 if __name__ == "__main__":
     dev = os.getenv("ENV", "development") == "development"
     uvicorn.run(
         "app.main:app",
-        host="0.0.0.0",
+        # nginx가 localhost로 프록시하므로 루프백에만 엽니다 - 0.0.0.0이면
+        # 방화벽이 열려 있을 때 TLS·프록시를 우회해 포트로 직접 접속됩니다.
+        # LAN에 직접 열어야 하면 .env에 HOST=0.0.0.0.
+        host=os.getenv("HOST", "127.0.0.1"),
         port=PORT,
         reload=dev,
         # 코드 폴더만 감시합니다. 기본값(작업 폴더 전체)이면 instance/records에
