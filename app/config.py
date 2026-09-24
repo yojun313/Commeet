@@ -136,3 +136,9 @@ if MAIL_BACKEND == "postech":
     MAIL_ENABLED = True
 else:
     MAIL_ENABLED = bool(MAIL_SENDER and MAIL_PASSWORD)
+
+# 명시적 차단 스위치. 테스트가 .env의 실제 자격증명을 물려받은 채 확정/초대
+# 흐름을 돌리면 **진짜 메일이 나가서** 가짜 주소의 반송이 발신 계정에
+# 쌓입니다 - 실제로 겪은 사고입니다. 백엔드/자격증명과 무관하게 끕니다.
+if _bool("MAIL_ENABLED", "true") is False:
+    MAIL_ENABLED = False

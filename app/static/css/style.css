@@ -5248,3 +5248,66 @@ textarea.rec-textarea-sm {
 .ext-table th {
   background: var(--color-surface-2);
 }
+
+/* ==========================================================================
+   모바일 웹앱 레이아웃 (prompts/01·04 문서 기준. 색·테마는 건드리지 않음)
+   ========================================================================== */
+
+/* 두 번 탭 확대·핀치 지연 제거. 텍스트 자동 확대(가로 회전 시) 방지. */
+html {
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+button, a {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 노치·홈 인디케이터(safe-area): viewport-fit=cover를 쓰므로 화면 고정/
+   가장자리 요소가 직접 피해 줍니다. 세로 모드에서 좌우 inset은 0이라
+   일반 화면에는 영향이 없습니다. */
+.site-header {
+  padding-top: env(safe-area-inset-top);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+.footer-wrapper {
+  padding-bottom: max(24px, env(safe-area-inset-bottom));
+}
+#snackbar-root {
+  bottom: max(20px, calc(env(safe-area-inset-bottom) + 8px));
+}
+/* 격자 편집 막대는 화면 아래에 붙는(sticky) 요소라 홈 인디케이터를 피합니다. */
+.edit-bar {
+  bottom: env(safe-area-inset-bottom);
+}
+.dialog-backdrop {
+  padding-top: max(16px, env(safe-area-inset-top));
+  padding-bottom: max(16px, env(safe-area-inset-bottom));
+}
+
+@media (pointer: coarse), (max-width: 767.98px) {
+  /* iOS는 16px 미만 입력창에 포커스하면 화면을 자동 확대해 레이아웃이
+     통째로 어긋납니다 - 모바일에서만 입력 요소를 16px로 올립니다. */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+
+  /* 스크롤 영역이 끝에 닿았을 때 문서 전체가 딸려 움직이지 않게. */
+  .grid-scroll,
+  .admin-log-table-wrap,
+  .admin-user-table-wrap,
+  .table-wrap,
+  .dialog {
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* 터치 목표 최소 높이 - 촘촘한 버튼들이 손가락으로 눌리게. */
+  .btn-sm {
+    min-height: 36px;
+  }
+}

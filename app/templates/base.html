@@ -2,7 +2,9 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- 모바일: 입력 포커스 확대 금지 + 노치까지 화면 사용 + (안드로이드)
+         키보드가 올라오면 레이아웃 축소. safe-area 여백은 style.css에서. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
     <script>
       // Sets the theme before first paint, so there's no flash of the wrong
       // palette. Must run here, before the stylesheet link below, not from
@@ -25,6 +27,19 @@
     </script>
     <title>{% block title %}{{ APP_NAME }} - {{ APP_FULL_NAME }}{% endblock %}</title>
     <meta name="description" content="{% block description %}모두의 가능한 시간을 한눈에 모아 그룹 일정을 빠르게 조율하세요.{% endblock %}" />
+    <!-- 홈 화면 앱(PWA). apple-* 메타와 아이콘은 "홈 화면에 추가"하는 순간
+         한 번만 읽히므로, 바꾸면 아이콘을 지우고 다시 추가해야 반영됩니다. -->
+    <link rel="manifest" href="/static/manifest.webmanifest" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Commeet" />
+    <meta name="application-name" content="Commeet" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#12151b" />
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/icons/apple-touch-icon.png" />
     <link rel="stylesheet" href="{{ asset('css/style.css') }}" />
     {% block extra_head %}{% endblock %}
   </head>
