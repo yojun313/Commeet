@@ -102,7 +102,12 @@ function closeDialog(id) {
 
 document.addEventListener("click", (e) => {
   document.querySelectorAll(".dialog-backdrop.open").forEach((backdrop) => {
-    if (e.target === backdrop) backdrop.classList.remove("open");
+    // 입력이 긴 창(data-static-backdrop)은 바깥을 눌러도 닫지 않습니다 -
+    // 일정 수정 중에 바깥을 잘못 눌러 적던 내용을 통째로 잃는 일이
+    // 있었습니다. 닫기는 X·취소 버튼으로만 합니다.
+    if (e.target === backdrop && !backdrop.hasAttribute("data-static-backdrop")) {
+      backdrop.classList.remove("open");
+    }
   });
   const closeBtn = e.target.closest("[data-dialog-close]");
   if (closeBtn) {

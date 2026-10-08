@@ -36,7 +36,7 @@ class EventPayload(BaseModel):
     # 값이 **없는** 예전 일정은 켜진 것으로 봅니다 (records_enabled 참고) -
     # 이 항목이 생기기 전에 적어 둔 기록이 사라지면 안 됩니다.
     guidanceRecordsEnabled: bool = False
-    timeIncrement: int = 15
+    timeIncrement: int = Field(default=15, ge=5, le=120)
     sendEmailAfterXResponses: int | None = None
 
     remindees: list[str] = Field(default_factory=list, max_length=300)

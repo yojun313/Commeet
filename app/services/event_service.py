@@ -27,6 +27,19 @@ class NotEventOwner(Exception):
     pass
 
 
+class IncrementChangeNeedsReset(Exception):
+    """시간 단위를 바꾸려는데 이미 응답이 있음. 기존 응답은 옛 단위의 칸에
+    찍혀 있어 새 격자와 맞지 않으므로, 주최자의 동의(reset_responses)를
+    받아 지운 뒤에만 바꿉니다."""
+
+    def __init__(self, count: int):
+        self.count = count
+
+
+class IncrementLockedWhileConfirmed(Exception):
+    """확정된 일정의 시간 단위는 바꿀 수 없음 - 확정 배정이 응답에 기대고 있습니다."""
+
+
 class NotSignedIn(Exception):
     pass
 
@@ -256,12 +269,25 @@ async def create_event(payload: EventPayload, owner: dict | None) -> dict:
 
 
 async def update_event(
-    event: dict, payload: EventPayload, requester: dict | None
+    event: dict,
+    payload: EventPayload,
+    requester: dict | None,
+    *,
+    reset_responses: bool = False,
 ) -> dict:
     owner_id = event.get("ownerId")
     requester_id = requester["_id"] if requester else None
     if owner_id is not None and owner_id != requester_id:
         raise NotEventOwner()
+
+    # 시간 단위 변경. 예전에는 저장 대상에 아예 없어 조용히 무시됐습니다.
+    increment_changed = int(event.get("timeIncrement") or 15) != payload.timeIncrement
+    if increment_changed:
+        if event.get("isClosed"):
+            raise IncrementLockedWhileConfirmed()
+        count = await event_responses_col.count_documents({"eventId": event["_id"]})
+        if count and not reset_responses:
+            raise IncrementChangeNeedsReset(count)
 
     updates = {
         "name": payload.name,
@@ -276,7 +302,15 @@ async def update_event(
         "guidanceRecordsEnabled": payload.guidanceRecordsEnabled,
         "sendEmailAfterXResponses": payload.sendEmailAfterXResponses,
         "type": payload.type.value,
+        "timeIncrement": payload.timeIncrement,
     }
+
+    unset: dict = {}
+    if increment_changed:
+        # 옛 단위로 찍힌 응답과, 그 응답을 기준으로 저장해 둔 (확정 취소된)
+        # 배정 초안을 함께 지웁니다 - 남겨 두면 없는 칸·없는 사람을 가리킵니다.
+        await event_responses_col.delete_many({"eventId": event["_id"]})
+        unset["finalization"] = ""
 
     old_remindees = {r["email"]: r for r in event.get("remindees") or []}
     new_remindee_emails = set(payload.remindees)
@@ -293,9 +327,15 @@ async def update_event(
         ]
     )
 
+    if increment_changed:
+        # 응답이 지워졌으니 "응답함" 표시도 되돌려 리마인더 대상에 다시 넣습니다.
+        updated_remindees = [{**r, "responded": False} for r in updated_remindees]
     updates["remindees"] = updated_remindees
 
-    await events_col.update_one({"_id": event["_id"]}, {"$set": updates})
+    update_doc: dict = {"$set": updates}
+    if unset:
+        update_doc["$unset"] = unset
+    await events_col.update_one({"_id": event["_id"]}, update_doc)
     saved = await events_col.find_one({"_id": event["_id"]})
     saved["invitesQueued"] = queued
     return saved

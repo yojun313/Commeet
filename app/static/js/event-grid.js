@@ -316,7 +316,8 @@ function buildGridDom() {
   // Sizes come from CSS custom properties so media queries can shrink the
   // grid on phones - an inline pixel value here would override them.
   grid.style.gridTemplateColumns = `var(--grid-label-w) repeat(${cols.length}, minmax(var(--grid-col-min), 1fr))`;
-  grid.style.gridTemplateRows = `var(--grid-head-h) repeat(${ST.slotCount}, var(--grid-row-h))`;
+  // 마지막 한 줄은 끝 시각 라벨 전용입니다 (아래 루프 끝 참고).
+  grid.style.gridTemplateRows = `var(--grid-head-h) repeat(${ST.slotCount}, var(--grid-row-h)) var(--grid-row-h)`;
   grid.innerHTML = "";
 
   grid.appendChild(el(`<div class="avail-grid-corner"></div>`));
@@ -337,7 +338,10 @@ function buildGridDom() {
   for (let row = 0; row < ST.slotCount; row++) {
     const hour = ST.startHour + (row * increment) / 60;
     const isHourMark = Math.abs((hour * 60) % 60) < 0.01;
-    const labelCell = el(`<div class="time-row-label">${isHourMark ? timeLabel(hour) : ""}</div>`);
+    // 정시에만 라벨을 달면, 12:30~13:30처럼 정시가 아닌 데서 시작하는 짧은
+    // 일정은 라벨이 하나도 안 보입니다 - 첫 줄(시작 시각)은 항상 표시합니다.
+    const showLabel = isHourMark || row === 0;
+    const labelCell = el(`<div class="time-row-label">${showLabel ? timeLabel(hour) : ""}</div>`);
     grid.appendChild(labelCell);
 
     const rowCells = [];
@@ -353,6 +357,15 @@ function buildGridDom() {
     });
     ST.cellGrid.push(rowCells);
   }
+
+  // 끝 시각 줄: 칸은 없고 라벨만. 범위가 어디서 끝나는지(예: 오후 1:30)가
+  // 항상 보이게 합니다.
+  const endHour = ST.startHour + (ST.slotCount * increment) / 60;
+  grid.appendChild(el(`<div class="time-row-label time-row-label-end">${timeLabel(endHour)}</div>`));
+  const endFiller = document.createElement("div");
+  endFiller.className = "grid-end-filler";
+  endFiller.style.gridColumn = `2 / span ${cols.length}`;
+  grid.appendChild(endFiller);
 
   wireGridInteraction(grid);
 }

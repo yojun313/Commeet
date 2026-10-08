@@ -1956,6 +1956,10 @@ textarea.input {
   white-space: nowrap;
   z-index: 1;
 }
+/* 끝 시각 라벨 줄 - 마지막 칸 아래 선을 닫아 주는 빈 줄. */
+.grid-end-filler {
+  border-top: 1px solid var(--color-grid-faint-border);
+}
 .grid-cell {
   border-left: 1px solid var(--color-border-light);
   border-top: 1px solid var(--color-grid-faint-border);

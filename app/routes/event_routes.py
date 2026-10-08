@@ -57,17 +57,36 @@ async def create_event(payload: EventPayload, request: Request):
 
 
 @router.put("/{event_id}")
-async def edit_event(event_id: str, payload: EventPayload, request: Request):
+async def edit_event(
+    event_id: str,
+    payload: EventPayload,
+    request: Request,
+    resetResponses: bool = False,
+):
+    """`resetResponses=true`: 시간 단위를 바꾸면서 기존 응답을 지우는 데
+    주최자가 동의했다는 뜻 (화면이 409를 받고 확인 창을 거친 뒤 다시 보냄)."""
     event = await event_service.get_event_by_either_id(event_id)
     if event is None:
         raise HTTPException(status_code=404, detail="이벤트를 찾을 수 없습니다")
 
     requester = await get_optional_user(request)
     try:
-        saved = await event_service.update_event(event, payload, requester)
+        saved = await event_service.update_event(
+            event, payload, requester, reset_responses=resetResponses
+        )
     except event_service.NotEventOwner as exc:
         raise HTTPException(
             status_code=403, detail="이 이벤트를 수정할 권한이 없습니다"
+        ) from exc
+    except event_service.IncrementLockedWhileConfirmed as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="확정된 일정은 시간 단위를 바꿀 수 없습니다. 확정을 취소한 뒤 바꿔 주세요.",
+        ) from exc
+    except event_service.IncrementChangeNeedsReset as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "increment_reset_required", "responses": exc.count},
         ) from exc
 
     return {"invitesQueued": saved.get("invitesQueued", 0)}

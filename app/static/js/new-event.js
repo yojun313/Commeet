@@ -515,7 +515,26 @@ const NewEventDialog = (() => {
       try {
         let result;
         if (state.mode === "edit") {
-          const res = await api.put(`/api/events/${state.event._id}`, payload);
+          const url = `/api/events/${state.event._id}`;
+          let res;
+          try {
+            res = await api.put(url, payload);
+          } catch (err) {
+            // 이미 응답이 있는 일정의 시간 단위를 바꾸면 기존 응답은 새
+            // 칸과 맞지 않아 지워야 합니다 - 서버가 409로 알려 오면 확인을
+            // 받고, 동의했을 때만 다시 보냅니다.
+            const detail = err.data && err.data.detail;
+            if (err.status !== 409 || !detail || detail.code !== "increment_reset_required") throw err;
+            const ok = confirm(
+              `시간 단위를 바꾸면 이미 받은 응답 ${detail.responses}건(가능한 시간)이 모두 삭제됩니다.\n` +
+                "참가자들은 새 단위로 다시 입력해야 합니다. 계속할까요?"
+            );
+            if (!ok) {
+              submitBtn.disabled = false;
+              return;
+            }
+            res = await api.put(`${url}?resetResponses=true`, payload);
+          }
           result = { shortId: state.event.shortId, _id: state.event._id, ...res };
         } else {
           result = await api.post("/api/events", payload);
