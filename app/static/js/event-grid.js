@@ -52,6 +52,7 @@ const ST = {
   dragAnchor: null, // {row, col} the drag started on
   dragBase: null, // ownMarks snapshot at drag start, so the rect can be recomputed live
   selectedRespondents: new Set(),
+  hoverRespondent: null, // 응답자 목록에서 마우스를 올린 사람 (미리보기)
   showBestTimes: false,
   hideIfNeeded: false,
   viewerKey: null,
@@ -247,6 +248,11 @@ function renderSkeleton() {
       </label>
     </div>
 
+    <div class="selection-bar" id="selection-bar" hidden>
+      <span data-role="sel-text"></span>
+      <button type="button" class="btn btn-ghost btn-sm" id="selection-clear">선택 해제</button>
+    </div>
+
     <details class="term-help">
       <summary>“가능”과 “가능(비선호)”는 어떻게 다른가요?</summary>
       <dl class="term-help-body">
@@ -432,8 +438,16 @@ function renderGridCells() {
       ? ST.responseSets[ST.event.ownerId]
       : null;
 
+  // 미리보기(호버) > 선택 > 전체 순. 호버는 잠깐 보는 것이라 선택을 바꾸지 않습니다.
+  const focusKeys = ST.hoverRespondent
+    ? [ST.hoverRespondent]
+    : ST.selectedRespondents.size
+      ? [...ST.selectedRespondents]
+      : null;
+  syncSelectionBar();
+
   cells.forEach((cell) => {
-    cell.classList.remove("available", "if-needed", "dim", "own-preview", "host-avail", "host-ifneeded");
+    cell.classList.remove("available", "if-needed", "dim", "own-preview", "host-avail", "host-ifneeded", "all-selected");
     cell.style.background = "";
     const slot = cell.dataset.slot;
 
@@ -448,17 +462,27 @@ function renderGridCells() {
       return;
     }
 
-    if (ST.selectedRespondents.size > 0) {
-      let anyAvailable = false;
-      let anyIfNeeded = false;
-      ST.selectedRespondents.forEach((key) => {
+    if (focusKeys) {
+      // 고른 사람들만 집계합니다. 예전에는 합집합(한 명이라도 되면 꽉 찬
+      // 색)이라 "몇 명이 되는지"가 안 보였습니다 - 이제 고른 인원 대비
+      // 가능 인원으로 진하기를 정하고, 전원 가능한 칸은 테두리로 강조합니다.
+      let avail = 0;
+      let soft = 0;
+      focusKeys.forEach((key) => {
         const sets = ST.responseSets[key];
         if (!sets) return;
-        if (sets.available.has(slot)) anyAvailable = true;
-        else if (sets.ifNeeded.has(slot)) anyIfNeeded = true;
+        if (sets.available.has(slot)) avail++;
+        else if (!ST.hideIfNeeded && sets.ifNeeded.has(slot)) soft++;
       });
-      if (anyAvailable) cell.classList.add("available");
-      else if (anyIfNeeded && !ST.hideIfNeeded) cell.classList.add("if-needed");
+      const n = focusKeys.length;
+      if (avail > 0) {
+        const opacity = n === 1 ? 0.85 : 0.18 + 0.82 * (avail / n);
+        cell.style.background = `rgba(200, 1, 80, ${opacity.toFixed(2)})`;
+      } else if (soft > 0) {
+        const opacity = n === 1 ? 0.75 : 0.25 + 0.6 * (soft / n);
+        cell.style.background = `rgba(245, 195, 68, ${opacity.toFixed(2)})`;
+      }
+      if (n > 1 && avail === n) cell.classList.add("all-selected");
       return;
     }
 
@@ -509,6 +533,89 @@ function appendPendingInvitees(list) {
   });
 }
 
+/* 응답 키 -> 화면에 보이는 이름 (응답자 목록과 같은 규칙). */
+function respondentName(key) {
+  const resp = (ST.event.responses || {})[key];
+  if (!resp) return key;
+  const isGuestEntry = !resp.user || !resp.user._id;
+  return isGuestEntry
+    ? resp.name || (resp.user ? resp.user.name : "") || key
+    : (resp.user.name || "").trim() || resp.user.email;
+}
+
+/* 선택 중일 때 격자 위 안내줄: 무엇을 기준으로 칠했는지 + 해제 버튼. */
+function syncSelectionBar() {
+  const bar = document.getElementById("selection-bar");
+  if (!bar) return;
+  const n = ST.selectedRespondents.size;
+  // 보이고 숨는 것은 "선택이 있느냐"로만 정합니다. 호버로 숨겼다 보였다 하면
+  // 격자가 위아래로 밀려, 응답자 목록을 누르려던 줄이 옆 사람으로 바뀝니다.
+  if (ST.editing || !n) {
+    bar.hidden = true;
+    return;
+  }
+  bar.hidden = false;
+  const names = [...ST.selectedRespondents].map(respondentName);
+  bar.querySelector("[data-role=sel-text]").textContent = ST.hoverRespondent
+    ? `${respondentName(ST.hoverRespondent)}님 미리보기 중 (마우스를 떼면 선택한 ${n}명 보기로 돌아갑니다)`
+    : n === 1
+      ? `${names[0]}님의 가능한 시간만 보고 있습니다.`
+      : `선택한 ${n}명(${names.join(", ")}) 기준 · 진할수록 더 많은 사람이 가능 · 테두리 = 전원 가능`;
+}
+
+/* 셀 툴팁: 그 시간에 누가 되는지. 지연 없이 바로 뜨도록 브라우저 title
+   대신 떠 있는 박스 하나를 재사용합니다. */
+let cellTip = null;
+function cellTooltipEl() {
+  if (!cellTip) {
+    cellTip = document.createElement("div");
+    cellTip.className = "cell-tooltip";
+    cellTip.hidden = true;
+    document.body.appendChild(cellTip);
+  }
+  return cellTip;
+}
+function hideCellTooltip() {
+  if (cellTip) cellTip.hidden = true;
+}
+function showCellTooltip(cell, x, y) {
+  const slot = cell.dataset.slot;
+  const keys = Object.keys(ST.responseSets || {});
+  if (!keys.length) return hideCellTooltip();
+  const yes = [];
+  const soft = [];
+  const no = [];
+  keys.forEach((key) => {
+    const sets = ST.responseSets[key];
+    if (sets.available.has(slot)) yes.push(respondentName(key));
+    else if (sets.ifNeeded.has(slot)) soft.push(respondentName(key));
+    else no.push(respondentName(key));
+  });
+  const start = new Date(Number(slot));
+  const end = new Date(start.getTime() + (ST.event.timeIncrement || 15) * 60000);
+  const line = (label, cls, names) =>
+    names.length
+      ? `<div class="ct-row"><span class="ct-label ${cls}">${label} ${names.length}</span><span class="ct-names">${names.map(escapeHtml).join(", ")}</span></div>`
+      : "";
+  const tip = cellTooltipEl();
+  tip.innerHTML =
+    `<div class="ct-head">${escapeHtml(fmtMeetingRange(start.toISOString(), end.toISOString()))}</div>` +
+    line("가능", "ct-yes", yes) +
+    line("비선호", "ct-soft", soft) +
+    line("불가", "ct-no", no);
+  tip.hidden = false;
+  // 커서 오른쪽 아래에 두되, 화면 밖으로 나가면 반대편으로 뒤집습니다.
+  const pad = 14;
+  const w = tip.offsetWidth;
+  const h = tip.offsetHeight;
+  let left = x + pad;
+  let top = y + pad;
+  if (left + w > window.innerWidth - 8) left = x - w - pad;
+  if (top + h > window.innerHeight - 8) top = y - h - pad;
+  tip.style.left = `${Math.max(8, left)}px`;
+  tip.style.top = `${Math.max(8, top)}px`;
+}
+
 function renderRespondents() {
   const list = document.getElementById("respondents-list");
   const responses = ST.event.responses || {};
@@ -551,7 +658,19 @@ function renderRespondents() {
       }
       if (ST.selectedRespondents.has(key)) ST.selectedRespondents.delete(key);
       else ST.selectedRespondents.add(key);
+      ST.hoverRespondent = null;
       renderRespondents();
+      renderGridCells();
+    });
+    // 마우스를 올리면 그 사람의 시간만 바로 미리보기 (터치 기기에선 탭=선택).
+    row.addEventListener("pointerenter", (e) => {
+      if (e.pointerType !== "mouse" || ST.editing) return;
+      ST.hoverRespondent = key;
+      renderGridCells();
+    });
+    row.addEventListener("pointerleave", (e) => {
+      if (e.pointerType !== "mouse" || ST.hoverRespondent !== key) return;
+      ST.hoverRespondent = null;
       renderGridCells();
     });
     list.appendChild(row);
@@ -854,6 +973,21 @@ function syncLayoutHeights() {
 /* ---------------------------------------------------------------------- */
 
 function wireGridInteraction(grid) {
+  // 셀 툴팁. 마우스는 올리는 즉시, 터치는 탭하면 뜹니다. 편집(칠하기) 중에는
+  // 손가락/커서를 가리므로 띄우지 않습니다.
+  grid.addEventListener("pointermove", (e) => {
+    if (e.pointerType !== "mouse" || ST.editing) return;
+    const cell = e.target.closest && e.target.closest(".grid-cell");
+    if (cell) showCellTooltip(cell, e.clientX, e.clientY);
+    else hideCellTooltip();
+  });
+  grid.addEventListener("pointerleave", hideCellTooltip);
+  grid.addEventListener("click", (e) => {
+    if (ST.editing) return;
+    const cell = e.target.closest && e.target.closest(".grid-cell");
+    if (cell && matchMedia("(pointer: coarse)").matches) showCellTooltip(cell, e.clientX, e.clientY);
+  });
+
   grid.addEventListener("pointerdown", (e) => {
     if (!ST.editing) return;
     const cell = e.target.closest(".grid-cell");
@@ -944,6 +1078,8 @@ function prefillMarksFrom(resp) {
 function startEditing(prefillFromSelf) {
   ST.editing = true;
   ST.selectedRespondents.clear();
+  ST.hoverRespondent = null;
+  hideCellTooltip();
   ST.ownMarks = {};
 
   if (prefillFromSelf && ST.viewerKey) {
@@ -1614,6 +1750,16 @@ function wireDynamicButtons() {
     syncLayoutHeights();
     if (ST.editing) document.getElementById("avail-grid").classList.add("editing");
   });
+
+  document.getElementById("selection-clear").addEventListener("click", () => {
+    ST.selectedRespondents.clear();
+    renderRespondents();
+    renderGridCells();
+  });
+  document.addEventListener("pointerdown", (e) => {
+    if (!e.target.closest || !e.target.closest(".grid-cell")) hideCellTooltip();
+  });
+  window.addEventListener("scroll", hideCellTooltip, { passive: true });
 
   document.getElementById("respond-btn").addEventListener("click", () => {
     ST.editingAsGuestKey = null;
