@@ -42,6 +42,20 @@ async def set_user_role(user_id: str, payload: SetAdminRequest, request: Request
     return {}
 
 
+@router.get("/people")
+async def list_people(request: Request):
+    """누적 이용자 (가입자 + 같은 이름을 한 사람으로 묶은 게스트 응답자)."""
+    await require_admin(request)
+    return jsonable(await admin_service.list_people())
+
+
+@router.get("/events")
+async def list_events(request: Request):
+    """모든 방 (휴지통 포함) - 대시보드의 방 목록 / 크게 보기."""
+    await require_admin(request)
+    return jsonable(await admin_service.list_events())
+
+
 @router.get("/stats")
 async def get_stats(request: Request, days: int = 30):
     await require_admin(request)

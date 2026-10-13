@@ -323,7 +323,12 @@ async def get_stats(days: int = 30) -> dict:
         {"isDeleted": {"$ne": True}, "isClosed": True}
     )
 
+    from app.services.admin_service import list_people
+
+    people_summary = (await list_people())["summary"]
+
     return {
+        "people": people_summary,
         "totalUsers": total_users,
         "totalAdmins": total_admins,
         "totalEvents": total_events,

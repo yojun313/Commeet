@@ -36,7 +36,14 @@ function renderStatCards(stats) {
   const g = stats.growth || {};
   const err4 = (stats.statusGroups && stats.statusGroups["4xx"]) || 0;
   const err5 = (stats.statusGroups && stats.statusGroups["5xx"]) || 0;
+  const people = stats.people || {};
   const cards = [
+    {
+      label: "누적 이용자",
+      value: people.total || 0,
+      sub: `회원 ${Number(people.members || 0).toLocaleString()} · 비회원 ${Number(people.guests || 0).toLocaleString()}`,
+      action: "people",
+    },
     {
       label: "전체 사용자",
       value: stats.totalUsers,
@@ -74,7 +81,16 @@ function renderStatCards(stats) {
   root.innerHTML = "";
   cards.forEach((c) => {
     const div = document.createElement("div");
-    div.className = "admin-stat-card" + (c.danger ? " danger" : "");
+    div.className = "admin-stat-card" + (c.danger ? " danger" : "") + (c.action ? " clickable" : "");
+    if (c.action === "people") {
+      div.title = "눌러서 이용자 목록 크게 보기";
+      div.tabIndex = 0;
+      div.setAttribute("role", "button");
+      div.addEventListener("click", () => openBrowse("people"));
+      div.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openBrowse("people"); }
+      });
+    }
     const val = c.raw ? esc(c.value) : Number(c.value).toLocaleString();
     div.innerHTML =
       `<div class="admin-stat-label">${esc(c.label)}</div>` +
@@ -509,6 +525,261 @@ async function openUserDetail(userId) {
 }
 
 /* ------------------------------------------------------------------ */
+/* People (members + guests) / rooms - sortable tables & big view      */
+/* ------------------------------------------------------------------ */
+
+let peopleData = null; // {summary, people}
+let allRooms = [];
+
+const fmtShort = (iso) => (iso ? fmtDate(iso).slice(2) : "-");
+
+function roomStatus(r) {
+  if (r.isDeleted) return { key: "deleted", label: "휴지통", cls: "badge-muted" };
+  if (r.isArchived) return { key: "archived", label: "보관", cls: "badge-muted" };
+  if (r.isClosed) return { key: "closed", label: "확정", cls: "admin-badge-closed" };
+  return { key: "open", label: "진행 중", cls: "admin-badge-open" };
+}
+
+function roomOwnerHtml(r) {
+  if (!r.ownerId) return `<span class="hint-inline">비로그인 생성</span>`;
+  const label = esc(r.ownerName || r.ownerEmail || "(탈퇴)");
+  return `<button type="button" class="admin-link" data-owner="${esc(r.ownerId)}" title="${esc(r.ownerEmail)}">${label}</button>`;
+}
+
+function roomOpenHtml(r) {
+  return r.isDeleted
+    ? `<span class="hint-inline">-</span>`
+    : `<a class="btn btn-sm btn-ghost" href="/e/${esc(r.shortId || r._id)}" target="_blank" rel="noopener">열기</a>`;
+}
+
+/* 열 정의: sort(r)는 정렬 값, html(r)은 칸 내용. compact는 대시보드 카드에도 나오는 열. */
+const ROOM_COLUMNS = [
+  { label: "방 이름", sort: (r) => r.name, html: (r) => `<span class="admin-cell-strong">${esc(r.name || "(이름 없음)")}</span>`, compact: true, wrap: true },
+  { label: "주최자", sort: (r) => r.ownerName || r.ownerEmail || "", html: roomOwnerHtml, compact: true },
+  { label: "응답", sort: (r) => r.numResponses, html: (r) => `${r.numResponses}`, num: true, compact: true },
+  { label: "일정 날짜", sort: (r) => r.firstDate || "", html: (r) => r.firstDate ? `${fmtShort(r.firstDate)}${r.lastDate && fmtDate(r.lastDate) !== fmtDate(r.firstDate) ? ` ~ ${fmtShort(r.lastDate)}` : ""}` : "-" },
+  { label: "최근 응답", sort: (r) => r.lastResponseAt || "", html: (r) => fmtShort(r.lastResponseAt) },
+  { label: "만든 날", sort: (r) => r.createdAt || "", html: (r) => fmtShort(r.createdAt), compact: true },
+  { label: "상태", sort: (r) => roomStatus(r).key, html: (r) => {
+      const st = roomStatus(r);
+      const extra = (r.blind ? ` <span class="badge badge-muted">비공개</span>` : "") + (r.records ? ` <span class="badge badge-muted">면담기록</span>` : "");
+      return `<span class="badge ${st.cls}">${st.label}</span>${extra}`;
+    }, compact: true },
+  { label: "", html: roomOpenHtml, compact: true },
+];
+
+const PEOPLE_COLUMNS = [
+  { label: "이름", sort: (p) => p.name || p.email, html: (p) => `<span class="admin-cell-strong">${esc(p.name || "-")}</span>${p.isAdmin ? ` <span class="badge" style="background:var(--color-primary);color:#fff;">관리자</span>` : ""}` },
+  { label: "구분", sort: (p) => p.kind, html: (p) => p.kind === "member"
+      ? `<span class="badge admin-badge-open">회원</span>${p.alsoGuest ? ` <span class="hint-inline" title="같은 이름으로 비회원 응답도 있어 한 사람으로 셌습니다">+비회원 응답</span>` : ""}`
+      : `<span class="badge badge-muted">비회원</span>` },
+  { label: "이메일", sort: (p) => p.email || "", html: (p) => esc(p.email || "-") },
+  { label: "처음 이용", sort: (p) => p.firstSeen || "", html: (p) => fmtShort(p.firstSeen) },
+  { label: "최근 활동", sort: (p) => p.lastActive || "", html: (p) => fmtShort(p.lastActive) },
+  { label: "만든 방", sort: (p) => p.eventsOwned, html: (p) => `${p.eventsOwned}`, num: true },
+  { label: "응답한 방", sort: (p) => p.eventsResponded, html: (p) => `${p.eventsResponded}`, num: true },
+  { label: "", html: () => `<button type="button" class="btn btn-sm btn-ghost" data-detail>상세</button>` },
+];
+
+/* 머리글을 누르면 그 열로 정렬 (같은 열을 다시 누르면 방향 반전). */
+function renderSortableTable(thead, tbody, columns, rows, sortState, onRow, rerender) {
+  thead.innerHTML = "";
+  const tr = document.createElement("tr");
+  columns.forEach((c, i) => {
+    const th = document.createElement("th");
+    if (c.num) th.className = "num";
+    if (c.sort) {
+      const arrow = sortState.col === i ? (sortState.dir > 0 ? " ▲" : " ▼") : "";
+      th.innerHTML = `<button type="button" class="admin-sort">${esc(c.label)}${arrow}</button>`;
+      th.firstChild.addEventListener("click", () => {
+        sortState.dir = sortState.col === i ? -sortState.dir : (c.num || /날|활동|응답|이용/.test(c.label) ? -1 : 1);
+        sortState.col = i;
+        rerender();
+      });
+    } else {
+      th.textContent = c.label;
+    }
+    tr.appendChild(th);
+  });
+  thead.appendChild(tr);
+
+  const col = columns[sortState.col];
+  const sorted = col && col.sort
+    ? [...rows].sort((a, b) => {
+        const x = col.sort(a), y = col.sort(b);
+        const cmp = typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y), "ko");
+        return cmp * sortState.dir;
+      })
+    : rows;
+
+  tbody.innerHTML = "";
+  if (!sorted.length) {
+    tbody.innerHTML = `<tr><td colspan="${columns.length}" class="hint" style="padding: 14px;">해당하는 항목이 없습니다.</td></tr>`;
+    return;
+  }
+  const frag = document.createDocumentFragment();
+  sorted.forEach((r) => {
+    const row = document.createElement("tr");
+    row.innerHTML = columns
+      .map((c) => `<td class="${[c.num ? "num" : "", c.wrap ? "wrap" : ""].join(" ").trim()}">${c.html(r)}</td>`)
+      .join("");
+    onRow(row, r);
+    frag.appendChild(row);
+  });
+  tbody.appendChild(frag);
+}
+
+function wireRoomRow(tr) {
+  tr.querySelectorAll("[data-owner]").forEach((b) =>
+    b.addEventListener("click", () => openUserDetail(b.dataset.owner))
+  );
+}
+
+function wirePersonRow(tr, p) {
+  tr.querySelector("[data-detail]").addEventListener("click", () => {
+    if (p.kind === "member") openUserDetail(p._id);
+    else openGuestDetail(p);
+  });
+}
+
+function roomMatches(r, filter, q) {
+  if (filter !== "all" && roomStatus(r).key !== filter) return false;
+  if (!q) return true;
+  return [r.name, r.ownerName, r.ownerEmail, r.shortId].some((v) => (v || "").toLowerCase().includes(q));
+}
+
+function personMatches(p, filter, q) {
+  if (filter !== "all" && p.kind !== filter) return false;
+  if (!q) return true;
+  return [p.name, p.email].some((v) => (v || "").toLowerCase().includes(q));
+}
+
+/* ---- dashboard rooms card ---- */
+const roomCardState = { filter: "all", sort: { col: 5, dir: -1 } };
+
+function renderRoomCard() {
+  const q = document.getElementById("admin-room-search").value.trim().toLowerCase();
+  const rows = allRooms.filter((r) => roomMatches(r, roomCardState.filter, q));
+  document.getElementById("admin-room-count").textContent = rows.length;
+  const cols = ROOM_COLUMNS.filter((c) => c.compact);
+  // 정렬 기준 열 번호는 전체 열 기준이라, 간단 표에서는 위치를 다시 찾습니다.
+  const sortCol = ROOM_COLUMNS[roomCardState.sort.col];
+  const state = { col: Math.max(0, cols.indexOf(sortCol)), dir: roomCardState.sort.dir };
+  renderSortableTable(
+    document.getElementById("admin-room-thead"),
+    document.getElementById("admin-room-tbody"),
+    cols, rows, state, wireRoomRow,
+    () => {
+      roomCardState.sort = { col: ROOM_COLUMNS.indexOf(cols[state.col]), dir: state.dir };
+      renderRoomCard();
+    }
+  );
+}
+
+async function loadRooms() {
+  try {
+    allRooms = await api.get("/api/admin/events");
+    renderRoomCard();
+  } catch (err) {
+    showSnackbar(err.message, "error");
+  }
+}
+
+/* ---- big view ---- */
+const browse = { mode: null, filter: "all", sort: { col: 0, dir: 1 } };
+
+const BROWSE_FILTERS = {
+  people: [["all", "전체"], ["member", "회원"], ["guest", "비회원"]],
+  rooms: [["all", "전체"], ["open", "진행 중"], ["closed", "확정"], ["archived", "보관"], ["deleted", "휴지통"]],
+};
+
+function browseSummaryHtml() {
+  if (browse.mode === "people") {
+    const s = (peopleData && peopleData.summary) || {};
+    const items = [
+      ["누적 이용자", s.total], ["회원", s.members], ["비회원", s.guests],
+      ["회원 중 비회원 응답도 있음", s.membersAlsoGuest],
+    ];
+    return items.map(([k, v]) => `<div class="admin-browse-stat"><span>${k}</span><b>${Number(v || 0).toLocaleString()}</b></div>`).join("") +
+      `<p class="hint admin-browse-note">비회원은 시간을 입력할 때 적은 이름으로 셉니다. 같은 이름은 한 사람으로, 회원과 이름이 같으면 그 회원으로 합쳤습니다.</p>`;
+  }
+  const count = (k) => allRooms.filter((r) => roomStatus(r).key === k).length;
+  const totalResp = allRooms.reduce((a, r) => a + r.numResponses, 0);
+  const items = [
+    ["전체 방", allRooms.length], ["진행 중", count("open")], ["확정", count("closed")],
+    ["보관", count("archived")], ["휴지통", count("deleted")], ["누적 응답", totalResp],
+  ];
+  return items.map(([k, v]) => `<div class="admin-browse-stat"><span>${k}</span><b>${Number(v || 0).toLocaleString()}</b></div>`).join("");
+}
+
+function renderBrowse() {
+  const q = document.getElementById("admin-browse-search").value.trim().toLowerCase();
+  const isPeople = browse.mode === "people";
+  const source = isPeople ? (peopleData ? peopleData.people : []) : allRooms;
+  const rows = source.filter((r) => (isPeople ? personMatches(r, browse.filter, q) : roomMatches(r, browse.filter, q)));
+  document.getElementById("admin-browse-count").textContent = `${rows.length.toLocaleString()}개 표시`;
+  document.getElementById("admin-browse-summary").innerHTML = browseSummaryHtml();
+  document.querySelectorAll("#admin-browse-filter button").forEach((b) =>
+    b.classList.toggle("active", b.dataset.f === browse.filter)
+  );
+  renderSortableTable(
+    document.getElementById("admin-browse-thead"),
+    document.getElementById("admin-browse-tbody"),
+    isPeople ? PEOPLE_COLUMNS : ROOM_COLUMNS,
+    rows, browse.sort,
+    isPeople ? wirePersonRow : wireRoomRow,
+    renderBrowse
+  );
+}
+
+async function openBrowse(mode) {
+  browse.mode = mode;
+  browse.filter = "all";
+  browse.sort = mode === "people" ? { col: 4, dir: -1 } : { col: 5, dir: -1 };
+  document.getElementById("admin-browse-title").textContent = mode === "people" ? "이용자 (회원 + 비회원)" : "방 목록";
+  const search = document.getElementById("admin-browse-search");
+  search.value = "";
+  search.placeholder = mode === "people" ? "이름 또는 이메일로 검색" : "방 이름, 주최자, 링크 ID로 검색";
+  document.getElementById("admin-browse-filter").innerHTML = BROWSE_FILTERS[mode]
+    .map(([k, label]) => `<button type="button" data-f="${k}">${label}</button>`)
+    .join("");
+  document.getElementById("admin-browse-tbody").innerHTML =
+    `<tr><td class="hint" style="padding: 14px;"><span class="spinner"></span></td></tr>`;
+  openDialog("admin-browse-dialog");
+  try {
+    if (mode === "people") peopleData = await api.get("/api/admin/people");
+    else allRooms = await api.get("/api/admin/events");
+    renderBrowse();
+  } catch (err) {
+    document.getElementById("admin-browse-tbody").innerHTML =
+      `<tr><td class="hint" style="padding: 14px;">불러오지 못했습니다: ${esc(err.message)}</td></tr>`;
+  }
+  search.focus();
+}
+
+/* 비회원은 계정이 없어 상세 API가 없습니다 - 목록에 같이 온 응답 방을 보여 줍니다. */
+function openGuestDetail(p) {
+  openDialog("admin-user-detail-dialog");
+  document.getElementById("admin-detail-title").textContent = `${p.name} (비회원)`;
+  const rows = [
+    `<div class="cal-detail-row"><span class="cal-detail-label">이메일</span><span>${esc(p.email || "-")}</span></div>`,
+    `<div class="cal-detail-row"><span class="cal-detail-label">처음 응답</span><span>${fmtDateTime(p.firstSeen)}</span></div>`,
+    `<div class="cal-detail-row"><span class="cal-detail-label">최근 응답</span><span>${fmtDateTime(p.lastActive)}</span></div>`,
+  ];
+  const events = p.events || [];
+  const list = events.length
+    ? events.map((e) => `
+        <div class="admin-event-row">
+          <div><div class="admin-event-name">${esc(e.name)}</div>
+          <div class="admin-event-meta">${e.isDeleted ? "휴지통" : "일정"}</div></div>
+          ${e.isDeleted ? "" : `<a class="btn btn-sm btn-ghost" href="/e/${esc(e.shortId || e._id)}" target="_blank" rel="noopener">열기</a>`}
+        </div>`).join("")
+    : `<p class="hint">남아 있는 방이 없습니다.</p>`;
+  document.getElementById("admin-detail-body").innerHTML =
+    rows.join("") + `<h3 style="font-size: 14px; margin: 16px 0 8px;">응답한 방 (${events.length})</h3>` + list;
+}
+
+/* ------------------------------------------------------------------ */
 /* Recent activity log                                                 */
 /* ------------------------------------------------------------------ */
 
@@ -593,7 +864,26 @@ async function sendTestMail() {
 document.addEventListener("DOMContentLoaded", () => {
   loadStats();
   loadUsers();
+  loadRooms();
   loadLogs();
+
+  document.getElementById("admin-people-open").addEventListener("click", () => openBrowse("people"));
+  document.getElementById("admin-rooms-open").addEventListener("click", () => openBrowse("rooms"));
+  document.getElementById("admin-room-search").addEventListener("input", renderRoomCard);
+  document.getElementById("admin-room-filter").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-f]");
+    if (!b) return;
+    roomCardState.filter = b.dataset.f;
+    document.querySelectorAll("#admin-room-filter button").forEach((x) => x.classList.toggle("active", x === b));
+    renderRoomCard();
+  });
+  document.getElementById("admin-browse-search").addEventListener("input", renderBrowse);
+  document.getElementById("admin-browse-filter").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-f]");
+    if (!b) return;
+    browse.filter = b.dataset.f;
+    renderBrowse();
+  });
   loadMailConfig();
 
   document.getElementById("admin-mail-send").addEventListener("click", sendTestMail);

@@ -5378,3 +5378,156 @@ button, a {
   border-radius: var(--radius-md);
 }
 .selection-bar[hidden] { display: none; }
+
+/* ---- 관리자: 누적 이용자 카드 · 방 목록 · 크게 보기 ---------------------- */
+.admin-stat-card.clickable {
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.admin-stat-card.clickable:hover,
+.admin-stat-card.clickable:focus-visible {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-pale);
+  outline: none;
+}
+.admin-head-tools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.admin-head-tools .toggle-group button {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+.admin-rooms-card {
+  margin-bottom: 16px;
+}
+.admin-user-table th.num,
+.admin-user-table td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.admin-user-table td.wrap {
+  white-space: normal;
+  min-width: 180px;
+}
+.admin-cell-strong {
+  font-weight: 700;
+  color: var(--color-heading);
+}
+.admin-sort {
+  all: unset;
+  cursor: pointer;
+  font: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+}
+.admin-sort:hover,
+.admin-sort:focus-visible {
+  color: var(--color-primary);
+}
+.admin-link {
+  all: unset;
+  cursor: pointer;
+  color: var(--color-heading);
+  text-decoration: underline;
+  text-decoration-color: var(--color-border);
+  text-underline-offset: 3px;
+}
+.admin-link:hover {
+  color: var(--color-primary);
+  text-decoration-color: currentColor;
+}
+.badge.admin-badge-open {
+  background-color: var(--color-primary-pale);
+  color: var(--color-primary);
+}
+.badge.admin-badge-closed {
+  background-color: var(--color-navy-pale-2);
+  color: var(--color-heading);
+}
+
+.admin-browse-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex-shrink: 0;
+  margin-bottom: 12px;
+}
+.admin-browse-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 96px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface-2);
+}
+.admin-browse-stat span {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+.admin-browse-stat b {
+  font-size: 18px;
+  color: var(--color-heading);
+  font-variant-numeric: tabular-nums;
+}
+.admin-browse-note {
+  flex-basis: 100%;
+  margin: 2px 0 0;
+}
+.admin-browse-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  margin-bottom: 10px;
+}
+.admin-browse-toolbar .input {
+  max-width: 280px;
+}
+/* 창 크기는 고정(.dialog-xl), 표만 안쪽에서 스크롤 - 머리글은 붙어 있습니다. */
+.admin-browse-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+}
+.admin-browse-table tbody tr:hover td {
+  background-color: var(--color-surface-2);
+}
+
+@media (max-width: 640px) {
+  .admin-browse-toolbar .input {
+    max-width: none;
+    flex: 1 1 100%;
+  }
+  .admin-browse-stat {
+    min-width: 0;
+    flex: 1 1 calc(33% - 8px);
+  }
+  .admin-head-tools {
+    width: 100%;
+  }
+  .admin-head-tools .input {
+    max-width: none !important;
+    flex: 1 1 100%;
+  }
+  .admin-browse-body {
+    overscroll-behavior: contain;
+  }
+  /* 좁은 화면에서는 표 자리를 남기려고 설명 문단은 접습니다. */
+  .admin-browse-note {
+    display: none;
+  }
+  .admin-browse-stat {
+    padding: 6px 10px;
+  }
+  .admin-browse-stat b {
+    font-size: 16px;
+  }
+}

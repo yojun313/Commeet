@@ -87,7 +87,10 @@
   <div class="card card-pad">
     <div class="admin-card-head">
       <h2>사용자 (<span id="admin-user-count">0</span>)</h2>
-      <input class="input" id="admin-user-search" style="max-width: 220px;" placeholder="이름 또는 이메일로 검색" />
+      <div class="admin-head-tools">
+        <input class="input" id="admin-user-search" style="max-width: 220px;" placeholder="이름 또는 이메일로 검색" />
+        <button class="btn btn-secondary btn-sm" type="button" id="admin-people-open">비회원 포함 크게 보기</button>
+      </div>
     </div>
     <div class="admin-user-table-wrap">
       <table class="admin-user-table" id="admin-user-table">
@@ -133,7 +136,52 @@
     </div>
   </div>
   </div>
+<div class="card card-pad admin-rooms-card">
+  <div class="admin-card-head">
+    <h2>방 (<span id="admin-room-count">0</span>)</h2>
+    <div class="admin-head-tools">
+      <div class="toggle-group" id="admin-room-filter">
+        <button type="button" data-f="all" class="active">전체</button>
+        <button type="button" data-f="open">진행 중</button>
+        <button type="button" data-f="closed">확정</button>
+        <button type="button" data-f="archived">보관</button>
+        <button type="button" data-f="deleted">휴지통</button>
+      </div>
+      <input class="input" id="admin-room-search" style="max-width: 220px;" placeholder="방 이름 또는 주최자로 검색" />
+      <button class="btn btn-secondary btn-sm" type="button" id="admin-rooms-open">크게 보기</button>
+    </div>
+  </div>
+  <div class="admin-user-table-wrap">
+    <table class="admin-user-table">
+      <thead id="admin-room-thead"></thead>
+      <tbody id="admin-room-tbody"></tbody>
+    </table>
+  </div>
 </div>
+</div>
+
+<!-- 사용자(비회원 포함) / 방 목록을 크게 보는 창. 같은 틀을 두 목록이 나눠 씁니다. -->
+<div class="dialog-backdrop" id="admin-browse-dialog">
+  <div class="dialog dialog-xl">
+    <div class="dialog-header">
+      <h2 id="admin-browse-title"></h2>
+      <button class="btn-icon" type="button" data-dialog-close>&times;</button>
+    </div>
+    <div class="admin-browse-summary" id="admin-browse-summary"></div>
+    <div class="admin-browse-toolbar">
+      <input class="input" id="admin-browse-search" placeholder="검색" />
+      <div class="toggle-group" id="admin-browse-filter"></div>
+      <span class="hint-inline" id="admin-browse-count"></span>
+    </div>
+    <div class="admin-browse-body">
+      <table class="admin-user-table admin-browse-table">
+        <thead id="admin-browse-thead"></thead>
+        <tbody id="admin-browse-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
 
 <div class="dialog-backdrop" id="admin-user-detail-dialog">
   <div class="dialog dialog-md">
