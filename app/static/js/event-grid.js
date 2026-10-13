@@ -129,6 +129,14 @@ async function loadEvent() {
       </div>
     `;
   }
+  if (event.adminView && !document.getElementById("admin-view-banner")) {
+    // 관리자가 남의 일정을 여는 경우 - 응답은 주최자와 똑같이 보이지만
+    // 수정·확정·메일 버튼은 주최자에게만 있습니다 (서버도 막습니다).
+    document.getElementById("guest-owner-banner").insertAdjacentHTML(
+      "beforeend",
+      `<div class="guest-banner" id="admin-view-banner">관리자 보기: 주최자와 같은 응답 화면입니다. 일정 수정·확정·메일 발송은 주최자만 할 수 있습니다.</div>`
+    );
+  }
 
   await refreshResponses();
   renderRespondents();

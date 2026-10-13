@@ -118,6 +118,18 @@ async def get_event_version(event_id: str):
     return {"v": version}
 
 
+def _sees_all_responses(event: dict, viewer: dict | None, is_owner: bool) -> bool:
+    """응답을 주최자와 똑같이 볼 수 있는가 - 주최자 본인, 또는 관리자.
+
+    관리자는 대시보드에서 남의 일정을 열어 응답 현황을 확인합니다. 비공개
+    일정(blind)의 다른 참가자 응답, 이메일, 미응답 명단까지 주최자 화면과
+    같게 보여 주되, 수정 권한(isOwner)은 주지 않습니다.
+    """
+    if is_owner:
+        return True
+    return bool(viewer and viewer.get("isAdmin") and event.get("ownerId"))
+
+
 @router.get("/{event_id}")
 async def get_event(event_id: str, request: Request, guestName: str | None = None):
     event = await event_service.get_event_by_either_id(event_id)
@@ -126,34 +138,39 @@ async def get_event(event_id: str, request: Request, guestName: str | None = Non
 
     viewer = await get_optional_user(request)
     is_owner = bool(viewer) and event.get("ownerId") == viewer["_id"]
+    sees_all = _sees_all_responses(event, viewer, is_owner)
 
     responses = await event_service.get_event_responses(event["_id"])
     responses_map = await event_service.build_responses_map(
-        event, responses, is_owner=is_owner, include_availability=False
+        event, responses, is_owner=sees_all, include_availability=False
     )
 
     result = dict(event)
     result["responses"] = event_service.apply_blind_filter(
-        event, responses_map, viewer=viewer, is_owner=is_owner, guest_name=guestName
+        event, responses_map, viewer=viewer, is_owner=sees_all, guest_name=guestName
     )
+    # isOwner는 "수정할 수 있나"입니다 - 관리자도 남의 일정은 고치지 못하므로
+    # 주최자 전용 버튼은 그대로 숨기고, 보기만 주최자와 같게 맞춥니다.
     result["isOwner"] = is_owner
+    result["adminView"] = sees_all and not is_owner
     result["isClosed"] = bool(event.get("isClosed"))
 
-    if is_owner:
+    if sees_all:
         # 사이드바의 "미응답" 섹션용. 초대는 받았는데 아직 응답하지 않은
         # 사람들 - "메일 보내기"가 쓰는 것과 같은 계산(mail_targets)이라
         # 리마인더 대상과 화면 목록이 어긋나지 않습니다. 초대 이메일이
-        # 드러나므로 주최자에게만 내려 줍니다.
-        targets = await event_service.mail_targets(event, viewer)
+        # 드러나므로 주최자(와 관리자)에게만 내려 줍니다.
+        owner = viewer if is_owner else await get_user_by_id(str(event["ownerId"]))
+        targets = await event_service.mail_targets(event, owner or {})
         result["pendingInvitees"] = targets["pending"]
 
-    if not is_owner:
+    if not sees_all:
         # 초대 명단은 이메일 목록입니다 - 링크만 가진 사람에게 다른
         # 초대자들의 이메일을 보여 줄 이유가 없습니다. 화면에서도 이 값은
         # 주최자만 씁니다 (초대 권유 배너).
         result["remindees"] = None
 
-    if event.get("blindAvailabilityEnabled") and not is_owner:
+    if event.get("blindAvailabilityEnabled") and not sees_all:
         result["numResponses"] = None
 
     return jsonable(result)
@@ -173,12 +190,13 @@ async def get_responses(
 
     viewer = await get_optional_user(request)
     is_owner = bool(viewer) and event.get("ownerId") == viewer["_id"]
+    sees_all = _sees_all_responses(event, viewer, is_owner)
 
     responses_map = await event_service.get_filtered_responses_map(
-        event, timeMin, timeMax, is_owner=is_owner
+        event, timeMin, timeMax, is_owner=sees_all
     )
     responses_map = event_service.apply_blind_filter(
-        event, responses_map, viewer=viewer, is_owner=is_owner, guest_name=guestName
+        event, responses_map, viewer=viewer, is_owner=sees_all, guest_name=guestName
     )
     return jsonable(responses_map)
 
