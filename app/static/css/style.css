@@ -3802,21 +3802,33 @@ body.dragging-active * {
 /* The dashboard used to be one full-width card stacked on another, which
    left a lot of unused width and a very tall page. These rows put the
    wide-content card beside the narrow ones instead. */
+/* 같은 줄 카드들은 높이를 맞춥니다(stretch) - 키가 다른 카드가 나란히 있으면
+   짧은 쪽 아래에 빈 여백이 생겨 배치가 어수선해 보였습니다. */
 .admin-grid {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
   gap: 16px;
   margin-bottom: 16px;
-  align-items: start;
+  align-items: stretch;
 }
-.admin-grid-main {
-  /* Chart spans the full height of the two stacked side cards next to it. */
-  grid-row: span 2;
+.admin-grid-pairs {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
-/* The log table carries more (and wider) columns than the user table, so it
-   gets the larger share rather than an even split. */
-.admin-grid-tables {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+.admin-card-col {
+  display: flex;
+  flex-direction: column;
+}
+/* 남는 높이만 차지하고 넘치면 안에서 스크롤. 안쪽을 absolute로 띄워 두어야
+   이 목록의 길이가 줄 높이를 늘리지 않습니다 (높이는 옆 카드가 정함). */
+.admin-fill-scroll {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 120px;
+}
+.admin-fill-scroll > * {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
 }
 .admin-card-head {
   display: flex;
@@ -3833,11 +3845,16 @@ body.dragging-active * {
 
 @media (max-width: 1100px) {
   .admin-grid,
-  .admin-grid-tables {
+  .admin-grid-pairs {
     grid-template-columns: minmax(0, 1fr);
   }
-  .admin-grid-main {
-    grid-row: auto;
+  /* 한 줄로 쌓이면 옆 카드가 없으니 오류 목록도 내용만큼 늘어납니다. */
+  .admin-fill-scroll {
+    min-height: 0;
+  }
+  .admin-fill-scroll > * {
+    position: static;
+    max-height: 320px;
   }
 }
 .admin-stat-card {
@@ -3912,12 +3929,6 @@ body.dragging-active * {
 .admin-delta.down { color: var(--color-danger); background: color-mix(in srgb, var(--color-danger) 10%, transparent); }
 .admin-delta.flat { color: var(--color-text-faint); background: var(--color-surface-muted, rgba(0,0,0,0.04)); }
 
-.admin-grid-thirds {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-@media (max-width: 1100px) {
-  .admin-grid-thirds { grid-template-columns: minmax(0, 1fr); }
-}
 
 .admin-chart-legend {
   display: flex;
@@ -5379,29 +5390,117 @@ button, a {
 }
 .selection-bar[hidden] { display: none; }
 
-/* ---- 관리자: 누적 이용자 카드 · 방 목록 · 크게 보기 ---------------------- */
-.admin-stat-card.clickable {
-  cursor: pointer;
-  transition: border-color 0.15s, box-shadow 0.15s;
+/* ---- 관리자: 목록 카드 · 누적 이용자 · 크게 보기 --------------------------
+   목록 카드 = 머리 줄(제목·개수 | 주요 버튼) + 도구 줄(검색 | 필터) + 표.
+   두 줄로 나눠 두어 폭이 좁아져도 버튼이 제목 밑으로 어정쩡하게 떨어지지
+   않습니다. 도구 줄은 검색창이 남는 폭을 차지하고, 좁으면 필터가 통째로
+   다음 줄로 내려갑니다. */
+.admin-list-card {
+  padding: 0;
+  margin-bottom: 16px;
+  overflow: hidden;
 }
-.admin-stat-card.clickable:hover,
-.admin-stat-card.clickable:focus-visible {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px var(--color-primary-pale);
-  outline: none;
-}
-.admin-head-tools {
+.admin-list-head {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px 12px;
+}
+.admin-list-title {
+  display: flex;
+  align-items: baseline;
   gap: 8px;
+  min-width: 0;
 }
-.admin-head-tools .toggle-group button {
-  padding: 5px 10px;
+.admin-list-title h2 {
+  font-size: 16px;
+  margin: 0;
+  white-space: nowrap;
+}
+.admin-count {
+  display: inline-flex;
+  align-items: center;
+  min-width: 24px;
+  justify-content: center;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background-color: var(--color-navy-pale);
+  color: var(--color-heading);
   font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
-.admin-rooms-card {
-  margin-bottom: 16px;
+.admin-list-sub {
+  font-size: 12px;
+  color: var(--color-text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.admin-list-head .btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.admin-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 0 20px 12px;
+}
+.admin-search {
+  flex: 1 1 240px;
+  max-width: 360px;
+  min-width: 0;
+  padding-left: 34px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: 11px center;
+}
+.admin-toolbar-meta {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--color-text-faint);
+  white-space: nowrap;
+}
+/* 작은 분절 버튼 - 기본 .toggle-group보다 낮게, 줄바꿈 없이. */
+.toggle-group.admin-seg {
+  flex-shrink: 0;
+}
+.toggle-group.admin-seg button {
+  padding: 5px 11px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* 카드 안 표: 머리글 줄은 카드 가장자리까지, 내용은 카드 안쪽 여백에 맞춥니다. */
+.admin-list-card .admin-user-table-wrap,
+.admin-list-card .admin-log-table-wrap {
+  border-top: 1px solid var(--color-border-light);
+}
+.admin-list-card .admin-user-table thead th {
+  background-color: var(--color-surface-2);
+}
+.admin-list-card .admin-user-table th:first-child,
+.admin-list-card .admin-user-table td:first-child {
+  padding-left: 20px;
+}
+.admin-list-card .admin-user-table th:last-child,
+.admin-list-card .admin-user-table td:last-child {
+  padding-right: 20px;
+}
+.admin-list-card .admin-user-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.admin-list-card .admin-log-pager {
+  margin: 0;
+  padding: 10px 20px;
+  border-top: 1px solid var(--color-border-light);
+}
+.admin-user-table tbody tr:hover td {
+  background-color: var(--color-surface-2);
 }
 .admin-user-table th.num,
 .admin-user-table td.num {
@@ -5412,8 +5511,71 @@ button, a {
   white-space: normal;
   min-width: 180px;
 }
+.admin-user-table td.admin-ellipsis {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 좁은 화면: 덜 중요한 열(날짜·개수·권한)을 접어, 표가 옆으로 밀려 오른쪽
+   버튼이 잘리지 않게 합니다. 전부 보려면 "크게 보기"나 "상세"로. */
+@media (max-width: 760px) {
+  .admin-user-table .admin-hide-sm {
+    display: none;
+  }
+  .admin-user-table td.admin-ellipsis {
+    max-width: 150px;
+  }}
+@media (max-width: 640px) {
+  .admin-user-table .admin-hide-xs {
+    display: none;
+  }
+  .admin-user-table td.wrap {
+    min-width: 0;
+  }
+  .admin-browse-table th,
+  .admin-browse-table td {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+}
+
+/* 행 버튼 칸: 오른쪽 끝에 붙이고, 버튼끼리는 gap으로 - 줄바꿈 없음. */
+.admin-user-table .admin-col-actions {
+  width: 1%;
+  text-align: right;
+}
+.admin-row-actions {
+  display: inline-flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.admin-user-table .btn-sm {
+  padding: 5px 11px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.admin-btn-danger,
+.admin-btn-danger:hover:not(:disabled) {
+  color: var(--color-danger);
+}
 .admin-cell-strong {
   font-weight: 700;
+  color: var(--color-heading);
+}
+.admin-muted {
+  color: var(--color-text-faint);
+  font-size: 12px;
+}
+.badge.admin-badge-admin {
+  background-color: var(--color-primary);
+  color: var(--color-text-on-primary);
+}
+.badge.admin-badge-open {
+  background-color: var(--color-primary-pale);
+  color: var(--color-primary);
+}
+.badge.admin-badge-closed {
+  background-color: var(--color-navy-pale-2);
   color: var(--color-heading);
 }
 .admin-sort {
@@ -5435,32 +5597,45 @@ button, a {
   text-decoration-color: var(--color-border);
   text-underline-offset: 3px;
 }
-.admin-link:hover {
+.admin-link:hover,
+.admin-link:focus-visible {
   color: var(--color-primary);
   text-decoration-color: currentColor;
 }
-.badge.admin-badge-open {
-  background-color: var(--color-primary-pale);
-  color: var(--color-primary);
-}
-.badge.admin-badge-closed {
-  background-color: var(--color-navy-pale-2);
-  color: var(--color-heading);
+
+/* 카드 머리의 오른쪽 묶음 (범례 + 기간 선택 등) - 통째로 움직입니다. */
+.admin-head-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin-left: auto;
 }
 
+.admin-stat-card.clickable {
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.admin-stat-card.clickable:hover,
+.admin-stat-card.clickable:focus-visible {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-pale);
+  outline: none;
+}
+
+/* ---- 크게 보기 창 ---- */
 .admin-browse-summary {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
   gap: 8px;
   flex-shrink: 0;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 .admin-browse-stat {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  min-width: 96px;
-  padding: 8px 12px;
+  padding: 10px 12px;
   border: 1px solid var(--color-border-light);
   border-radius: var(--radius-md);
   background-color: var(--color-surface-2);
@@ -5468,6 +5643,9 @@ button, a {
 .admin-browse-stat span {
   font-size: 11px;
   color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .admin-browse-stat b {
   font-size: 18px;
@@ -5475,19 +5653,13 @@ button, a {
   font-variant-numeric: tabular-nums;
 }
 .admin-browse-note {
-  flex-basis: 100%;
-  margin: 2px 0 0;
+  grid-column: 1 / -1;
+  margin: 0;
 }
 .admin-browse-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-  flex-shrink: 0;
+  padding: 0;
   margin-bottom: 10px;
-}
-.admin-browse-toolbar .input {
-  max-width: 280px;
+  flex-shrink: 0;
 }
 /* 창 크기는 고정(.dialog-xl), 표만 안쪽에서 스크롤 - 머리글은 붙어 있습니다. */
 .admin-browse-body {
@@ -5497,28 +5669,42 @@ button, a {
   border: 1px solid var(--color-border-light);
   border-radius: var(--radius-md);
 }
-.admin-browse-table tbody tr:hover td {
+.admin-browse-table thead th {
   background-color: var(--color-surface-2);
 }
 
 @media (max-width: 640px) {
-  .admin-browse-toolbar .input {
+  .admin-list-head {
+    padding: 14px 16px 10px;
+  }
+  .admin-toolbar {
+    padding: 0 16px 10px;
+  }
+  .admin-browse-toolbar {
+    padding: 0;
+  }
+  .admin-search {
+    flex-basis: 100%;
     max-width: none;
-    flex: 1 1 100%;
   }
-  .admin-browse-stat {
-    min-width: 0;
-    flex: 1 1 calc(33% - 8px);
+  /* 분절 버튼이 폭을 넘으면 그 안에서만 옆으로 밀립니다. */
+  .toggle-group.admin-seg {
+    max-width: 100%;
+    overflow-x: auto;
   }
-  .admin-head-tools {
-    width: 100%;
+  .admin-list-sub {
+    display: none;
   }
-  .admin-head-tools .input {
-    max-width: none !important;
-    flex: 1 1 100%;
+  .admin-list-card .admin-user-table th:first-child,
+  .admin-list-card .admin-user-table td:first-child {
+    padding-left: 16px;
   }
-  .admin-browse-body {
-    overscroll-behavior: contain;
+  .admin-list-card .admin-user-table th:last-child,
+  .admin-list-card .admin-user-table td:last-child {
+    padding-right: 16px;
+  }
+  .admin-browse-summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
   /* 좁은 화면에서는 표 자리를 남기려고 설명 문단은 접습니다. */
   .admin-browse-note {
@@ -5529,5 +5715,8 @@ button, a {
   }
   .admin-browse-stat b {
     font-size: 16px;
+  }
+  .admin-browse-body {
+    overscroll-behavior: contain;
   }
 }

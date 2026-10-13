@@ -436,14 +436,14 @@ function renderUserTable() {
   visible.forEach((u) => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td>${esc(u.name || "-")}</td>
-      <td>${esc(u.email)}</td>
-      <td>${fmtDate(u.createdAt)}</td>
-      <td>${u.numEventsOwned}</td>
-      <td>${u.isAdmin ? '<span class="badge" style="background:var(--color-primary);color:#fff;">관리자</span>' : ""}</td>
-      <td></td>
+      <td><span class="admin-cell-strong">${esc(u.name || "-")}</span></td>
+      <td class="admin-ellipsis admin-hide-xs" title="${esc(u.email)}">${esc(u.email)}</td>
+      <td class="admin-hide-sm">${fmtDate(u.createdAt)}</td>
+      <td class="num admin-hide-sm">${u.numEventsOwned}</td>
+      <td class="admin-hide-sm">${u.isAdmin ? '<span class="badge admin-badge-admin">관리자</span>' : '<span class="admin-muted">일반</span>'}</td>
+      <td class="admin-col-actions"><div class="admin-row-actions"></div></td>
     `;
-    const actionsTd = tr.lastElementChild;
+    const actionsTd = tr.querySelector(".admin-row-actions");
 
     const detailBtn = document.createElement("button");
     detailBtn.type = "button";
@@ -454,8 +454,8 @@ function renderUserTable() {
 
     const roleBtn = document.createElement("button");
     roleBtn.type = "button";
-    roleBtn.className = "btn btn-sm " + (u.isAdmin ? "btn-ghost" : "btn-secondary");
-    roleBtn.style.marginLeft = "6px";
+    // 행마다 진한 버튼이 있으면 표가 시끄러워집니다 - 둘 다 옅게, 해제만 경고색.
+    roleBtn.className = "btn btn-sm btn-ghost" + (u.isAdmin ? " admin-btn-danger" : "");
     roleBtn.textContent = u.isAdmin ? "관리자 해제" : "관리자 지정";
     roleBtn.addEventListener("click", async () => {
       if (!confirm(`${u.name || u.email}님을 ${u.isAdmin ? "관리자에서 해제" : "관리자로 지정"}할까요?`)) return;
@@ -541,42 +541,42 @@ function roomStatus(r) {
 }
 
 function roomOwnerHtml(r) {
-  if (!r.ownerId) return `<span class="hint-inline">비로그인 생성</span>`;
+  if (!r.ownerId) return `<span class="admin-muted">비로그인 생성</span>`;
   const label = esc(r.ownerName || r.ownerEmail || "(탈퇴)");
   return `<button type="button" class="admin-link" data-owner="${esc(r.ownerId)}" title="${esc(r.ownerEmail)}">${label}</button>`;
 }
 
 function roomOpenHtml(r) {
   return r.isDeleted
-    ? `<span class="hint-inline">-</span>`
+    ? `<span class="admin-muted">-</span>`
     : `<a class="btn btn-sm btn-ghost" href="/e/${esc(r.shortId || r._id)}" target="_blank" rel="noopener">열기</a>`;
 }
 
 /* 열 정의: sort(r)는 정렬 값, html(r)은 칸 내용. compact는 대시보드 카드에도 나오는 열. */
 const ROOM_COLUMNS = [
   { label: "방 이름", sort: (r) => r.name, html: (r) => `<span class="admin-cell-strong">${esc(r.name || "(이름 없음)")}</span>`, compact: true, wrap: true },
-  { label: "주최자", sort: (r) => r.ownerName || r.ownerEmail || "", html: roomOwnerHtml, compact: true },
+  { label: "주최자", cls: "admin-hide-xs", sort: (r) => r.ownerName || r.ownerEmail || "", html: roomOwnerHtml, compact: true },
   { label: "응답", sort: (r) => r.numResponses, html: (r) => `${r.numResponses}`, num: true, compact: true },
-  { label: "일정 날짜", sort: (r) => r.firstDate || "", html: (r) => r.firstDate ? `${fmtShort(r.firstDate)}${r.lastDate && fmtDate(r.lastDate) !== fmtDate(r.firstDate) ? ` ~ ${fmtShort(r.lastDate)}` : ""}` : "-" },
-  { label: "최근 응답", sort: (r) => r.lastResponseAt || "", html: (r) => fmtShort(r.lastResponseAt) },
-  { label: "만든 날", sort: (r) => r.createdAt || "", html: (r) => fmtShort(r.createdAt), compact: true },
+  { label: "일정 날짜", cls: "admin-hide-sm", sort: (r) => r.firstDate || "", html: (r) => r.firstDate ? `${fmtShort(r.firstDate)}${r.lastDate && fmtDate(r.lastDate) !== fmtDate(r.firstDate) ? ` ~ ${fmtShort(r.lastDate)}` : ""}` : "-" },
+  { label: "최근 응답", cls: "admin-hide-sm", sort: (r) => r.lastResponseAt || "", html: (r) => fmtShort(r.lastResponseAt) },
+  { label: "만든 날", sort: (r) => r.createdAt || "", html: (r) => fmtShort(r.createdAt), compact: true, cls: "admin-hide-sm" },
   { label: "상태", sort: (r) => roomStatus(r).key, html: (r) => {
       const st = roomStatus(r);
-      const extra = (r.blind ? ` <span class="badge badge-muted">비공개</span>` : "") + (r.records ? ` <span class="badge badge-muted">면담기록</span>` : "");
+      const extra = (r.blind ? ` <span class="badge badge-muted admin-hide-xs">비공개</span>` : "") + (r.records ? ` <span class="badge badge-muted admin-hide-xs">면담기록</span>` : "");
       return `<span class="badge ${st.cls}">${st.label}</span>${extra}`;
     }, compact: true },
   { label: "", html: roomOpenHtml, compact: true },
 ];
 
 const PEOPLE_COLUMNS = [
-  { label: "이름", sort: (p) => p.name || p.email, html: (p) => `<span class="admin-cell-strong">${esc(p.name || "-")}</span>${p.isAdmin ? ` <span class="badge" style="background:var(--color-primary);color:#fff;">관리자</span>` : ""}` },
+  { label: "이름", sort: (p) => p.name || p.email, html: (p) => `<span class="admin-cell-strong">${esc(p.name || "-")}</span>${p.isAdmin ? ` <span class="badge admin-badge-admin">관리자</span>` : ""}` },
   { label: "구분", sort: (p) => p.kind, html: (p) => p.kind === "member"
-      ? `<span class="badge admin-badge-open">회원</span>${p.alsoGuest ? ` <span class="hint-inline" title="같은 이름으로 비회원 응답도 있어 한 사람으로 셌습니다">+비회원 응답</span>` : ""}`
+      ? `<span class="badge admin-badge-open">회원</span>${p.alsoGuest ? ` <span class="hint-inline admin-hide-xs" title="같은 이름으로 비회원 응답도 있어 한 사람으로 셌습니다">+비회원 응답</span>` : ""}`
       : `<span class="badge badge-muted">비회원</span>` },
-  { label: "이메일", sort: (p) => p.email || "", html: (p) => esc(p.email || "-") },
-  { label: "처음 이용", sort: (p) => p.firstSeen || "", html: (p) => fmtShort(p.firstSeen) },
-  { label: "최근 활동", sort: (p) => p.lastActive || "", html: (p) => fmtShort(p.lastActive) },
-  { label: "만든 방", sort: (p) => p.eventsOwned, html: (p) => `${p.eventsOwned}`, num: true },
+  { label: "이메일", cls: "admin-ellipsis admin-hide-xs", sort: (p) => p.email || "", html: (p) => esc(p.email || "-") },
+  { label: "처음 이용", cls: "admin-hide-sm", sort: (p) => p.firstSeen || "", html: (p) => fmtShort(p.firstSeen) },
+  { label: "최근 활동", cls: "admin-hide-xs", sort: (p) => p.lastActive || "", html: (p) => fmtShort(p.lastActive) },
+  { label: "만든 방", cls: "admin-hide-sm", sort: (p) => p.eventsOwned, html: (p) => `${p.eventsOwned}`, num: true },
   { label: "응답한 방", sort: (p) => p.eventsResponded, html: (p) => `${p.eventsResponded}`, num: true },
   { label: "", html: () => `<button type="button" class="btn btn-sm btn-ghost" data-detail>상세</button>` },
 ];
@@ -588,6 +588,8 @@ function renderSortableTable(thead, tbody, columns, rows, sortState, onRow, rere
   columns.forEach((c, i) => {
     const th = document.createElement("th");
     if (c.num) th.className = "num";
+    if (!c.label) th.className = "admin-col-actions";
+    if (c.cls) th.classList.add(...c.cls.split(" "));
     if (c.sort) {
       const arrow = sortState.col === i ? (sortState.dir > 0 ? " ▲" : " ▼") : "";
       th.innerHTML = `<button type="button" class="admin-sort">${esc(c.label)}${arrow}</button>`;
@@ -621,7 +623,7 @@ function renderSortableTable(thead, tbody, columns, rows, sortState, onRow, rere
   sorted.forEach((r) => {
     const row = document.createElement("tr");
     row.innerHTML = columns
-      .map((c) => `<td class="${[c.num ? "num" : "", c.wrap ? "wrap" : ""].join(" ").trim()}">${c.html(r)}</td>`)
+      .map((c) => `<td class="${[c.num ? "num" : "", c.wrap ? "wrap" : "", c.label ? "" : "admin-col-actions", c.cls || ""].join(" ").trim()}">${c.html(r)}</td>`)
       .join("");
     onRow(row, r);
     frag.appendChild(row);
@@ -698,7 +700,7 @@ function browseSummaryHtml() {
     const s = (peopleData && peopleData.summary) || {};
     const items = [
       ["누적 이용자", s.total], ["회원", s.members], ["비회원", s.guests],
-      ["회원 중 비회원 응답도 있음", s.membersAlsoGuest],
+      ["이름으로 합친 회원", s.membersAlsoGuest],
     ];
     return items.map(([k, v]) => `<div class="admin-browse-stat"><span>${k}</span><b>${Number(v || 0).toLocaleString()}</b></div>`).join("") +
       `<p class="hint admin-browse-note">비회원은 시간을 입력할 때 적은 이름으로 셉니다. 같은 이름은 한 사람으로, 회원과 이름이 같으면 그 회원으로 합쳤습니다.</p>`;
@@ -801,8 +803,8 @@ async function loadLogs() {
           <td>${esc(r.userEmail || "익명")}</td>
           <td>${esc(r.method)}</td>
           <td class="admin-log-path">${esc(r.path)}</td>
-          <td>${r.statusCode}</td>
-          <td>${r.durationMs}ms</td>
+          <td class="num">${r.statusCode}</td>
+          <td class="num">${r.durationMs}ms</td>
         `;
         tbody.appendChild(tr);
       });

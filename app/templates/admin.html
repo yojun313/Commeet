@@ -12,14 +12,16 @@
     <div class="card card-pad admin-grid-main">
       <div class="admin-card-head">
         <h2>일별 트래픽</h2>
-        <div class="admin-chart-legend">
-          <span><i class="legend-dot legend-bar"></i>요청</span>
-          <span><i class="legend-dot legend-line"></i>순사용자</span>
-        </div>
-        <div class="toggle-group" id="admin-traffic-range">
-          <button type="button" data-days="7">7일</button>
-          <button type="button" class="active" data-days="30">30일</button>
-          <button type="button" data-days="90">90일</button>
+        <div class="admin-head-actions">
+          <div class="admin-chart-legend">
+            <span><i class="legend-dot legend-bar"></i>요청</span>
+            <span><i class="legend-dot legend-line"></i>순사용자</span>
+          </div>
+          <div class="toggle-group admin-seg" id="admin-traffic-range">
+            <button type="button" data-days="7">7일</button>
+            <button type="button" class="active" data-days="30">30일</button>
+            <button type="button" data-days="90">90일</button>
+          </div>
         </div>
       </div>
       <div id="admin-traffic-chart"></div>
@@ -29,20 +31,22 @@
       </div>
     </div>
 
-    <div class="card card-pad admin-grid-side">
+    <!-- 최근 오류는 길이가 들쭉날쭉해서, 옆 트래픽 카드 높이에 맞춰 남는
+         만큼만 쓰고 넘치면 안에서 스크롤합니다 (.admin-fill-scroll). -->
+    <div class="card card-pad admin-grid-side admin-card-col">
       <div class="admin-card-head"><h2>상태코드</h2></div>
       <div id="admin-status-dist"></div>
       <h3 class="admin-subhead" style="margin-top: 16px;">최근 오류</h3>
-      <div id="admin-recent-errors"></div>
-    </div>
-
-    <div class="card card-pad admin-grid-side">
-      <div class="admin-card-head"><h2>많이 호출된 경로</h2></div>
-      <div class="admin-top-paths" id="admin-top-paths"></div>
+      <div class="admin-fill-scroll"><div id="admin-recent-errors"></div></div>
     </div>
   </div>
 
-  <div class="admin-grid admin-grid-thirds">
+  <!-- 2열 격자 - 같은 줄의 카드는 높이를 맞춰 카드 사이에 빈 여백이 생기지 않습니다. -->
+  <div class="admin-grid admin-grid-pairs">
+    <div class="card card-pad">
+      <div class="admin-card-head"><h2>많이 호출된 경로</h2></div>
+      <div class="admin-top-paths" id="admin-top-paths"></div>
+    </div>
     <div class="card card-pad">
       <div class="admin-card-head"><h2>느린 엔드포인트</h2><span class="hint-inline">정상 응답 평균, 5회 이상</span></div>
       <div id="admin-slowest"></div>
@@ -83,37 +87,72 @@
     </div>
   </div>
 
-  <div class="admin-grid admin-grid-tables">
-  <div class="card card-pad">
-    <div class="admin-card-head">
-      <h2>사용자 (<span id="admin-user-count">0</span>)</h2>
-      <div class="admin-head-tools">
-        <input class="input" id="admin-user-search" style="max-width: 220px;" placeholder="이름 또는 이메일로 검색" />
-        <button class="btn btn-secondary btn-sm" type="button" id="admin-people-open">비회원 포함 크게 보기</button>
+  <!-- 목록 카드: 머리 줄(제목·개수 | 주요 버튼)과 도구 줄(검색 | 필터)을 나눠,
+       화면 폭이 바뀌어도 버튼이 제목 아래로 어정쩡하게 떨어지지 않습니다.
+       표는 넓어야 읽히므로 세 목록 모두 전체 폭을 씁니다. -->
+  <section class="card admin-list-card">
+    <header class="admin-list-head">
+      <div class="admin-list-title">
+        <h2>사용자</h2>
+        <span class="admin-count" id="admin-user-count">0</span>
+        <span class="admin-list-sub">가입한 회원</span>
       </div>
+      <button class="btn btn-secondary btn-sm" type="button" id="admin-people-open">비회원 포함 크게 보기</button>
+    </header>
+    <div class="admin-toolbar">
+      <input class="input admin-search" type="search" id="admin-user-search" placeholder="이름 또는 이메일로 검색" />
     </div>
     <div class="admin-user-table-wrap">
       <table class="admin-user-table" id="admin-user-table">
         <thead>
           <tr>
             <th>이름</th>
-            <th>이메일</th>
-            <th>가입일</th>
-            <th>보유 방</th>
-            <th>관리자</th>
-            <th></th>
+            <th class="admin-hide-xs">이메일</th>
+            <th class="admin-hide-sm">가입일</th>
+            <th class="num admin-hide-sm">보유 방</th>
+            <th class="admin-hide-sm">권한</th>
+            <th class="admin-col-actions"></th>
           </tr>
         </thead>
         <tbody id="admin-user-tbody"></tbody>
       </table>
     </div>
-  </div>
+  </section>
 
-  <div class="card card-pad">
-    <div class="admin-card-head">
-      <h2>최근 활동 로그</h2>
-      <button class="btn btn-ghost btn-sm" type="button" id="admin-logs-refresh">새로고침</button>
+  <section class="card admin-list-card">
+    <header class="admin-list-head">
+      <div class="admin-list-title">
+        <h2>방</h2>
+        <span class="admin-count" id="admin-room-count">0</span>
+        <span class="admin-list-sub">휴지통 포함 전체</span>
+      </div>
+      <button class="btn btn-secondary btn-sm" type="button" id="admin-rooms-open">크게 보기</button>
+    </header>
+    <div class="admin-toolbar">
+      <input class="input admin-search" type="search" id="admin-room-search" placeholder="방 이름 또는 주최자로 검색" />
+      <div class="toggle-group admin-seg" id="admin-room-filter">
+        <button type="button" data-f="all" class="active">전체</button>
+        <button type="button" data-f="open">진행 중</button>
+        <button type="button" data-f="closed">확정</button>
+        <button type="button" data-f="archived">보관</button>
+        <button type="button" data-f="deleted">휴지통</button>
+      </div>
     </div>
+    <div class="admin-user-table-wrap">
+      <table class="admin-user-table">
+        <thead id="admin-room-thead"></thead>
+        <tbody id="admin-room-tbody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card admin-list-card">
+    <header class="admin-list-head">
+      <div class="admin-list-title">
+        <h2>최근 활동 로그</h2>
+      </div>
+      <button class="btn btn-ghost btn-sm" type="button" id="admin-logs-refresh">새로고침</button>
+    </header>
     <div class="admin-log-table-wrap">
       <table class="admin-user-table" id="admin-log-table">
         <thead>
@@ -122,8 +161,8 @@
             <th>사용자</th>
             <th>메서드</th>
             <th>경로</th>
-            <th>상태</th>
-            <th>응답시간</th>
+            <th class="num">상태</th>
+            <th class="num">응답시간</th>
           </tr>
         </thead>
         <tbody id="admin-log-tbody"></tbody>
@@ -134,30 +173,7 @@
       <span id="admin-logs-page-label"></span>
       <button class="btn btn-ghost btn-sm" type="button" id="admin-logs-next">다음 &rsaquo;</button>
     </div>
-  </div>
-  </div>
-<div class="card card-pad admin-rooms-card">
-  <div class="admin-card-head">
-    <h2>방 (<span id="admin-room-count">0</span>)</h2>
-    <div class="admin-head-tools">
-      <div class="toggle-group" id="admin-room-filter">
-        <button type="button" data-f="all" class="active">전체</button>
-        <button type="button" data-f="open">진행 중</button>
-        <button type="button" data-f="closed">확정</button>
-        <button type="button" data-f="archived">보관</button>
-        <button type="button" data-f="deleted">휴지통</button>
-      </div>
-      <input class="input" id="admin-room-search" style="max-width: 220px;" placeholder="방 이름 또는 주최자로 검색" />
-      <button class="btn btn-secondary btn-sm" type="button" id="admin-rooms-open">크게 보기</button>
-    </div>
-  </div>
-  <div class="admin-user-table-wrap">
-    <table class="admin-user-table">
-      <thead id="admin-room-thead"></thead>
-      <tbody id="admin-room-tbody"></tbody>
-    </table>
-  </div>
-</div>
+  </section>
 </div>
 
 <!-- 사용자(비회원 포함) / 방 목록을 크게 보는 창. 같은 틀을 두 목록이 나눠 씁니다. -->
@@ -168,10 +184,10 @@
       <button class="btn-icon" type="button" data-dialog-close>&times;</button>
     </div>
     <div class="admin-browse-summary" id="admin-browse-summary"></div>
-    <div class="admin-browse-toolbar">
-      <input class="input" id="admin-browse-search" placeholder="검색" />
-      <div class="toggle-group" id="admin-browse-filter"></div>
-      <span class="hint-inline" id="admin-browse-count"></span>
+    <div class="admin-toolbar admin-browse-toolbar">
+      <input class="input admin-search" type="search" id="admin-browse-search" placeholder="검색" />
+      <div class="toggle-group admin-seg" id="admin-browse-filter"></div>
+      <span class="admin-toolbar-meta" id="admin-browse-count"></span>
     </div>
     <div class="admin-browse-body">
       <table class="admin-user-table admin-browse-table">
