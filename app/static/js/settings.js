@@ -5,6 +5,7 @@ async function loadProfile() {
   document.getElementById("st-name").value = profile.name || "";
   document.getElementById("st-email").value = profile.email;
   document.getElementById("dac-email").textContent = profile.email;
+  document.getElementById("st-professor").checked = !!profile.professorFeatures;
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -22,6 +23,18 @@ document.addEventListener("DOMContentLoaded", () => {
     await api.patch("/api/user/name", { name });
     document.getElementById("st-save-name").style.display = "none";
     showSnackbar("저장되었습니다.", "success");
+  });
+
+  document.getElementById("st-professor").addEventListener("change", async (e) => {
+    const enabled = e.target.checked;
+    try {
+      await api.patch("/api/user/professor-features", { enabled });
+      window.PROFESSOR_FEATURES = enabled;
+      showSnackbar(enabled ? "교수용 기능을 켰습니다." : "교수용 기능을 껐습니다.", "success");
+    } catch (err) {
+      e.target.checked = !enabled;
+      showSnackbar(err.message || "저장하지 못했습니다.", "error");
+    }
   });
 
   document.getElementById("st-password-form").addEventListener("submit", async (e) => {

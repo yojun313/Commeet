@@ -93,7 +93,9 @@ async def get_user_by_id(user_id) -> dict | None:
 # ---------------------------------------------------------------------------
 
 
-async def start_signup(email: str, password: str, name: str) -> str:
+async def start_signup(
+    email: str, password: str, name: str, professor_features: bool = False
+) -> str:
     """Stores a pending sign-up and returns the code to email to the user.
 
     The account is not created until the code is verified. Only the code's
@@ -114,6 +116,7 @@ async def start_signup(email: str, password: str, name: str) -> str:
                 "email": email,
                 "name": name.strip(),
                 "passwordHash": hash_password(password),
+                "professorFeatures": bool(professor_features),
                 "codeHash": hash_otp_code(email, code),
                 "expiresAt": now + timedelta(minutes=OTP_TTL_MINUTES),
                 "tries": 0,
@@ -157,6 +160,7 @@ async def verify_signup(email: str, code: str) -> dict:
         "calendarAccounts": {},
         "calendarOptions": default_calendar_options(),
         "numEventsCreated": 0,
+        "professorFeatures": bool(pending.get("professorFeatures")),
         "createdAt": now,
     }
     result = await users_col.insert_one(doc)

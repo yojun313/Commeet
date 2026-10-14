@@ -23,6 +23,8 @@ from app.services.auth_service import get_optional_user, get_user_by_id, require
 
 router = APIRouter(prefix="/api/events", tags=["events"])
 
+PROFESSOR_FEATURES_OFF = "계정 설정에서 교수용 기능을 켜면 쓸 수 있습니다."
+
 
 def _require_member_to_create(request: Request, user: dict | None) -> None:
     """외부인의 일정 생성을 막습니다 (RESTRICT_TO_POSTECH).
@@ -566,6 +568,8 @@ async def set_guidance_records(event_id: str, request: Request, enabled: bool = 
         raise HTTPException(status_code=404, detail="이벤트를 찾을 수 없습니다")
     if not event_service.has_perm(event, user, "records"):
         raise HTTPException(status_code=403, detail="바꿀 권한이 없습니다")
+    if not event_service.professor_features(user):
+        raise HTTPException(status_code=403, detail=PROFESSOR_FEATURES_OFF)
     await events_col.update_one(
         {"_id": event["_id"]}, {"$set": {"guidanceRecordsEnabled": enabled}}
     )

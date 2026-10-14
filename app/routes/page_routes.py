@@ -99,6 +99,8 @@ async def record_print_page(record_id: str, request: Request, aff: str | None = 
     if not user:
         return redirect_to_sign_in(request)
     try:
+        if not event_service.professor_features(user):
+            raise record_service.RecordNotFound()
         record = await record_service.get_record(user, record_id)
     except (record_service.RecordNotFound, crypto_service.RecordDecryptionError):
         return templates.TemplateResponse(

@@ -50,6 +50,7 @@
     </main>
     {% block footer %}{% include "partials/footer.html" %}{% endblock %}
     <div id="snackbar-root"></div>
+    <script>window.PROFESSOR_FEATURES = {{ "true" if user and user.professorFeatures else "false" }};</script>
     <script src="{{ asset('js/api.js') }}"></script>
     <script src="{{ asset('js/ui.js') }}"></script>
     {# 여러 사람이 함께 보는 화면의 자동 갱신 루프. 페이지 스크립트보다

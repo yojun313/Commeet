@@ -23,6 +23,18 @@ _EXTENSIONS = {
 }
 
 
+async def _records_user(request: Request) -> dict:
+    """로그인했고 교수용 기능을 켠 계정. 끈 계정에는 기록이 보이지 않습니다
+    (지우지는 않습니다 - 다시 켜면 그대로 돌아옵니다)."""
+    user = await require_user(request)
+    if not event_service.professor_features(user):
+        raise HTTPException(
+            status_code=403,
+            detail="계정 설정에서 교수용 기능을 켜면 쓸 수 있습니다.",
+        )
+    return user
+
+
 async def _owned_event(user: dict, event_id: str) -> dict:
     event = await event_service.get_event_by_either_id(event_id)
     # 주최자, 또는 "면담 기록" 권한의 공동주최자. 기록은 쓴 사람 앞으로
@@ -40,7 +52,7 @@ async def list_records(request: Request, eventId: str | None = None):
     이벤트 링크는 짧은 공유 id로도 열리므로(/e/aB3f9), 어느 쪽이 와도 받아
     실제 ObjectId로 바꿔서 넘깁니다.
     """
-    user = await require_user(request)
+    user = await _records_user(request)
     owned_id = str((await _owned_event(user, eventId))["_id"]) if eventId else None
     return jsonable(
         {"records": await record_service.list_records(user, event_id=owned_id)}
@@ -51,7 +63,7 @@ async def list_records(request: Request, eventId: str | None = None):
 async def get_draft(request: Request, eventId: str, meetingStart: datetime):
     """The form's data for one meeting: the saved record if there is one,
     otherwise a draft prefilled from the confirmed schedule."""
-    user = await require_user(request)
+    user = await _records_user(request)
     event = await _owned_event(user, eventId)
 
     # 짧은 공유 id로 들어올 수 있으므로 반드시 실제 ObjectId로 조회합니다 -
@@ -78,13 +90,13 @@ async def record_counts(request: Request):
     `/{record_id}`보다 위에 있어야 합니다 - 아래에 두면 "counts"가 record_id로
     잡힙니다.
     """
-    user = await require_user(request)
+    user = await _records_user(request)
     return {"counts": await record_service.count_by_event(user)}
 
 
 @router.get("/{record_id}")
 async def get_record(record_id: str, request: Request):
-    user = await require_user(request)
+    user = await _records_user(request)
     try:
         return jsonable(await record_service.get_record(user, record_id))
     except record_service.RecordNotFound as exc:
@@ -95,7 +107,7 @@ async def get_record(record_id: str, request: Request):
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def save_record(payload: SaveRecordRequest, request: Request):
-    user = await require_user(request)
+    user = await _records_user(request)
     try:
         record_id = await record_service.save_record(user, payload.model_dump())
     except record_service.RecordsDisabled as exc:
@@ -115,7 +127,7 @@ async def save_signature(record_id: str, payload: SignatureRequest, request: Req
     An empty dataUrl means the host cleared the pad, so the stored signature
     is removed rather than replaced with a blank image.
     """
-    user = await require_user(request)
+    user = await _records_user(request)
     if not payload.dataUrl:
         try:
             await record_service.clear_signature(user, record_id)
@@ -153,7 +165,7 @@ async def upload_receipt(
     record_id: str, index: int, request: Request, file: UploadFile = File(...)
 ):
     """One receipt per settlement - 컴공/무은재 amounts are paid separately."""
-    user = await require_user(request)
+    user = await _records_user(request)
     if index < 0 or index > 5:
         raise HTTPException(status_code=400, detail="잘못된 요청입니다.")
     if file.content_type not in ALLOWED_TYPES:
@@ -184,7 +196,7 @@ async def upload_receipt(
 async def download_file(record_id: str, kind: str, request: Request):
     """Serves an attachment, decrypted in memory - the file on disk stays
     encrypted and is never exposed through /static."""
-    user = await require_user(request)
+    user = await _records_user(request)
     if "/" in kind or "\\" in kind or ".." in kind:
         raise HTTPException(status_code=400, detail="잘못된 요청입니다.")
     try:
@@ -209,7 +221,7 @@ async def download_file(record_id: str, kind: str, request: Request):
 
 @router.delete("/{record_id}")
 async def delete_record(record_id: str, request: Request):
-    user = await require_user(request)
+    user = await _records_user(request)
     if not await record_service.delete_record(user, record_id):
         raise HTTPException(status_code=404, detail="기록을 찾을 수 없습니다.")
     return {"ok": True}

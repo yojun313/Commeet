@@ -8,6 +8,10 @@ class CoHostPrefRequest(BaseModel):
     perms: dict[str, bool]
 
 
+class ProfessorFeaturesRequest(BaseModel):
+    enabled: bool
+
+
 class UpdateNameRequest(BaseModel):
     name: str = Field(min_length=1)
 

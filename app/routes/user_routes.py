@@ -3,11 +3,13 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from app.config import GOOGLE_CALENDAR_ENABLED
 from app.core.ids import to_object_id
 from app.core.serialize import jsonable
+from app.db import users_col
 from app.schemas.folder import SetEventFolderRequest
 from app.schemas.user import (
     CoHostPrefRequest,
     ChangePasswordRequest,
     DeleteAccountRequest,
+    ProfessorFeaturesRequest,
     UpdateCalendarOptionsRequest,
     UpdateNameRequest,
 )
@@ -48,6 +50,7 @@ async def get_profile(request: Request):
             },
             "calendarOptions": user.get("calendarOptions"),
             "numEventsCreated": user.get("numEventsCreated", 0),
+            "professorFeatures": bool(user.get("professorFeatures")),
         }
     )
 
@@ -65,6 +68,17 @@ async def save_co_host_pref(payload: CoHostPrefRequest, request: Request):
     user = await require_user(request)
     await user_service.save_co_host_prefs(user, [(payload.email, payload.perms)])
     return {}
+
+
+@router.patch("/professor-features")
+async def set_professor_features(payload: ProfessorFeaturesRequest, request: Request):
+    """교수용 기능(지도학생 면담 관리)을 켜고 끕니다. 꺼도 적어 둔 면담
+    기록은 지우지 않습니다 - 화면에서 숨길 뿐, 다시 켜면 그대로 보입니다."""
+    user = await require_user(request)
+    await users_col.update_one(
+        {"_id": user["_id"]}, {"$set": {"professorFeatures": payload.enabled}}
+    )
+    return {"professorFeatures": payload.enabled}
 
 
 @router.patch("/name")

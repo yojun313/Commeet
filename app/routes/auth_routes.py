@@ -41,7 +41,10 @@ async def signup_send_code(payload: SignupStartRequest, request: Request):
     _limit(request, "send-code", payload.email, limit=3, per_seconds=600)
     try:
         code = await auth_service.start_signup(
-            payload.email, payload.password, payload.name
+            payload.email,
+            payload.password,
+            payload.name,
+            professor_features=payload.professorFeatures,
         )
     except auth_service.EmailDomainNotAllowed as exc:
         raise HTTPException(

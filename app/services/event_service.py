@@ -222,6 +222,16 @@ async def as_hosts(event: dict, actor: dict | None) -> dict | None:
     return {**actor, "name": label} if label else actor
 
 
+def professor_features(user: dict | None) -> bool:
+    """계정에 "교수용 기능"(지도학생 면담 관리)을 켰는가.
+
+    가입할 때 고르고 계정 설정에서 바꿉니다. 값이 없는 계정(이 설정이
+    생기기 전에 가입한 계정)은 꺼진 것으로 봅니다. 꺼 두어도 이미 적은
+    기록은 지우지 않습니다 - 다시 켜면 그대로 보입니다.
+    """
+    return bool((user or {}).get("professorFeatures"))
+
+
 def records_enabled(event: dict) -> bool:
     """이 일정에서 "면담 기록 · 학생지도비"를 쓰는가.
 
@@ -408,7 +418,9 @@ async def create_event(payload: EventPayload, owner: dict | None) -> dict:
         "notificationsEnabled": payload.notificationsEnabled,
         "blindAvailabilityEnabled": payload.blindAvailabilityEnabled,
         "collectEmails": payload.collectEmails,
-        "guidanceRecordsEnabled": payload.guidanceRecordsEnabled,
+        # 교수용 기능을 안 켠 계정의 화면에는 이 체크가 없습니다.
+        "guidanceRecordsEnabled": payload.guidanceRecordsEnabled
+        and professor_features(owner),
         "timeIncrement": payload.timeIncrement,
         "sendEmailAfterXResponses": payload.sendEmailAfterXResponses,
         "type": payload.type.value,
@@ -488,11 +500,14 @@ async def update_event(
         "notificationsEnabled": payload.notificationsEnabled,
         "blindAvailabilityEnabled": payload.blindAvailabilityEnabled,
         "collectEmails": payload.collectEmails,
-        "guidanceRecordsEnabled": payload.guidanceRecordsEnabled,
         "sendEmailAfterXResponses": payload.sendEmailAfterXResponses,
         "type": payload.type.value,
         "timeIncrement": payload.timeIncrement,
     }
+    # 교수용 기능을 안 켠 사람의 수정 창에는 이 체크가 없어 늘 False가
+    # 옵니다 - 그대로 저장하면 다른 주최자가 켜 둔 기능이 꺼집니다.
+    if professor_features(requester):
+        updates["guidanceRecordsEnabled"] = payload.guidanceRecordsEnabled
     if co_host_update is not None:
         updates["coHostIds"], updates["coHostPerms"] = co_host_update
 

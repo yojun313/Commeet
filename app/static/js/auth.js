@@ -83,7 +83,12 @@ if (AUTH_MODE === "sign-in") {
 
     submitBtn.disabled = true;
     try {
-      await api.post("/api/auth/signup/send-code", { email, password, name });
+      await api.post("/api/auth/signup/send-code", {
+        email,
+        password,
+        name,
+        professorFeatures: document.getElementById("signup-professor").checked,
+      });
       pendingEmail = email;
       document.getElementById("verify-email").textContent = email;
       document.getElementById("verify-code").value = "";
@@ -130,6 +135,7 @@ if (AUTH_MODE === "sign-in") {
         email: pendingEmail,
         password: document.getElementById("signup-password").value,
         name: document.getElementById("signup-name").value.trim(),
+        professorFeatures: document.getElementById("signup-professor").checked,
       });
       showSnackbar("인증 코드를 다시 보냈습니다.", "success");
       startResendCooldown(btn, 30);

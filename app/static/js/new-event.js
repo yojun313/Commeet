@@ -268,10 +268,12 @@ const NewEventDialog = (() => {
       const box = document.createElement("div");
       box.className = "cohost-perms";
       const boxes = {};
+      // "면담 기록"은 교수용 기능을 켠 계정에서만 의미가 있어 그때만 보입니다.
+      const shown = CO_HOST_PERMS.filter(([k]) => k !== "records" || window.PROFESSOR_FEATURES);
       const syncAll = () => {
-        allBox.checked = CO_HOST_PERMS.every(([k]) => perms[k]);
+        allBox.checked = shown.every(([k]) => perms[k]);
       };
-      CO_HOST_PERMS.forEach(([key, label]) => {
+      shown.forEach(([key, label]) => {
         const item = document.createElement("label");
         item.className = "cohost-perm";
         const cb = document.createElement("input");
@@ -295,7 +297,8 @@ const NewEventDialog = (() => {
       });
       allBox.addEventListener("change", () => {
         CO_HOST_PERMS.forEach(([k]) => {
-          perms[k] = boxes[k].checked = allBox.checked;
+          perms[k] = allBox.checked;
+          if (boxes[k]) boxes[k].checked = allBox.checked;
         });
         rememberCoHostPerms(email, perms);
       });

@@ -64,6 +64,8 @@ const ST = {
 
 /** 주최자이거나, 이 권한을 받은 공동주최자인가. */
 function can(perm) {
+  // 면담 기록은 계정 설정의 "교수용 기능"을 켠 사람에게만 보입니다.
+  if (perm === "records" && !window.PROFESSOR_FEATURES) return false;
   return !!ST.perms[perm];
 }
 

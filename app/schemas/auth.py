@@ -5,6 +5,8 @@ class SignupStartRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8)
     name: str = Field(min_length=1)
+    # 교수용 기능(지도학생 면담 관리). 계정 설정에서 언제든 바꿀 수 있습니다.
+    professorFeatures: bool = False
 
 
 class SignupVerifyRequest(BaseModel):
