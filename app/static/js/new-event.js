@@ -543,7 +543,7 @@ const NewEventDialog = (() => {
     // 시작은 23:30까지만 - 24:00을 고르면 그 뒤에 놓을 끝 시간이 없습니다.
     populateTimeSelect(document.getElementById("ne-start-time"), 9, 0, 23.5);
     populateTimeSelect(document.getElementById("ne-end-time"), 17, 9.5, 24);
-    document.getElementById("ne-time-increment").value = event ? String(event.timeIncrement || 15) : "15";
+    document.getElementById("ne-time-increment").value = event ? String(event.timeIncrement || 15) : "60";
 
     // 새로 만들 때는 세 옵션 모두 켠 채로 시작합니다 - 실제 사용 방식이
     // 그쪽이라서입니다. 수정할 때는 그 일정에 저장된 값을 그대로 보여 줍니다.
