@@ -40,6 +40,10 @@ class EventPayload(BaseModel):
     sendEmailAfterXResponses: int | None = None
 
     remindees: list[str] = Field(default_factory=list, max_length=300)
+    # 공동주최자 이메일 - 가입한 계정이어야 합니다 (event_service.resolve_co_hosts).
+    # None이면 "건드리지 않음": 공동주최자가 일정을 고칠 때 명단이 지워지지
+    # 않게 합니다. 명단을 바꿀 수 있는 사람은 주최자뿐입니다.
+    coHosts: list[EmailStr] | None = Field(default=None, max_length=20)
 
 
 class EventResponsePayload(BaseModel):

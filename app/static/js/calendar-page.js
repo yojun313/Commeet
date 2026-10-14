@@ -77,7 +77,8 @@ function buildPlacements(events) {
   };
 
   events.forEach((event) => {
-    const isOwner = String(event.ownerId) === CURRENT_USER_ID;
+    // 공동주최자도 주최자처럼 그 일정의 약속 전체를 봅니다.
+    const isOwner = String(event.ownerId) === CURRENT_USER_ID || !!event.isCoHost;
     const fin = event.finalization;
 
     if (event.isClosed && fin && Array.isArray(fin.meetings)) {

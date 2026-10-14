@@ -42,11 +42,22 @@ def _require_member_to_create(request: Request, user: dict | None) -> None:
     )
 
 
+def _unknown_co_hosts(exc: "event_service.UnknownCoHosts") -> HTTPException:
+    return HTTPException(
+        status_code=400,
+        detail="공동주최자는 가입한 계정만 지정할 수 있습니다. 가입하지 않은 이메일: "
+        + ", ".join(exc.emails),
+    )
+
+
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_event(payload: EventPayload, request: Request):
     owner = await get_optional_user(request)
     _require_member_to_create(request, owner)
-    event = await event_service.create_event(payload, owner)
+    try:
+        event = await event_service.create_event(payload, owner)
+    except event_service.UnknownCoHosts as exc:
+        raise _unknown_co_hosts(exc) from exc
     return {
         "eventId": str(event["_id"]),
         "shortId": event.get("shortId"),
@@ -78,6 +89,8 @@ async def edit_event(
         raise HTTPException(
             status_code=403, detail="이 이벤트를 수정할 권한이 없습니다"
         ) from exc
+    except event_service.UnknownCoHosts as exc:
+        raise _unknown_co_hosts(exc) from exc
     except event_service.IncrementLockedWhileConfirmed as exc:
         raise HTTPException(
             status_code=400,
@@ -118,16 +131,29 @@ async def get_event_version(event_id: str):
     return {"v": version}
 
 
-def _sees_all_responses(event: dict, viewer: dict | None, is_owner: bool) -> bool:
-    """응답을 주최자와 똑같이 볼 수 있는가 - 주최자 본인, 또는 관리자.
+def _sees_all_responses(event: dict, viewer: dict | None) -> bool:
+    """응답을 주최자와 똑같이 볼 수 있는가 - 주최자·공동주최자, 또는 관리자.
 
     관리자는 대시보드에서 남의 일정을 열어 응답 현황을 확인합니다. 비공개
     일정(blind)의 다른 참가자 응답, 이메일, 미응답 명단까지 주최자 화면과
-    같게 보여 주되, 수정 권한(isOwner)은 주지 않습니다.
+    같게 보여 주되, 수정 권한(canManage)은 주지 않습니다.
     """
-    if is_owner:
+    if event_service.can_manage(event, viewer):
         return True
     return bool(viewer and viewer.get("isAdmin") and event.get("ownerId"))
+
+
+async def _event_owner(event: dict, user: dict) -> dict:
+    """일정의 주최자 문서. 요청한 사람이 공동주최자면 주최자를 따로 읽습니다.
+
+    미응답 명단의 이름은 주최자의 연락처에서 찾고, 확정한 약속은 주최자의
+    약속(주최자 캘린더·주최자 이름의 안내 메일)이라 공동주최자가 눌러도
+    주최자 기준으로 처리합니다. 주최자 계정이 사라졌으면 요청한 사람으로
+    대신합니다.
+    """
+    if event.get("ownerId") == user["_id"]:
+        return user
+    return await get_user_by_id(str(event["ownerId"])) or user
 
 
 @router.get("/{event_id}")
@@ -138,7 +164,8 @@ async def get_event(event_id: str, request: Request, guestName: str | None = Non
 
     viewer = await get_optional_user(request)
     is_owner = bool(viewer) and event.get("ownerId") == viewer["_id"]
-    sees_all = _sees_all_responses(event, viewer, is_owner)
+    manages = event_service.can_manage(event, viewer)
+    sees_all = _sees_all_responses(event, viewer)
 
     responses = await event_service.get_event_responses(event["_id"])
     responses_map = await event_service.build_responses_map(
@@ -149,10 +176,12 @@ async def get_event(event_id: str, request: Request, guestName: str | None = Non
     result["responses"] = event_service.apply_blind_filter(
         event, responses_map, viewer=viewer, is_owner=sees_all, guest_name=guestName
     )
-    # isOwner는 "수정할 수 있나"입니다 - 관리자도 남의 일정은 고치지 못하므로
-    # 주최자 전용 버튼은 그대로 숨기고, 보기만 주최자와 같게 맞춥니다.
+    # isOwner는 만든 사람(삭제·면담 기록 등 주최자 전용), canManage는 주최자와
+    # 공동주최자(수정·확정·메일). 관리자는 둘 다 아니라 보기만 같게 맞춥니다.
     result["isOwner"] = is_owner
-    result["adminView"] = sees_all and not is_owner
+    result["isCoHost"] = manages and not is_owner
+    result["canManage"] = manages
+    result["adminView"] = sees_all and not manages
     result["isClosed"] = bool(event.get("isClosed"))
 
     if sees_all:
@@ -160,11 +189,14 @@ async def get_event(event_id: str, request: Request, guestName: str | None = Non
         # 사람들 - "메일 보내기"가 쓰는 것과 같은 계산(mail_targets)이라
         # 리마인더 대상과 화면 목록이 어긋나지 않습니다. 초대 이메일이
         # 드러나므로 주최자(와 관리자)에게만 내려 줍니다.
-        owner = viewer if is_owner else await get_user_by_id(str(event["ownerId"]))
-        targets = await event_service.mail_targets(event, owner or {})
+        owner = await _event_owner(event, viewer)
+        targets = await event_service.mail_targets(event, owner)
         result["pendingInvitees"] = targets["pending"]
+        # 공동주최자 이메일은 운영하는 사람들끼리만 봅니다.
+        result["coHosts"] = await event_service.co_host_list(event)
 
     if not sees_all:
+        result.pop("coHostIds", None)
         # 초대 명단은 이메일 목록입니다 - 링크만 가진 사람에게 다른
         # 초대자들의 이메일을 보여 줄 이유가 없습니다. 화면에서도 이 값은
         # 주최자만 씁니다 (초대 권유 배너).
@@ -190,7 +222,8 @@ async def get_responses(
 
     viewer = await get_optional_user(request)
     is_owner = bool(viewer) and event.get("ownerId") == viewer["_id"]
-    sees_all = _sees_all_responses(event, viewer, is_owner)
+    manages = event_service.can_manage(event, viewer)
+    sees_all = _sees_all_responses(event, viewer)
 
     responses_map = await event_service.get_filtered_responses_map(
         event, timeMin, timeMax, is_owner=sees_all
@@ -339,9 +372,9 @@ async def send_invites(event_id: str, payload: SendInvitePayload, request: Reque
     # Only the host may send mail on an event's behalf. Ownerless (guest-created)
     # events are editable by anyone with the link, but letting anyone send mail
     # from them would turn the app into an open relay.
-    if event.get("ownerId") != user["_id"]:
+    if not event_service.can_manage(event, user):
         raise HTTPException(
-            status_code=403, detail="일정을 만든 사람만 초대를 보낼 수 있습니다"
+            status_code=403, detail="주최자와 공동주최자만 초대를 보낼 수 있습니다"
         )
 
     recipients = list(dict.fromkeys(str(e).strip().lower() for e in payload.emails))
@@ -368,9 +401,9 @@ async def _require_event_host(event_id: str, request: Request) -> tuple[dict, di
     event = await event_service.get_event_by_either_id(event_id)
     if event is None:
         raise HTTPException(status_code=404, detail="이벤트를 찾을 수 없습니다")
-    if event.get("ownerId") != user["_id"]:
+    if not event_service.can_manage(event, user):
         raise HTTPException(
-            status_code=403, detail="일정을 만든 사람만 메일을 보낼 수 있습니다"
+            status_code=403, detail="주최자와 공동주최자만 메일을 보낼 수 있습니다"
         )
     return event, user
 
@@ -379,7 +412,16 @@ async def _require_event_host(event_id: str, request: Request) -> tuple[dict, di
 async def mail_targets(event_id: str, request: Request):
     """메일 보내기 창이 채울 명단 - 응답한 사람 / 아직 안 한 사람."""
     event, user = await _require_event_host(event_id, request)
-    return await event_service.mail_targets(event, user)
+    targets = await event_service.mail_targets(event, await _event_owner(event, user))
+    if user["_id"] != event.get("ownerId"):
+        # 주최자 기준으로 뽑은 명단이라 공동주최자 본인이 섞여 있을 수
+        # 있습니다 - 자기에게 보낼 이유는 없으니 뺍니다.
+        me = (user.get("email") or "").lower()
+        for group in ("responded", "pending"):
+            targets[group] = [
+                t for t in targets[group] if (t.get("email") or "").lower() != me
+            ]
+    return targets
 
 
 @router.post("/{event_id}/message")

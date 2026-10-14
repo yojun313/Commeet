@@ -33,7 +33,11 @@ async def get_dashboard_version(user: dict) -> str:
     ids = {d["eventId"] for d in responded}
     owned_or_visible = await events_col.find(
         {
-            "$or": [{"ownerId": user_id}, {"_id": {"$in": list(ids)}}],
+            "$or": [
+                {"ownerId": user_id},
+                {"coHostIds": user_id},
+                {"_id": {"$in": list(ids)}},
+            ],
             "isDeleted": {"$ne": True},
         },
         {"v": 1},
@@ -83,7 +87,7 @@ async def _attach_participant_names(events: list[dict]) -> None:
 
 
 async def get_dashboard_events(user: dict) -> list[dict]:
-    """내가 응답한 일정과 내가 만든 일정의 합집합."""
+    """내가 응답한 일정, 내가 만든 일정, 공동주최자로 지정된 일정의 합집합."""
     user_id = user["_id"]
     user_id_str = str(user_id)
 
@@ -93,7 +97,11 @@ async def get_dashboard_events(user: dict) -> list[dict]:
     responded_event_ids = {d["eventId"] for d in responded_docs}
 
     owned_docs = await events_col.find(
-        {"ownerId": user_id, "isDeleted": {"$ne": True}}, {"_id": 1}
+        {
+            "$or": [{"ownerId": user_id}, {"coHostIds": user_id}],
+            "isDeleted": {"$ne": True},
+        },
+        {"_id": 1},
     ).to_list(length=None)
     owned_event_ids = {d["_id"] for d in owned_docs}
 
@@ -124,9 +132,41 @@ async def get_dashboard_events(user: dict) -> list[dict]:
             d["_id"]: (d.get("name") or d.get("email") or "").strip() for d in docs
         }
 
+    # 내 일정의 공동주최자 명단 - 대시보드의 "수정" 창이 지금 명단을 채워
+    # 보여 줘야, 저장할 때 명단이 비어 있는 채로 덮어쓰지 않습니다.
+    co_ids = {
+        i
+        for e in events
+        if e.get("ownerId") == user_id
+        for i in (e.get("coHostIds") or [])
+    }
+    co_docs = {}
+    if co_ids:
+        docs = await users_col.find(
+            {"_id": {"$in": list(co_ids)}}, {"name": 1, "email": 1}
+        ).to_list(length=None)
+        co_docs = {d["_id"]: d for d in docs}
+
     for event in events:
         event["hasResponded"] = event["_id"] in responded_event_ids
         event["isOwner"] = event.get("ownerId") == user_id
+        event["isCoHost"] = not event["isOwner"] and user_id in (
+            event.get("coHostIds") or []
+        )
+        if event["isOwner"]:
+            event["coHosts"] = [
+                {
+                    "_id": str(i),
+                    "name": (co_docs[i].get("name") or "").strip(),
+                    "email": co_docs[i].get("email", ""),
+                }
+                for i in (event.get("coHostIds") or [])
+                if i in co_docs
+            ]
+        else:
+            # 남의 일정 응답자에게 다른 공동주최자가 누구인지까지 내려 줄
+            # 이유는 없습니다. 내가 공동주최자인지만 알면 됩니다.
+            event.pop("coHostIds", None)
         if not event["isOwner"]:
             # 남의 일정에는 누가 만든 것인지 보여 줍니다. 소유자가 없는
             # (게스트가 만든) 일정도 있어 기본값을 둡니다.

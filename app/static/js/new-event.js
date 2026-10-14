@@ -161,6 +161,29 @@ const NewEventDialog = (() => {
     if (remindeesField) remindeesField.style.display = creating ? "none" : "";
   }
 
+  /* 공동주최자 명단은 주최자만 바꿉니다 (서버도 무시합니다). 공동주최자가
+     수정 창을 열면 칸 대신 지금 명단만 보여 줍니다. 주인 없는(게스트가 만든)
+     일정은 공동주최자를 둘 수 없습니다. */
+  function coHostsEditable() {
+    if (state.mode !== "edit") return true;
+    return !!(state.event && state.event.ownerId && state.event.isOwner);
+  }
+
+  function syncCoHostFields() {
+    const field = document.getElementById("ne-cohosts-field");
+    const readonly = document.getElementById("ne-cohosts-readonly");
+    if (!field) return;
+    const editable = coHostsEditable();
+    field.style.display = editable ? "" : "none";
+    if (!readonly) return;
+    const list = (state.event && state.event.coHosts) || [];
+    const showNote = !editable && state.event && state.event.isCoHost;
+    readonly.style.display = showNote ? "" : "none";
+    readonly.textContent = showNote
+      ? `공동주최자: ${list.map((c) => c.name || c.email).join(", ") || "-"} (명단은 주최자만 바꿀 수 있습니다)`
+      : "";
+  }
+
   function addChip(container, listEl, arr, value) {
     const trimmed = value.trim();
     if (!trimmed || !trimmed.includes("@") || arr.includes(trimmed)) return;
@@ -368,6 +391,7 @@ const NewEventDialog = (() => {
       })(),
       selectedDates: new Set(),
       remindees: [],
+      coHosts: [],
     };
 
     document.getElementById("new-event-title").textContent =
@@ -413,6 +437,10 @@ const NewEventDialog = (() => {
     if (event && event.remindees) {
       event.remindees.forEach((r) => addChip(document.getElementById("ne-remindees-input"), document.getElementById("ne-remindees-chips"), state.remindees, r.email));
     }
+    resetChips("ne-cohosts-chips", state.coHosts);
+    if (event && event.coHosts) {
+      event.coHosts.forEach((c) => addChip(document.getElementById("ne-cohosts-input"), document.getElementById("ne-cohosts-chips"), state.coHosts, c.email));
+    }
 
     if (event) {
       event.dates.forEach((iso) => {
@@ -436,6 +464,7 @@ const NewEventDialog = (() => {
     }
 
     syncInviteFields();
+    syncCoHostFields();
     renderCalendar();
     openDialog("new-event-dialog");
   }
@@ -471,6 +500,8 @@ const NewEventDialog = (() => {
 
     wireChipInput("ne-remindees-input", "ne-remindees-chips", "remindees");
     wireContactPicker("ne-remindees-field", "ne-remindees-input", "ne-remindees-chips", "remindees");
+    wireChipInput("ne-cohosts-input", "ne-cohosts-chips", "coHosts");
+    wireContactPicker("ne-cohosts-field", "ne-cohosts-input", "ne-cohosts-chips", "coHosts");
     document.getElementById("new-event-form").addEventListener("submit", async (e) => {
       e.preventDefault();
       showError("");
@@ -503,6 +534,17 @@ const NewEventDialog = (() => {
           : false,
         remindees: state.remindees,
       };
+      // 칸이 있을 때만 보냅니다. 빠지면 서버는 명단을 그대로 둡니다 -
+      // 공동주최자가 저장해도 명단이 지워지지 않습니다.
+      if (document.getElementById("ne-cohosts-field") && coHostsEditable()) {
+        // 입력만 하고 Enter를 안 누른 주소도 담습니다 (가장 흔한 실수).
+        const pending = document.getElementById("ne-cohosts-input");
+        if (pending && pending.value.trim()) {
+          addChip(pending, document.getElementById("ne-cohosts-chips"), state.coHosts, pending.value);
+          pending.value = "";
+        }
+        payload.coHosts = state.coHosts;
+      }
 
       const thresholdEnable = document.getElementById("ne-threshold-enable");
       if (thresholdEnable && thresholdEnable.checked) {

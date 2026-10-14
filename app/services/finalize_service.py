@@ -363,8 +363,12 @@ async def confirm(
     meetings: list[dict],
     *,
     calendar_invite: bool = True,
+    confirmed_by=None,
 ) -> dict:
-    """Stores the host's final schedule, closes the event and notifies people."""
+    """Stores the host's final schedule, closes the event and notifies people.
+
+    `confirmed_by`: 실제로 확정을 누른 사람 (공동주최자일 수 있음). 없으면 주최자.
+    """
     validate_meeting_minutes(event, meeting_minutes)
 
     _host_response, participants = await _load_people(event)
@@ -413,7 +417,7 @@ async def confirm(
         "meetings": stored,
         "unassigned": [k for k in by_key if k not in seen],
         "confirmedAt": datetime.now(UTC),
-        "confirmedBy": host["_id"],
+        "confirmedBy": confirmed_by or host["_id"],
         # 다음 확정 화면이 체크박스 기본값으로 되살립니다.
         "calendarInvite": calendar_invite,
     }

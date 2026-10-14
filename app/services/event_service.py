@@ -52,6 +52,77 @@ class EventClosed(Exception):
     pass
 
 
+class UnknownCoHosts(Exception):
+    """공동주최자로 적은 이메일 중 가입한 계정이 없는 것들."""
+
+    def __init__(self, emails: list[str]):
+        self.emails = emails
+
+
+# ---------------------------------------------------------------------------
+# 공동주최자
+# ---------------------------------------------------------------------------
+#
+# 주최자(ownerId)가 이메일로 지정한 가입 회원들입니다. 응답 전체 보기, 일정
+# 수정, 최적 배정·확정, 초대·안내 메일까지 주최자와 같이 다룹니다. 일정 삭제·
+# 보관·복제, 면담 기록, 공동주최자 명단 변경은 주최자에게만 남깁니다 - 일정의
+# 존폐와 개인 기록은 만든 사람의 것이라서요.
+
+
+def is_co_host(event: dict, user: dict | None) -> bool:
+    if not user or not event.get("ownerId"):
+        return False
+    return user["_id"] in (event.get("coHostIds") or [])
+
+
+def can_manage(event: dict, user: dict | None) -> bool:
+    """주최자 또는 공동주최자 - 응답 전체를 보고 일정을 운영할 수 있는가.
+
+    주인 없는(게스트가 만든) 일정은 여기서 False입니다. 그런 일정의 "링크를
+    가진 누구나 수정" 규칙은 update_event가 따로 처리합니다.
+    """
+    if not user or not event.get("ownerId"):
+        return False
+    return event["ownerId"] == user["_id"] or is_co_host(event, user)
+
+
+async def resolve_co_hosts(emails: list[str], owner_id: ObjectId) -> list[ObjectId]:
+    """공동주최자 이메일을 계정 id로 바꿉니다. 없는 계정이 하나라도 있으면
+    조용히 빼지 않고 알립니다 - 빠진 줄 모르면 그 사람은 권한이 있는 줄
+    알고 기다리게 됩니다. 주최자 본인은 명단에서 뺍니다."""
+    wanted = list(dict.fromkeys(e.strip().lower() for e in emails if e and e.strip()))
+    if not wanted:
+        return []
+    docs = await users_col.find({"email": {"$in": wanted}}, {"email": 1}).to_list(
+        length=None
+    )
+    by_email = {d["email"].lower(): d["_id"] for d in docs}
+    missing = [e for e in wanted if e not in by_email]
+    if missing:
+        raise UnknownCoHosts(missing)
+    return [by_email[e] for e in wanted if by_email[e] != owner_id]
+
+
+async def co_host_list(event: dict) -> list[dict]:
+    """화면용 공동주최자 명단 (지정한 순서 그대로). 탈퇴한 계정은 뺍니다."""
+    ids = event.get("coHostIds") or []
+    if not ids:
+        return []
+    docs = await users_col.find({"_id": {"$in": ids}}, {"name": 1, "email": 1}).to_list(
+        length=None
+    )
+    by_id = {d["_id"]: d for d in docs}
+    return [
+        {
+            "_id": str(i),
+            "name": (by_id[i].get("name") or "").strip(),
+            "email": by_id[i].get("email", ""),
+        }
+        for i in ids
+        if i in by_id
+    ]
+
+
 def records_enabled(event: dict) -> bool:
     """이 일정에서 "면담 기록 · 학생지도비"를 쓰는가.
 
@@ -216,8 +287,16 @@ async def rename_guest(event_id: ObjectId, old_name: str, new_name: str) -> None
 
 async def create_event(payload: EventPayload, owner: dict | None) -> dict:
     now = datetime.now(UTC)
+    # 저장 전에 확인합니다 - 없는 계정이 섞여 있으면 일정을 만들지 않고
+    # 화면에서 고치게 합니다 (만들어진 뒤에 알리면 일정이 두 번 생깁니다).
+    co_host_ids = (
+        await resolve_co_hosts(payload.coHosts, owner["_id"])
+        if owner and payload.coHosts
+        else []
+    )
     event = {
         "ownerId": owner["_id"] if owner else None,
+        "coHostIds": co_host_ids,
         "name": payload.name,
         "description": payload.description,
         "descriptionFormat": payload.descriptionFormat,
@@ -277,8 +356,18 @@ async def update_event(
 ) -> dict:
     owner_id = event.get("ownerId")
     requester_id = requester["_id"] if requester else None
-    if owner_id is not None and owner_id != requester_id:
+    if owner_id is not None and not can_manage(event, requester):
         raise NotEventOwner()
+
+    # 공동주최자 명단은 주최자만 바꿉니다. 공동주최자가 저장한 요청에 명단이
+    # 실려 와도 무시합니다 (서로를 빼거나 남을 끌어들이지 못하게).
+    co_host_ids = None
+    if (
+        owner_id is not None
+        and owner_id == requester_id
+        and payload.coHosts is not None
+    ):
+        co_host_ids = await resolve_co_hosts(payload.coHosts, owner_id)
 
     # 시간 단위 변경. 예전에는 저장 대상에 아예 없어 조용히 무시됐습니다.
     increment_changed = int(event.get("timeIncrement") or 15) != payload.timeIncrement
@@ -304,6 +393,8 @@ async def update_event(
         "type": payload.type.value,
         "timeIncrement": payload.timeIncrement,
     }
+    if co_host_ids is not None:
+        updates["coHostIds"] = co_host_ids
 
     unset: dict = {}
     if increment_changed:
@@ -632,8 +723,7 @@ async def upsert_response(
     if is_closed(event):
         raise EventClosed()
     if event.get("blindAvailabilityEnabled") and requester and payload.guest:
-        owner_id = event.get("ownerId")
-        if owner_id != requester["_id"]:
+        if not can_manage(event, requester):
             raise BlindAvailabilityViolation()
 
     if payload.guest:
@@ -693,8 +783,7 @@ async def delete_response(event: dict, payload, requester: dict | None) -> None:
             raise NotSignedIn()
         user_key = str(requester["_id"])
         target = payload.userId or user_key
-        owner_id = event.get("ownerId")
-        if target != user_key and owner_id != requester["_id"]:
+        if target != user_key and not can_manage(event, requester):
             raise NotEventOwner()
 
         result = await event_responses_col.delete_one(

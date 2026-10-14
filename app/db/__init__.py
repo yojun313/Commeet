@@ -27,6 +27,7 @@ async def create_indexes() -> None:
 
     await events_col.create_index("shortId", unique=True, sparse=True)
     await events_col.create_index("ownerId")
+    await events_col.create_index("coHostIds")
 
     await event_responses_col.create_index([("eventId", 1), ("userId", 1)], unique=True)
 

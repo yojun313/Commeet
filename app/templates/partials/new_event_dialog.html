@@ -74,6 +74,26 @@
             </div>
           </div>
 
+          {# 공동주최자 - 가입한 계정만. 전체 응답 보기, 수정, 최적 배정·확정,
+             메일 보내기를 함께 합니다 (event_service.can_manage). 명단은
+             주최자만 바꿀 수 있어, 공동주최자가 이 창을 열면 칸 대신 안내가 나옵니다. #}
+          <div class="field" id="ne-cohosts-field">
+            <label>공동주최자 (선택)</label>
+            <div class="chip-input" id="ne-cohosts-chips">
+              <input type="text" id="ne-cohosts-input" placeholder="가입한 이메일 입력 후 Enter" />
+            </div>
+            <div class="contact-picker">
+              <button type="button" class="btn btn-ghost btn-sm" data-role="pick-contact-btn">+ 연락처에서 선택<span data-role="pick-contact-count"></span></button>
+              <div class="contact-picker-dropdown" style="display: none;">
+                <input type="text" class="input" data-role="pick-contact-search" placeholder="이름 또는 이메일로 검색" />
+                <div class="contact-picker-filters" data-role="pick-contact-filters" style="display: none;"></div>
+                <div class="contact-picker-list" data-role="pick-contact-list"></div>
+              </div>
+            </div>
+            <div class="hint">전체 응답을 보고 일정 수정, 최적 배정·확정, 메일 보내기를 함께 할 수 있습니다. 삭제와 면담 기록은 주최자만 할 수 있습니다.</div>
+          </div>
+          <p class="hint" id="ne-cohosts-readonly" style="display: none;"></p>
+
           {% else %}
           <p class="hint">로그인하면 이메일 알림, 초대, 세부 옵션을 사용할 수 있습니다.</p>
           {% endif %}
@@ -106,7 +126,7 @@
             <input type="checkbox" id="ne-blind" />
             <span class="checkbox-copy">
               다른 응답자에게 결과 숨기기
-              <div class="desc">켜면 생성자만 전체 응답을 볼 수 있습니다.</div>
+              <div class="desc">켜면 주최자와 공동주최자만 전체 응답을 볼 수 있습니다.</div>
             </span>
           </label>
           <label class="checkbox-row">

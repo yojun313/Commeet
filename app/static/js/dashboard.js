@@ -98,7 +98,7 @@ function eventCard(event) {
         <div class="event-card-meta">${fmtDateRange(event)} &middot; 응답 ${event.numResponses ?? 0}명</div>
         <div class="event-card-created">${
           readOnly
-            ? `${escapeHtml(event.ownerName || "익명")}님의 일정`
+            ? `${escapeHtml(event.ownerName || "익명")}님의 일정${event.isCoHost ? " · 공동주최" : ""}`
             : `${fmtCreatedAt(event.createdAt)} 생성`
         }</div>
       </div>
@@ -112,7 +112,7 @@ function eventCard(event) {
       ${
         readOnly
           ? `<span class="event-card-readonly-note">${
-              event.hasResponded ? "응답함" : "응답 대기"
+              event.isCoHost ? "공동주최자" : event.hasResponded ? "응답함" : "응답 대기"
             }</span>`
           : `<button class="btn btn-sm btn-ghost" data-action="edit">수정</button>
              <button class="btn btn-sm btn-ghost" data-action="duplicate">복제</button>

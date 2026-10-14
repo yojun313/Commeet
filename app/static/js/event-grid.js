@@ -57,7 +57,8 @@ const ST = {
   hideIfNeeded: false,
   viewerKey: null,
   guestName: null,
-  isOwner: false,
+  isOwner: false, // 만든 사람 - 삭제·면담 기록
+  canManage: false, // 주최자 또는 공동주최자 - 수정·확정·메일·전체 응답
 };
 
 function el(html) {
@@ -103,6 +104,7 @@ async function loadEvent() {
   const event = await api.get(`/api/events/${ST.eventId}${guestQuery}`);
   ST.event = event;
   ST.isOwner = !!event.isOwner;
+  ST.canManage = !!event.canManage;
 
   document.getElementById("ev-title").textContent = event.name;
   document.title = `${event.name} - Commeet`;
@@ -124,10 +126,16 @@ async function loadEvent() {
         <p><b>이 일정은 확정되어 마감되었습니다.</b></p>
         <p style="font-size: 13px; opacity: 0.8;">
           더 이상 가능한 시간을 추가하거나 수정할 수 없습니다.
-          ${ST.isOwner ? `<a href="${link}">확정 내용 보기</a>에서 배정을 조정하거나 확정을 취소할 수 있습니다.` : ""}
+          ${ST.canManage ? `<a href="${link}">확정 내용 보기</a>에서 배정을 조정하거나 확정을 취소할 수 있습니다.` : ""}
         </p>
       </div>
     `;
+  }
+  if (event.isCoHost && !document.getElementById("cohost-banner")) {
+    document.getElementById("guest-owner-banner").insertAdjacentHTML(
+      "beforeend",
+      `<div class="guest-banner" id="cohost-banner">공동주최자로 지정된 일정입니다. 전체 응답 보기, 일정 수정, 최적 배정·확정, 메일 보내기를 할 수 있습니다. 일정 삭제는 주최자만 할 수 있습니다.</div>`
+    );
   }
   if (event.adminView && !document.getElementById("admin-view-banner")) {
     // 관리자가 남의 일정을 여는 경우 - 응답은 주최자와 똑같이 보이지만
@@ -649,7 +657,7 @@ function renderRespondents() {
     // 목록에서 내 줄을 바로 찾을 수 있게 표시합니다. viewerKey는 로그인했으면
     // 사용자 id, 게스트면 이름이고 응답 목록의 키와 같은 값입니다.
     const isMe = !!ST.viewerKey && key === ST.viewerKey;
-    const canEditAsGuest = isGuestEntry && ST.isOwner && !ST.event.isClosed;
+    const canEditAsGuest = isGuestEntry && ST.canManage && !ST.event.isClosed;
 
     const row = document.createElement("div");
     row.className = "respondent-row" + (ST.selectedRespondents.has(key) ? " selected" : "");
@@ -1797,15 +1805,30 @@ function wireDynamicButtons() {
     showSnackbar("삭제되었습니다.", "success");
   });
 
-  if (ST.isOwner) {
-    // Only the host can mail the link out (server enforces this too), so
-    // this pinned-to-the-bottom sidebar action only exists for them.
+  if (ST.canManage) {
+    // Only the host and co-hosts can mail the link out (server enforces this
+    // too), so this pinned-to-the-bottom sidebar action only exists for them.
     const inviteBtn = document.getElementById("invite-btn");
     inviteBtn.style.display = "";
     inviteBtn.addEventListener("click", openInviteDialog);
     const messageBtn = document.getElementById("message-btn");
     messageBtn.style.display = "";
     messageBtn.addEventListener("click", openMessageDialog);
+    document.getElementById("finalize-link-btn").style.display = "";
+    // Only swap the label span's text, not the whole button - the button
+    // also contains an SVG icon that a plain .textContent assignment here
+    // would silently wipe out.
+    document.getElementById("finalize-link-label").textContent = ST.event.isClosed
+      ? "확정 내용 보기/수정"
+      : "최적 배정 계산하기";
+
+    const editBtn = document.getElementById("edit-event-btn");
+    editBtn.style.display = "";
+    editBtn.addEventListener("click", () => NewEventDialog.open({ mode: "edit", event: ST.event }));
+  }
+
+  // 일정 삭제와 면담 기록은 만든 사람에게만 남깁니다 (공동주최자 제외).
+  if (ST.isOwner) {
     // 지도면담 기능을 안 켠 일정 - 사이드바에서 바로 켤 수 있게.
     // ("일정 정보 수정"의 체크박스를 못 찾는 문제 방지)
     const enableBtn = document.getElementById("enable-records-btn");
@@ -1835,18 +1858,6 @@ function wireDynamicButtons() {
         RecordDialog.open(ST.eventId, now.toISOString(), loadEventRecords);
       });
     }
-    document.getElementById("finalize-link-btn").style.display = "";
-    // Only swap the label span's text, not the whole button - the button
-    // also contains an SVG icon that a plain .textContent assignment here
-    // would silently wipe out.
-    document.getElementById("finalize-link-label").textContent = ST.event.isClosed
-      ? "확정 내용 보기/수정"
-      : "최적 배정 계산하기";
-
-    const editBtn = document.getElementById("edit-event-btn");
-    editBtn.style.display = "";
-    editBtn.addEventListener("click", () => NewEventDialog.open({ mode: "edit", event: ST.event }));
-
     const deleteBtn = document.getElementById("delete-event-btn");
     deleteBtn.style.display = "";
     // 앞으로 있을 일정은 참가자에게 "취소", 이미 지난 일정은 기록 "삭제"입니다.
