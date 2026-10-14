@@ -324,7 +324,10 @@ async def _sync_to_google_calendar(
         record = await calendar_service.sync_meeting_to_account(
             user_doc,
             summary=f"[{APP_NAME}] {event.get('name') or '약속'} - {with_whom}",
-            description=f"{APP_NAME}에서 확정된 약속입니다.\n{event_url}",
+            description=(
+                f"{APP_NAME}에서 확정된 약속입니다.\n"
+                f"주최: {host.get('name') or ''}\n{event_url}"
+            ),
             start=meeting["start"],
             end=meeting["end"],
         )

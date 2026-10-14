@@ -18,7 +18,7 @@ from app.schemas.event import (
     SendInvitePayload,
     SendMessagePayload,
 )
-from app.services import email_service, event_service
+from app.services import email_service, event_service, user_service
 from app.services.auth_service import get_optional_user, get_user_by_id, require_user
 
 router = APIRouter(prefix="/api/events", tags=["events"])
@@ -50,6 +50,18 @@ def _unknown_co_hosts(exc: "event_service.UnknownCoHosts") -> HTTPException:
     )
 
 
+async def _remember_co_host_perms(user: dict, payload: EventPayload) -> None:
+    """저장한 공동주최자 권한을 그 사람 앞으로 기억합니다 - 다음 일정에서
+    같은 사람을 넣으면 같은 체크로 시작합니다 (user_service.save_co_host_prefs)."""
+    if not payload.coHosts:
+        return
+    # 이메일만 온 항목(예전 화면)은 고른 권한이 없으니 기억할 것도 없습니다.
+    await user_service.save_co_host_prefs(
+        user,
+        [(c.email, c.perms or {}) for c in payload.coHosts if not isinstance(c, str)],
+    )
+
+
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_event(payload: EventPayload, request: Request):
     owner = await get_optional_user(request)
@@ -58,6 +70,8 @@ async def create_event(payload: EventPayload, request: Request):
         event = await event_service.create_event(payload, owner)
     except event_service.UnknownCoHosts as exc:
         raise _unknown_co_hosts(exc) from exc
+    if owner:
+        await _remember_co_host_perms(owner, payload)
     return {
         "eventId": str(event["_id"]),
         "shortId": event.get("shortId"),
@@ -102,6 +116,8 @@ async def edit_event(
             detail={"code": "increment_reset_required", "responses": exc.count},
         ) from exc
 
+    if requester and event_service.has_perm(event, requester, "coHosts"):
+        await _remember_co_host_perms(requester, payload)
     return {"invitesQueued": saved.get("invitesQueued", 0)}
 
 
@@ -181,6 +197,8 @@ async def get_event(event_id: str, request: Request, guestName: str | None = Non
     result["isOwner"] = is_owner
     result["isCoHost"] = manages and not is_owner
     result["canManage"] = manages
+    # 버튼을 고를 때 쓰는 내 권한 (주최자는 전부 True).
+    result["myPerms"] = event_service.my_perms(event, viewer)
     result["adminView"] = sees_all and not manages
     result["isClosed"] = bool(event.get("isClosed"))
 
@@ -195,6 +213,7 @@ async def get_event(event_id: str, request: Request, guestName: str | None = Non
         # 공동주최자 이메일은 운영하는 사람들끼리만 봅니다.
         result["coHosts"] = await event_service.co_host_list(event)
 
+    result.pop("coHostPerms", None)  # 화면은 coHosts[].perms를 씁니다
     if not sees_all:
         result.pop("coHostIds", None)
         # 초대 명단은 이메일 목록입니다 - 링크만 가진 사람에게 다른
@@ -282,23 +301,31 @@ async def update_event_response(
     if is_new and owner_id and user_key != str(owner_id):
         owner = await get_user_by_id(owner_id)
         current_count = (event.get("numResponses") or 0) + 1
+        # 주최자 + "응답 알림" 권한의 공동주최자. 본인 응답은 알리지 않습니다.
+        recipients = [
+            r
+            for r in await event_service.notify_recipients(event, owner)
+            if str(r["_id"]) != user_key
+        ]
 
-        if owner and event.get("notificationsEnabled"):
+        if event.get("notificationsEnabled"):
             respondent_name = (
                 payload.name if payload.guest else (requester or {}).get("name", "")
             )
-            await email_service.send_someone_responded_email(
-                owner, event, respondent_name or "익명"
-            )
+            for person in recipients:
+                await email_service.send_someone_responded_email(
+                    person, event, respondent_name or "익명"
+                )
 
         threshold = event.get("sendEmailAfterXResponses")
-        if owner and threshold and threshold > 0 and current_count == threshold:
+        if recipients and threshold and threshold > 0 and current_count == threshold:
             await events_col.update_one(
                 {"_id": event["_id"]}, {"$set": {"sendEmailAfterXResponses": -1}}
             )
-            await email_service.send_threshold_reached_email(
-                owner, event, current_count
-            )
+            for person in recipients:
+                await email_service.send_threshold_reached_email(
+                    person, event, current_count
+                )
 
     return {}
 
@@ -352,12 +379,18 @@ async def delete_event(event_id: str, request: Request, notify: bool = True):
         raise HTTPException(status_code=400, detail="잘못된 이벤트 ID입니다")
 
     event = await events_col.find_one(
-        {"_id": ObjectId(event_id), "ownerId": user["_id"]}
+        {"_id": ObjectId(event_id), "isDeleted": {"$ne": True}}
     )
-    if event is None:
+    if event is None or not event_service.has_perm(event, user, "delete"):
         raise HTTPException(status_code=404, detail="이벤트를 찾을 수 없습니다")
 
-    notified = await event_service.delete_event(event, user, notify=notify)
+    # 삭제는 주최자의 일정을 지우는 일입니다 - 취소 안내에서 빼는 사람과
+    # "남이 응답했으면 휴지통으로" 판단은 주최자 기준, 안내의 이름은 주최자
+    # 모두입니다. 지운 일정은 주최자의 휴지통으로 갑니다.
+    owner = await _event_owner(event, user)
+    notified = await event_service.delete_event(
+        event, owner, notify=notify, presenter=await event_service.as_hosts(event, user)
+    )
     return {"notifiedCount": notified}
 
 
@@ -372,15 +405,14 @@ async def send_invites(event_id: str, payload: SendInvitePayload, request: Reque
     # Only the host may send mail on an event's behalf. Ownerless (guest-created)
     # events are editable by anyone with the link, but letting anyone send mail
     # from them would turn the app into an open relay.
-    if not event_service.can_manage(event, user):
-        raise HTTPException(
-            status_code=403, detail="주최자와 공동주최자만 초대를 보낼 수 있습니다"
-        )
+    if not event_service.has_perm(event, user, "mail"):
+        raise HTTPException(status_code=403, detail="메일을 보낼 권한이 없습니다")
 
     recipients = list(dict.fromkeys(str(e).strip().lower() for e in payload.emails))
 
+    presenter = await event_service.as_hosts(event, user)
     mails = [
-        email_service.build_event_invite_mail(email, user, event, payload.message)
+        email_service.build_event_invite_mail(email, presenter, event, payload.message)
         for email in recipients
     ]
 
@@ -401,10 +433,8 @@ async def _require_event_host(event_id: str, request: Request) -> tuple[dict, di
     event = await event_service.get_event_by_either_id(event_id)
     if event is None:
         raise HTTPException(status_code=404, detail="이벤트를 찾을 수 없습니다")
-    if not event_service.can_manage(event, user):
-        raise HTTPException(
-            status_code=403, detail="주최자와 공동주최자만 메일을 보낼 수 있습니다"
-        )
+    if not event_service.has_perm(event, user, "mail"):
+        raise HTTPException(status_code=403, detail="메일을 보낼 권한이 없습니다")
     return event, user
 
 
@@ -434,13 +464,14 @@ async def send_message(event_id: str, payload: SendMessagePayload, request: Requ
     if not recipients:
         raise HTTPException(status_code=400, detail="받는 사람을 선택해 주세요")
 
+    presenter = await event_service.as_hosts(event, user)
     if payload.combined:
         # 전체 수신자를 To에 나란히 넣은 한 통 + 주최자 참조(Cc). 수신자끼리
         # 서로를 보고 전체 답장할 수 있고, 주최자에게도 사본이 남습니다.
         mails = [
             email_service.build_event_message_mail(
                 recipients[0],
-                user,
+                presenter,
                 event,
                 payload.message,
                 subject=payload.subject,
@@ -451,7 +482,7 @@ async def send_message(event_id: str, payload: SendMessagePayload, request: Requ
     else:
         mails = [
             email_service.build_event_message_mail(
-                email, user, event, payload.message, subject=payload.subject
+                email, presenter, event, payload.message, subject=payload.subject
             )
             for email in recipients
         ]
@@ -474,10 +505,10 @@ async def duplicate_event(
         raise HTTPException(status_code=404, detail="이벤트를 찾을 수 없습니다")
     # 참여만 하고 있는 남의 일정은 복제 대상이 아닙니다 (수정·보관·삭제와 동일).
     # 소유자 없는 게스트 생성 일정은 링크를 가진 누구나 다룰 수 있어 예외입니다.
-    if event.get("ownerId") is not None and event.get("ownerId") != user["_id"]:
-        raise HTTPException(
-            status_code=403, detail="내가 만든 일정만 복제할 수 있습니다"
-        )
+    if event.get("ownerId") is not None and not event_service.has_perm(
+        event, user, "delete"
+    ):
+        raise HTTPException(status_code=403, detail="이 일정을 복제할 권한이 없습니다")
 
     new_event = await event_service.duplicate_event(
         event, payload.eventName, payload.copyAvailability, user
@@ -533,10 +564,8 @@ async def set_guidance_records(event_id: str, request: Request, enabled: bool = 
     event = await event_service.get_event_by_either_id(event_id)
     if event is None:
         raise HTTPException(status_code=404, detail="이벤트를 찾을 수 없습니다")
-    if event.get("ownerId") != user["_id"]:
-        raise HTTPException(
-            status_code=403, detail="일정을 만든 사람만 바꿀 수 있습니다"
-        )
+    if not event_service.has_perm(event, user, "records"):
+        raise HTTPException(status_code=403, detail="바꿀 권한이 없습니다")
     await events_col.update_one(
         {"_id": event["_id"]}, {"$set": {"guidanceRecordsEnabled": enabled}}
     )
@@ -549,7 +578,7 @@ async def archive_event(event_id: str, request: Request, archived: bool = True):
     event = await event_service.get_event_by_either_id(event_id)
     if event is None:
         raise HTTPException(status_code=404, detail="이벤트를 찾을 수 없습니다")
-    if event.get("ownerId") != user["_id"]:
+    if not event_service.has_perm(event, user, "delete"):
         raise HTTPException(status_code=403, detail="권한이 없습니다")
 
     await event_service.archive_event(event, archived)

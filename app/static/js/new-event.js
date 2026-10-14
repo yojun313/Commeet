@@ -161,12 +161,149 @@ const NewEventDialog = (() => {
     if (remindeesField) remindeesField.style.display = creating ? "none" : "";
   }
 
-  /* 공동주최자 명단은 주최자만 바꿉니다 (서버도 무시합니다). 공동주최자가
-     수정 창을 열면 칸 대신 지금 명단만 보여 줍니다. 주인 없는(게스트가 만든)
+  /* 공동주최자 명단·권한은 주최자와 "공동주최자 관리" 권한을 받은 사람만
+     바꿉니다 (서버도 그 밖의 요청은 무시합니다). 나머지 공동주최자가 수정
+     창을 열면 칸 대신 지금 명단만 보여 줍니다. 주인 없는(게스트가 만든)
      일정은 공동주최자를 둘 수 없습니다. */
   function coHostsEditable() {
     if (state.mode !== "edit") return true;
-    return !!(state.event && state.event.ownerId && state.event.isOwner);
+    const ev = state.event;
+    return !!(ev && ev.ownerId && ev.myPerms && ev.myPerms.coHosts);
+  }
+
+  /* 공동주최자 권한 - 서버 event_service.CO_HOST_PERM_DEFAULTS와 같은 순서·
+     기본값입니다. 전체 응답 보기는 모든 공동주최자의 기본이라 목록에 없습니다. */
+  const CO_HOST_PERMS = [
+    ["edit", "일정 수정", true],
+    ["finalize", "배정·확정", true],
+    ["mail", "메일 보내기", true],
+    ["listed", "안내 메일·캘린더에 이름 표시", true],
+    ["notify", "응답 알림 받기", true],
+    ["delete", "삭제·보관·복제", false],
+    ["records", "면담 기록", false],
+    ["coHosts", "공동주최자 관리", false],
+  ];
+
+  function defaultCoHostPerms() {
+    return Object.fromEntries(CO_HOST_PERMS.map(([k, , v]) => [k, v]));
+  }
+
+  /* 체크를 바꾸면 계정에 기억해 두었다가(/api/user/co-host-prefs), 다음에
+     같은 사람을 넣으면 그 체크로, 처음 넣는 사람은 가장 최근 체크로 시작합니다. */
+  let coHostPrefs = null; // { byEmail: {email: perms}, last: perms | null }
+  let coHostPrefsLoading = null;
+  function loadCoHostPrefs() {
+    if (!document.getElementById("ne-cohosts-field")) return Promise.resolve();
+    if (!coHostPrefsLoading) {
+      coHostPrefsLoading = api
+        .get("/api/user/co-host-prefs")
+        .then((prefs) => {
+          coHostPrefs = prefs || { byEmail: {}, last: null };
+        })
+        .catch(() => {
+          coHostPrefs = { byEmail: {}, last: null };
+        });
+    }
+    return coHostPrefsLoading;
+  }
+
+  function rememberedPerms(email) {
+    const prefs = coHostPrefs || {};
+    const saved = (prefs.byEmail || {})[email.toLowerCase()] || prefs.last;
+    return { ...defaultCoHostPerms(), ...(saved || {}) };
+  }
+
+  const saveTimers = {};
+  function rememberCoHostPerms(email, perms) {
+    const key = email.toLowerCase();
+    const copy = { ...perms };
+    if (coHostPrefs) {
+      coHostPrefs.byEmail = coHostPrefs.byEmail || {};
+      coHostPrefs.byEmail[key] = copy;
+      coHostPrefs.last = copy;
+    }
+    // 연달아 여러 칸을 누르면 마지막 상태만 한 번 보냅니다.
+    clearTimeout(saveTimers[key]);
+    saveTimers[key] = setTimeout(() => {
+      api.put("/api/user/co-host-prefs", { email: key, perms: copy }).catch(() => {});
+    }, 400);
+  }
+
+  /* 공동주최자마다 한 줄: 이메일, "모든 권한", 권한 체크들, 빼기 버튼.
+     사람 목록 자체는 칩 배열(state.coHosts)이 그대로 들고 있고 - 이메일
+     입력·연락처 선택이 모두 그 배열을 씁니다 - 여기서는 칩이 바뀔 때마다
+     줄을 다시 그립니다 (칩은 CSS로 숨김). */
+  function renderCoHostRows() {
+    const list = document.getElementById("ne-cohosts-list");
+    if (!list || !state) return;
+    list.innerHTML = "";
+    state.coHosts.forEach((email) => {
+      const perms = (state.coHostPerms[email] = state.coHostPerms[email] || rememberedPerms(email));
+      const row = document.createElement("div");
+      row.className = "cohost-row";
+
+      const head = document.createElement("div");
+      head.className = "cohost-row-head";
+      const name = document.createElement("span");
+      name.className = "cohost-email";
+      name.textContent = email;
+      const all = document.createElement("label");
+      all.className = "cohost-all";
+      const allBox = document.createElement("input");
+      allBox.type = "checkbox";
+      all.append(allBox, document.createTextNode("모든 권한 (주최자와 동일)"));
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "btn-icon cohost-remove";
+      remove.title = "공동주최자에서 빼기";
+      remove.setAttribute("aria-label", `${email} 빼기`);
+      remove.textContent = "×";
+      remove.addEventListener("click", () => {
+        delete state.coHostPerms[email];
+        removeChip(document.getElementById("ne-cohosts-chips"), state.coHosts, email);
+        renderCoHostRows();
+      });
+      head.append(name, all, remove);
+
+      const box = document.createElement("div");
+      box.className = "cohost-perms";
+      const boxes = {};
+      const syncAll = () => {
+        allBox.checked = CO_HOST_PERMS.every(([k]) => perms[k]);
+      };
+      CO_HOST_PERMS.forEach(([key, label]) => {
+        const item = document.createElement("label");
+        item.className = "cohost-perm";
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = !!perms[key];
+        cb.addEventListener("change", () => {
+          perms[key] = cb.checked;
+          // 명단을 바꾸는 일은 "일정 수정" 창에서 하므로 수정 권한이 함께 필요합니다.
+          if (key === "coHosts" && cb.checked && !perms.edit) {
+            perms.edit = boxes.edit.checked = true;
+          }
+          if (key === "edit" && !cb.checked && perms.coHosts) {
+            perms.coHosts = boxes.coHosts.checked = false;
+          }
+          syncAll();
+          rememberCoHostPerms(email, perms);
+        });
+        boxes[key] = cb;
+        item.append(cb, document.createTextNode(label));
+        box.appendChild(item);
+      });
+      allBox.addEventListener("change", () => {
+        CO_HOST_PERMS.forEach(([k]) => {
+          perms[k] = boxes[k].checked = allBox.checked;
+        });
+        rememberCoHostPerms(email, perms);
+      });
+      syncAll();
+
+      row.append(head, box);
+      list.appendChild(row);
+    });
   }
 
   function syncCoHostFields() {
@@ -180,7 +317,7 @@ const NewEventDialog = (() => {
     const showNote = !editable && state.event && state.event.isCoHost;
     readonly.style.display = showNote ? "" : "none";
     readonly.textContent = showNote
-      ? `공동주최자: ${list.map((c) => c.name || c.email).join(", ") || "-"} (명단은 주최자만 바꿀 수 있습니다)`
+      ? `공동주최자: ${list.map((c) => c.name || c.email).join(", ") || "-"} (명단과 권한은 주최자가 바꿀 수 있습니다)`
       : "";
   }
 
@@ -392,6 +529,7 @@ const NewEventDialog = (() => {
       selectedDates: new Set(),
       remindees: [],
       coHosts: [],
+      coHostPerms: {}, // email -> 권한
     };
 
     document.getElementById("new-event-title").textContent =
@@ -439,8 +577,13 @@ const NewEventDialog = (() => {
     }
     resetChips("ne-cohosts-chips", state.coHosts);
     if (event && event.coHosts) {
-      event.coHosts.forEach((c) => addChip(document.getElementById("ne-cohosts-input"), document.getElementById("ne-cohosts-chips"), state.coHosts, c.email));
+      event.coHosts.forEach((c) => {
+        addChip(document.getElementById("ne-cohosts-input"), document.getElementById("ne-cohosts-chips"), state.coHosts, c.email);
+        state.coHostPerms[c.email] = { ...defaultCoHostPerms(), ...(c.perms || {}) };
+      });
     }
+    renderCoHostRows();
+    loadCoHostPrefs();
 
     if (event) {
       event.dates.forEach((iso) => {
@@ -502,6 +645,10 @@ const NewEventDialog = (() => {
     wireContactPicker("ne-remindees-field", "ne-remindees-input", "ne-remindees-chips", "remindees");
     wireChipInput("ne-cohosts-input", "ne-cohosts-chips", "coHosts");
     wireContactPicker("ne-cohosts-field", "ne-cohosts-input", "ne-cohosts-chips", "coHosts");
+    // 칩이 늘거나 줄면(입력·연락처 선택·Backspace) 권한 줄을 다시 그립니다.
+    loadCoHostPrefs();
+    const coChips = document.getElementById("ne-cohosts-chips");
+    if (coChips) new MutationObserver(renderCoHostRows).observe(coChips, { childList: true });
     document.getElementById("new-event-form").addEventListener("submit", async (e) => {
       e.preventDefault();
       showError("");
@@ -543,7 +690,10 @@ const NewEventDialog = (() => {
           addChip(pending, document.getElementById("ne-cohosts-chips"), state.coHosts, pending.value);
           pending.value = "";
         }
-        payload.coHosts = state.coHosts;
+        payload.coHosts = state.coHosts.map((email) => ({
+          email,
+          perms: state.coHostPerms[email] || defaultCoHostPerms(),
+        }));
       }
 
       const thresholdEnable = document.getElementById("ne-threshold-enable");

@@ -63,10 +63,29 @@ class UnknownCoHosts(Exception):
 # 공동주최자
 # ---------------------------------------------------------------------------
 #
-# 주최자(ownerId)가 이메일로 지정한 가입 회원들입니다. 응답 전체 보기, 일정
-# 수정, 최적 배정·확정, 초대·안내 메일까지 주최자와 같이 다룹니다. 일정 삭제·
-# 보관·복제, 면담 기록, 공동주최자 명단 변경은 주최자에게만 남깁니다 - 일정의
-# 존폐와 개인 기록은 만든 사람의 것이라서요.
+# 주최자(ownerId)가 이메일로 지정한 가입 회원들입니다. 전체 응답 보기는 모든
+# 공동주최자의 기본이고, 그 밖의 일은 사람마다 체크한 권한(coHostPerms)만큼
+# 합니다. 전부 체크하면 주최자와 똑같습니다.
+
+# 권한 이름 -> 기본값. 기본은 "운영은 같이, 일정의 존폐와 개인 기록은 주최자".
+# 화면의 체크 목록(new-event.js CO_HOST_PERMS)과 같은 순서·같은 기본값입니다.
+CO_HOST_PERM_DEFAULTS: dict[str, bool] = {
+    "edit": True,  # 일정 정보 수정, 게스트 응답 대신 고치기
+    "finalize": True,  # 최적 배정 계산·확정·확정 취소
+    "mail": True,  # 초대·안내 메일 보내기
+    "listed": True,  # 참가자 안내 메일·캘린더에 주최자로 이름 표시
+    "notify": True,  # 응답 알림 메일 받기 (일정에서 알림을 켰을 때)
+    "delete": False,  # 일정 삭제·보관·복제
+    "records": False,  # 지도면담 기록 작성
+    "coHosts": False,  # 공동주최자 명단·권한 바꾸기
+}
+
+
+def co_host_perms(event: dict, user_id) -> dict[str, bool]:
+    """한 공동주최자의 권한. 저장된 값이 없는 항목은 기본값을 씁니다
+    (권한 설정이 생기기 전에 지정된 공동주최자도 그대로 동작하도록)."""
+    saved = (event.get("coHostPerms") or {}).get(str(user_id)) or {}
+    return {k: bool(saved.get(k, v)) for k, v in CO_HOST_PERM_DEFAULTS.items()}
 
 
 def is_co_host(event: dict, user: dict | None) -> bool:
@@ -76,7 +95,7 @@ def is_co_host(event: dict, user: dict | None) -> bool:
 
 
 def can_manage(event: dict, user: dict | None) -> bool:
-    """주최자 또는 공동주최자 - 응답 전체를 보고 일정을 운영할 수 있는가.
+    """주최자 또는 공동주최자 - 응답 전체를 볼 수 있는가.
 
     주인 없는(게스트가 만든) 일정은 여기서 False입니다. 그런 일정의 "링크를
     가진 누구나 수정" 규칙은 update_event가 따로 처리합니다.
@@ -86,13 +105,45 @@ def can_manage(event: dict, user: dict | None) -> bool:
     return event["ownerId"] == user["_id"] or is_co_host(event, user)
 
 
-async def resolve_co_hosts(emails: list[str], owner_id: ObjectId) -> list[ObjectId]:
-    """공동주최자 이메일을 계정 id로 바꿉니다. 없는 계정이 하나라도 있으면
-    조용히 빼지 않고 알립니다 - 빠진 줄 모르면 그 사람은 권한이 있는 줄
-    알고 기다리게 됩니다. 주최자 본인은 명단에서 뺍니다."""
-    wanted = list(dict.fromkeys(e.strip().lower() for e in emails if e and e.strip()))
-    if not wanted:
-        return []
+def has_perm(event: dict, user: dict | None, perm: str) -> bool:
+    """주최자는 언제나 True, 공동주최자는 체크된 권한만, 나머지는 False."""
+    if not user or not event.get("ownerId"):
+        return False
+    if event["ownerId"] == user["_id"]:
+        return True
+    return is_co_host(event, user) and co_host_perms(event, user["_id"])[perm]
+
+
+def my_perms(event: dict, user: dict | None) -> dict[str, bool] | None:
+    """화면이 버튼을 고를 때 쓰는 내 권한. 주최자도 공동주최자도 아니면 None."""
+    if not can_manage(event, user):
+        return None
+    return {k: has_perm(event, user, k) for k in CO_HOST_PERM_DEFAULTS}
+
+
+async def resolve_co_hosts(
+    entries: list, owner_id: ObjectId
+) -> tuple[list[ObjectId], dict[str, dict]]:
+    """공동주최자 항목(이메일 + 권한)을 (계정 id 목록, 권한 표)로 바꿉니다.
+
+    없는 계정이 하나라도 있으면 조용히 빼지 않고 알립니다 - 빠진 줄 모르면
+    그 사람은 권한이 있는 줄 알고 기다리게 됩니다. 주최자 본인은 뺍니다.
+    이메일만 온 항목(예전 화면)은 기본 권한을 받습니다.
+    """
+    perms_by_email: dict[str, dict] = {}
+    for entry in entries:
+        email = entry if isinstance(entry, str) else entry.email
+        email = (email or "").strip().lower()
+        if not email or email in perms_by_email:
+            continue
+        given = {} if isinstance(entry, str) else (entry.perms or {})
+        perms_by_email[email] = {
+            k: bool(given.get(k, v)) for k, v in CO_HOST_PERM_DEFAULTS.items()
+        }
+    if not perms_by_email:
+        return [], {}
+
+    wanted = list(perms_by_email)
     docs = await users_col.find({"email": {"$in": wanted}}, {"email": 1}).to_list(
         length=None
     )
@@ -100,11 +151,15 @@ async def resolve_co_hosts(emails: list[str], owner_id: ObjectId) -> list[Object
     missing = [e for e in wanted if e not in by_email]
     if missing:
         raise UnknownCoHosts(missing)
-    return [by_email[e] for e in wanted if by_email[e] != owner_id]
+    ids = [by_email[e] for e in wanted if by_email[e] != owner_id]
+    perms = {
+        str(by_email[e]): perms_by_email[e] for e in wanted if by_email[e] != owner_id
+    }
+    return ids, perms
 
 
 async def co_host_list(event: dict) -> list[dict]:
-    """화면용 공동주최자 명단 (지정한 순서 그대로). 탈퇴한 계정은 뺍니다."""
+    """화면용 공동주최자 명단 (지정한 순서 그대로, 권한 포함). 탈퇴한 계정은 뺍니다."""
     ids = event.get("coHostIds") or []
     if not ids:
         return []
@@ -117,10 +172,54 @@ async def co_host_list(event: dict) -> list[dict]:
             "_id": str(i),
             "name": (by_id[i].get("name") or "").strip(),
             "email": by_id[i].get("email", ""),
+            "perms": co_host_perms(event, i),
         }
         for i in ids
         if i in by_id
     ]
+
+
+async def notify_recipients(event: dict, owner: dict | None) -> list[dict]:
+    """응답 알림을 받을 사람 - 주최자와 "응답 알림" 권한을 받은 공동주최자."""
+    people = [owner] if owner else []
+    ids = [
+        i for i in (event.get("coHostIds") or []) if co_host_perms(event, i)["notify"]
+    ]
+    if ids:
+        people += await users_col.find({"_id": {"$in": ids}}).to_list(length=None)
+    return people
+
+
+async def host_label(event: dict) -> str:
+    """참가자에게 보이는 주최자 이름 - 주최자와 "이름 표시" 권한의 공동주최자.
+
+    예: "김교수, 이조교". 안내 메일의 보낸 사람·본문, 캘린더 초대의 주최자
+    칸에 그대로 들어갑니다. 주최자가 앞, 공동주최자는 지정한 순서입니다.
+    """
+    names: list[str] = []
+    ids = [event["ownerId"]] if event.get("ownerId") else []
+    ids += [
+        i for i in (event.get("coHostIds") or []) if co_host_perms(event, i)["listed"]
+    ]
+    if ids:
+        docs = await users_col.find(
+            {"_id": {"$in": ids}}, {"name": 1, "email": 1}
+        ).to_list(length=None)
+        by_id = {
+            d["_id"]: (d.get("name") or d.get("email") or "").strip() for d in docs
+        }
+        names = [by_id[i] for i in ids if by_id.get(i)]
+    return ", ".join(dict.fromkeys(names))
+
+
+async def as_hosts(event: dict, actor: dict | None) -> dict | None:
+    """메일·캘린더에 넘길 "주최자" 문서. 실제로 보내는 사람(actor)의 문서를
+    그대로 쓰되(참조 주소, 캘린더 계정) 이름만 주최자 모두의 이름으로 바꿉니다.
+    원본을 고치지 않도록 사본을 돌려줍니다."""
+    if not actor or not event.get("ownerId"):
+        return actor
+    label = await host_label(event)
+    return {**actor, "name": label} if label else actor
 
 
 def records_enabled(event: dict) -> bool:
@@ -289,14 +388,15 @@ async def create_event(payload: EventPayload, owner: dict | None) -> dict:
     now = datetime.now(UTC)
     # 저장 전에 확인합니다 - 없는 계정이 섞여 있으면 일정을 만들지 않고
     # 화면에서 고치게 합니다 (만들어진 뒤에 알리면 일정이 두 번 생깁니다).
-    co_host_ids = (
+    co_host_ids, co_host_perms_map = (
         await resolve_co_hosts(payload.coHosts, owner["_id"])
         if owner and payload.coHosts
-        else []
+        else ([], {})
     )
     event = {
         "ownerId": owner["_id"] if owner else None,
         "coHostIds": co_host_ids,
+        "coHostPerms": co_host_perms_map,
         "name": payload.name,
         "description": payload.description,
         "descriptionFormat": payload.descriptionFormat,
@@ -356,18 +456,18 @@ async def update_event(
 ) -> dict:
     owner_id = event.get("ownerId")
     requester_id = requester["_id"] if requester else None
-    if owner_id is not None and not can_manage(event, requester):
+    if owner_id is not None and not has_perm(event, requester, "edit"):
         raise NotEventOwner()
 
-    # 공동주최자 명단은 주최자만 바꿉니다. 공동주최자가 저장한 요청에 명단이
-    # 실려 와도 무시합니다 (서로를 빼거나 남을 끌어들이지 못하게).
-    co_host_ids = None
+    # 공동주최자 명단·권한은 주최자와 "공동주최자 관리" 권한을 받은 사람만
+    # 바꿉니다. 그 밖의 공동주최자가 저장한 요청에 명단이 실려 와도 무시합니다.
+    co_host_update = None
     if (
         owner_id is not None
-        and owner_id == requester_id
         and payload.coHosts is not None
+        and has_perm(event, requester, "coHosts")
     ):
-        co_host_ids = await resolve_co_hosts(payload.coHosts, owner_id)
+        co_host_update = await resolve_co_hosts(payload.coHosts, owner_id)
 
     # 시간 단위 변경. 예전에는 저장 대상에 아예 없어 조용히 무시됐습니다.
     increment_changed = int(event.get("timeIncrement") or 15) != payload.timeIncrement
@@ -393,8 +493,8 @@ async def update_event(
         "type": payload.type.value,
         "timeIncrement": payload.timeIncrement,
     }
-    if co_host_ids is not None:
-        updates["coHostIds"] = co_host_ids
+    if co_host_update is not None:
+        updates["coHostIds"], updates["coHostPerms"] = co_host_update
 
     unset: dict = {}
     if increment_changed:
@@ -411,9 +511,10 @@ async def update_event(
     updated_remindees = [old_remindees[email] for email in kept_emails]
     for email in added_emails:
         updated_remindees.append({"email": email, "responded": False})
+    presenter = await as_hosts(event, requester) if added_emails else requester
     queued = email_service.send_many_detached(
         [
-            email_service.build_event_invite_mail(email, requester, event)
+            email_service.build_event_invite_mail(email, presenter, event)
             for email in added_emails
         ]
     )
@@ -536,7 +637,9 @@ async def remember_invitees(event: dict, emails: list[str]) -> None:
     )
 
 
-async def delete_event(event: dict, requester: dict, *, notify: bool = True) -> int:
+async def delete_event(
+    event: dict, requester: dict, *, notify: bool = True, presenter: dict | None = None
+) -> int:
     """일정을 삭제하고, 참가자에게 취소 안내를 보낸 통수를 반환합니다.
 
     남이 응답한 일정은 그 응답을 지우지 않으려고 숨김 처리(휴지통)만 하는데,
@@ -545,12 +648,20 @@ async def delete_event(event: dict, requester: dict, *, notify: bool = True) -> 
     """
     notified = 0
     if notify:
+        # requester는 주최자(공동주최자가 지워도 주최자 기준), presenter는
+        # 안내에 이름이 나갈 사람들 - 없으면 주최자 모두의 이름을 씁니다.
+        presenter = presenter or await as_hosts(event, requester)
+        actor_email = (presenter.get("email") or "").lower()
         word = removal_word(event)
-        recipients = await _cancellation_recipients(event, requester)
+        recipients = [
+            e
+            for e in await _cancellation_recipients(event, requester)
+            if e.lower() != actor_email
+        ]
         notified = email_service.send_many_detached(
             [
                 email_service.build_event_cancelled_mail(
-                    email, requester, event, word=word
+                    email, presenter, event, word=word
                 )
                 for email in recipients
             ]
@@ -615,9 +726,10 @@ async def restore_event(event: dict, owner: dict, *, notify: bool = False) -> in
     if not notify:
         return 0
     recipients = await _cancellation_recipients(event, owner)
+    presenter = await as_hosts(event, owner)
     return email_service.send_many_detached(
         [
-            email_service.build_event_reopened_mail(email, owner, event)
+            email_service.build_event_reopened_mail(email, presenter, event)
             for email in recipients
         ]
     )
@@ -723,7 +835,7 @@ async def upsert_response(
     if is_closed(event):
         raise EventClosed()
     if event.get("blindAvailabilityEnabled") and requester and payload.guest:
-        if not can_manage(event, requester):
+        if not has_perm(event, requester, "edit"):
             raise BlindAvailabilityViolation()
 
     if payload.guest:
@@ -783,7 +895,7 @@ async def delete_response(event: dict, payload, requester: dict | None) -> None:
             raise NotSignedIn()
         user_key = str(requester["_id"])
         target = payload.userId or user_key
-        if target != user_key and not can_manage(event, requester):
+        if target != user_key and not has_perm(event, requester, "edit"):
             raise NotEventOwner()
 
         result = await event_responses_col.delete_one(

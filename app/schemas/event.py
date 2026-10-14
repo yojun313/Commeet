@@ -15,6 +15,14 @@ class EventType(str, Enum):
     SPECIFIC_DATES = "specific_dates"
 
 
+class CoHostEntry(BaseModel):
+    """공동주최자 한 명. `perms`에 없는 권한은 기본값을 씁니다
+    (event_service.CO_HOST_PERM_DEFAULTS)."""
+
+    email: EmailStr
+    perms: dict[str, bool] | None = None
+
+
 class EventPayload(BaseModel):
     """Shared shape for create + edit."""
 
@@ -40,10 +48,11 @@ class EventPayload(BaseModel):
     sendEmailAfterXResponses: int | None = None
 
     remindees: list[str] = Field(default_factory=list, max_length=300)
-    # 공동주최자 이메일 - 가입한 계정이어야 합니다 (event_service.resolve_co_hosts).
-    # None이면 "건드리지 않음": 공동주최자가 일정을 고칠 때 명단이 지워지지
-    # 않게 합니다. 명단을 바꿀 수 있는 사람은 주최자뿐입니다.
-    coHosts: list[EmailStr] | None = Field(default=None, max_length=20)
+    # 공동주최자 - 가입한 계정이어야 합니다 (event_service.resolve_co_hosts).
+    # 이메일만 오면(예전 화면) 기본 권한을 받습니다.
+    # None이면 "건드리지 않음": 명단을 바꿀 권한이 없는 공동주최자가 일정을
+    # 고칠 때 명단이 지워지지 않게 합니다.
+    coHosts: list[CoHostEntry | EmailStr] | None = Field(default=None, max_length=20)
 
 
 class EventResponsePayload(BaseModel):

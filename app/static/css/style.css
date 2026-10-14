@@ -556,6 +556,13 @@ textarea.input {
   font-size: 14px;
   padding: 5px;
   font-family: inherit;
+  /* 지정하지 않으면 브라우저 기본(흰 바탕·검은 글씨)이 나와 다크 모드에서
+     상자 안에 흰 띠가 생깁니다 - 바깥 상자(.chip-input)의 색을 그대로 씁니다. */
+  background: transparent;
+  color: var(--color-text);
+}
+.chip-input input::placeholder {
+  color: var(--color-text-muted);
 }
 .chip {
   display: inline-flex;
@@ -5720,3 +5727,105 @@ button, a {
     overscroll-behavior: contain;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* 일정 만들기·수정: 공동주최자 권한                                     */
+/* ------------------------------------------------------------------ */
+/* 사람 목록은 칩 배열이 들고 있지만, 화면에는 칩 대신 권한 줄을 보여 줍니다
+   (new-event.js renderCoHostRows). */
+.cohost-chips .chip { display: none; }
+
+.cohost-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cohost-list:not(:empty) { margin-top: 8px; }
+
+.cohost-row {
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface);
+  padding: 10px 12px;
+}
+.cohost-row-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.cohost-email {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 600;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* .field label(블록·굵게·아래 여백)보다 앞서도록 행 안에서 한 단계 더 좁힙니다. */
+.cohost-row label.cohost-all,
+.cohost-row label.cohost-perm {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  cursor: pointer;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text);
+}
+.cohost-row label.cohost-all {
+  flex: none;
+  color: var(--color-primary);
+  font-weight: 700;
+}
+.cohost-all input,
+.cohost-perm input {
+  margin: 0;
+  width: 14px;
+  height: 14px;
+  accent-color: var(--color-primary);
+}
+.cohost-remove {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  font-size: 18px;
+  line-height: 1;
+}
+.cohost-perms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.cohost-row label.cohost-perm {
+  padding: 4px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface-2);
+  transition: background 0.15s, border-color 0.15s;
+}
+.cohost-row label.cohost-perm:has(input:checked) {
+  background: var(--color-primary-pale);
+  border-color: var(--color-primary-pale-2);
+}
+.cohost-perm:has(input:focus-visible),
+.cohost-all:has(input:focus-visible) {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+/* 좁은 화면: 이메일 | × 한 줄, "모든 권한"은 그 아래 줄. */
+@media (max-width: 480px) {
+  .cohost-row-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 6px;
+  }
+  .cohost-email { grid-column: 1; grid-row: 1; }
+  .cohost-remove { grid-column: 2; grid-row: 1; }
+  .cohost-row label.cohost-all { grid-column: 1 / -1; grid-row: 2; justify-self: start; }
+}
+

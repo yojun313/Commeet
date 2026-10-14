@@ -5,6 +5,10 @@ from bson import ObjectId
 
 from app.db import event_responses_col, events_col, users_col
 from app.services.auth_service import default_calendar_options
+from app.services.event_service import CO_HOST_PERM_DEFAULTS, co_host_perms
+
+# 공동주최자 권한을 기억해 둘 사람 수 상한 - 사용자 문서가 끝없이 커지지 않게.
+_CO_HOST_PREFS_LIMIT = 200
 
 _OBJECT_ID_RE = re.compile(r"^[0-9a-fA-F]{24}$")
 
@@ -159,14 +163,18 @@ async def get_dashboard_events(user: dict) -> list[dict]:
                     "_id": str(i),
                     "name": (co_docs[i].get("name") or "").strip(),
                     "email": co_docs[i].get("email", ""),
+                    "perms": co_host_perms(event, i),
                 }
                 for i in (event.get("coHostIds") or [])
                 if i in co_docs
             ]
         else:
             # 남의 일정 응답자에게 다른 공동주최자가 누구인지까지 내려 줄
-            # 이유는 없습니다. 내가 공동주최자인지만 알면 됩니다.
+            # 이유는 없습니다. 내가 공동주최자인지, 무엇을 할 수 있는지만.
+            if event["isCoHost"]:
+                event["myPerms"] = co_host_perms(event, user_id)
             event.pop("coHostIds", None)
+        event.pop("coHostPerms", None)
         if not event["isOwner"]:
             # 남의 일정에는 누가 만든 것인지 보여 줍니다. 소유자가 없는
             # (게스트가 만든) 일정도 있어 기본값을 둡니다.
@@ -214,3 +222,47 @@ async def get_public_profile(user_id: str) -> dict | None:
         "name": user.get("name", ""),
         "picture": user.get("picture", ""),
     }
+
+
+# --------------------------------------------------------------------- #
+# 공동주최자 권한 기억                                                     #
+# --------------------------------------------------------------------- #
+#
+# 일정 창에서 공동주최자의 체크를 바꾸면 그 사람 앞으로 기억해 두었다가,
+# 다음에 같은 사람을 공동주최자로 넣을 때 그대로 채웁니다. 처음 넣는 사람은
+# 가장 최근에 고른 권한으로 시작합니다. 이메일에는 점이 들어가 Mongo 키로
+# 쓰기 곤란해서, [{email, perms}] 목록으로 둡니다 (최근 것이 뒤).
+
+
+def _clean_perms(perms: dict | None) -> dict[str, bool]:
+    perms = perms or {}
+    return {k: bool(perms.get(k, v)) for k, v in CO_HOST_PERM_DEFAULTS.items()}
+
+
+def get_co_host_prefs(user: dict) -> dict:
+    rows = user.get("coHostPrefs") or []
+    by_email = {
+        r["email"]: _clean_perms(r.get("perms")) for r in rows if r.get("email")
+    }
+    return {
+        "byEmail": by_email,
+        "last": _clean_perms(rows[-1].get("perms")) if rows else None,
+    }
+
+
+async def save_co_host_prefs(user: dict, entries: list[tuple[str, dict]]) -> None:
+    """(이메일, 권한) 들을 기억합니다. 넘긴 순서대로 "최근"이 됩니다."""
+    if not entries:
+        return
+    fresh = await users_col.find_one({"_id": user["_id"]}, {"coHostPrefs": 1}) or {}
+    rows = [r for r in (fresh.get("coHostPrefs") or []) if r.get("email")]
+    for email, perms in entries:
+        email = (email or "").strip().lower()
+        if not email:
+            continue
+        rows = [r for r in rows if r["email"] != email]
+        rows.append({"email": email, "perms": _clean_perms(perms)})
+    await users_col.update_one(
+        {"_id": user["_id"]},
+        {"$set": {"coHostPrefs": rows[-_CO_HOST_PREFS_LIMIT:]}},
+    )

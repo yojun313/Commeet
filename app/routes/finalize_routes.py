@@ -9,22 +9,23 @@ router = APIRouter(prefix="/api/events", tags=["finalize"])
 
 
 async def _require_host(event_id: str, request: Request) -> tuple[dict, dict, dict]:
-    """(일정, 주최자, 요청한 사람). 공동주최자도 배정·확정할 수 있지만,
-    약속 자체는 주최자의 것입니다 - 주최자가 모든 약속에 들어가고, 캘린더
-    등록과 안내 메일도 주최자 이름으로 나갑니다. 그래서 확정 처리에는
-    요청한 사람이 아니라 주최자를 넘깁니다."""
+    """(일정, 주최자, 요청한 사람). "배정·확정" 권한의 공동주최자도 확정할
+    수 있지만, 약속은 주최자의 것입니다 - 주최자가 모든 약속에 들어가고
+    주최자 캘린더에 등록됩니다. 넘기는 주최자 문서는 이름만 "주최자 모두"
+    (주최자 + 이름 표시 권한의 공동주최자)로 바꾼 사본이라, 안내 메일과
+    캘린더 초대에 그 이름들이 함께 나갑니다."""
     user = await require_user(request)
     event = await event_service.get_event_by_either_id(event_id)
     if event is None:
         raise HTTPException(status_code=404, detail="이벤트를 찾을 수 없습니다")
-    if not event_service.can_manage(event, user):
-        raise HTTPException(
-            status_code=403, detail="주최자와 공동주최자만 확정할 수 있습니다"
-        )
-    if event["ownerId"] == user["_id"]:
-        return event, user, user
-    host = await get_user_by_id(str(event["ownerId"])) or user
-    return event, host, user
+    if not event_service.has_perm(event, user, "finalize"):
+        raise HTTPException(status_code=403, detail="확정할 권한이 없습니다")
+    owner = (
+        user
+        if event["ownerId"] == user["_id"]
+        else await get_user_by_id(str(event["ownerId"])) or user
+    )
+    return event, await event_service.as_hosts(event, owner), user
 
 
 @router.post("/{event_id}/finalize/proposal")

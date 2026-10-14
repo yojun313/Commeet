@@ -383,7 +383,7 @@ async def save_record(owner: dict, data: dict) -> str:
     """Creates or updates the record for one meeting (upsert on the meeting)."""
     event_oid = to_object_id(data["eventId"])
     event = await events_col.find_one({"_id": event_oid})
-    if not event or event.get("ownerId") != owner["_id"]:
+    if not event or not event_service.has_perm(event, owner, "records"):
         raise RecordNotFound()
     # 꺼 둔 일정에는 새로 쓰지 않습니다. 화면에서는 칸 자체가 안 보이지만,
     # 열어 둔 탭에서 뒤늦게 저장이 날아올 수 있습니다. 읽기는 막지 않습니다 -

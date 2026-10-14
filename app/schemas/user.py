@@ -1,6 +1,13 @@
 from pydantic import BaseModel, Field
 
 
+class CoHostPrefRequest(BaseModel):
+    """일정 창에서 바꾼 공동주최자 한 명의 권한 체크 (다음에 다시 채우려고 기억)."""
+
+    email: str = Field(min_length=3, max_length=254)
+    perms: dict[str, bool]
+
+
 class UpdateNameRequest(BaseModel):
     name: str = Field(min_length=1)
 

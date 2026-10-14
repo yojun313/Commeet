@@ -330,7 +330,7 @@ async def finalize_page(event_id: str, request: Request):
         return _event_not_found_response(request, user)
     if not user:
         return redirect_to_sign_in(request)
-    if not event_service.can_manage(event, user):
+    if not event_service.has_perm(event, user, "finalize"):
         return RedirectResponse(f"/e/{event.get('shortId') or event['_id']}")
 
     event_id_str = event.get("shortId") or str(event["_id"])

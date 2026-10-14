@@ -5,6 +5,7 @@ from app.core.ids import to_object_id
 from app.core.serialize import jsonable
 from app.schemas.folder import SetEventFolderRequest
 from app.schemas.user import (
+    CoHostPrefRequest,
     ChangePasswordRequest,
     DeleteAccountRequest,
     UpdateCalendarOptionsRequest,
@@ -49,6 +50,21 @@ async def get_profile(request: Request):
             "numEventsCreated": user.get("numEventsCreated", 0),
         }
     )
+
+
+@router.get("/co-host-prefs")
+async def get_co_host_prefs(request: Request):
+    """일정 창이 공동주최자 권한 체크를 채울 때 씁니다 - 사람별로 기억한
+    권한과, 처음 넣는 사람에게 쓸 가장 최근 권한."""
+    user = await require_user(request)
+    return user_service.get_co_host_prefs(user)
+
+
+@router.put("/co-host-prefs")
+async def save_co_host_pref(payload: CoHostPrefRequest, request: Request):
+    user = await require_user(request)
+    await user_service.save_co_host_prefs(user, [(payload.email, payload.perms)])
+    return {}
 
 
 @router.patch("/name")

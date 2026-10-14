@@ -79,6 +79,23 @@ function isPastEvent(event) {
   return last < new Date();
 }
 
+/* 공동주최자로 지정된 남의 일정 - 받은 권한만큼 버튼을 둡니다. 보관은
+   주최자의 폴더 정리 기능이라 여기 두지 않습니다. */
+function coHostActions(event) {
+  const perms = event.myPerms || {};
+  const buttons = [];
+  if (perms.edit) buttons.push(`<button class="btn btn-sm btn-ghost" data-action="edit">수정</button>`);
+  if (perms.delete) {
+    buttons.push(`<button class="btn btn-sm btn-ghost" data-action="duplicate">복제</button>`);
+    buttons.push(
+      `<button class="btn btn-sm btn-ghost" data-action="delete" style="color: var(--color-danger);">${
+        isPastEvent(event) ? "삭제" : "취소"
+      }</button>`
+    );
+  }
+  return `<span class="event-card-readonly-note">공동주최자</span>${buttons.join("")}`;
+}
+
 function eventCard(event) {
   const readOnly = event.isOwner === false;
   const url = `/e/${event.shortId || event._id}`;
@@ -111,9 +128,11 @@ function eventCard(event) {
       <a class="btn btn-sm btn-secondary" href="${url}">열기</a>
       ${
         readOnly
-          ? `<span class="event-card-readonly-note">${
-              event.isCoHost ? "공동주최자" : event.hasResponded ? "응답함" : "응답 대기"
-            }</span>`
+          ? event.isCoHost
+            ? coHostActions(event)
+            : `<span class="event-card-readonly-note">${
+                event.hasResponded ? "응답함" : "응답 대기"
+              }</span>`
           : `<button class="btn btn-sm btn-ghost" data-action="edit">수정</button>
              <button class="btn btn-sm btn-ghost" data-action="duplicate">복제</button>
              <button class="btn btn-sm btn-ghost" data-action="archive">${event.isArchived ? "보관 해제" : "보관"}</button>
@@ -124,24 +143,28 @@ function eventCard(event) {
     </div>
   `;
 
-  if (readOnly) return div;
+  if (readOnly && !event.isCoHost) return div;
 
-  div.querySelector('[data-action="edit"]').addEventListener("click", async () => {
+  const on = (action, fn) => {
+    const btn = div.querySelector(`[data-action="${action}"]`);
+    if (btn) btn.addEventListener("click", fn);
+  };
+  on("edit", async () => {
     const full = await api.get(`/api/events/${event._id}`);
     NewEventDialog.open({ mode: "edit", event: full });
   });
-  div.querySelector('[data-action="duplicate"]').addEventListener("click", async () => {
+  on("duplicate", async () => {
     const name = prompt("새 일정 이름", `${event.name} (복사본)`);
     if (!name) return;
     await api.post(`/api/events/${event._id}/duplicate`, { eventName: name, copyAvailability: true });
     showSnackbar("복제되었습니다.", "success");
     loadDashboard();
   });
-  div.querySelector('[data-action="archive"]').addEventListener("click", async () => {
+  on("archive", async () => {
     await api.post(`/api/events/${event._id}/archive?archived=${!event.isArchived}`);
     loadDashboard();
   });
-  div.querySelector('[data-action="delete"]').addEventListener("click", () => {
+  on("delete", () => {
     deleteTargetId = event._id;
     // 앞으로 있을 일정은 참가자에게 "취소", 이미 지난 일정은 기록 "삭제"입니다.
     const word = isPastEvent(event) ? "삭제" : "취소";
@@ -155,7 +178,8 @@ function eventCard(event) {
     openDialog("delete-event-dialog");
   });
 
-  div.querySelector(".event-card-grip").addEventListener("pointerdown", (e) => startCardDrag(e, event, div));
+  const gripEl = div.querySelector(".event-card-grip");
+  if (gripEl) gripEl.addEventListener("pointerdown", (e) => startCardDrag(e, event, div));
 
   return div;
 }

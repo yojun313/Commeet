@@ -25,7 +25,9 @@ _EXTENSIONS = {
 
 async def _owned_event(user: dict, event_id: str) -> dict:
     event = await event_service.get_event_by_either_id(event_id)
-    if not event or event.get("ownerId") != user["_id"]:
+    # 주최자, 또는 "면담 기록" 권한의 공동주최자. 기록은 쓴 사람 앞으로
+    # 저장되어(ownerId = 쓴 사람) 각자 자기 기록만 봅니다.
+    if not event or not event_service.has_perm(event, user, "records"):
         raise HTTPException(status_code=404, detail="일정을 찾을 수 없습니다.")
     return event
 
