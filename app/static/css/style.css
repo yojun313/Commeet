@@ -3794,9 +3794,27 @@ body.dragging-active * {
   .brand-mark {
     font-size: 19px;
   }
+  .header-logos {
+    flex-shrink: 0;
+  }
+  .site-header .container {
+    gap: 6px;
+  }
+  .nav-actions {
+    gap: 2px;
+  }
+  .nav-actions .btn-icon {
+    min-width: 28px;
+    padding: 5px;
+  }
   .nav-links a {
     padding: 6px 7px;
     font-size: 12px;
+  }
+  /* 로고가 이미 대시보드로 가므로, 좁은 화면에서는 이 링크를 빼 자리를
+     만듭니다 - 언어·테마 버튼까지 들어가면 로고 위로 겹쳤습니다. */
+  .nav-links a[href="/home"] {
+    display: none;
   }
   .event-card-actions .btn {
     flex: 1;
