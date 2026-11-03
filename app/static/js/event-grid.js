@@ -1893,7 +1893,7 @@ function wireDynamicButtons() {
     deleteBtn.style.display = "";
     // 앞으로 있을 일정은 참가자에게 "취소", 이미 지난 일정은 기록 "삭제"입니다.
     const word = isPastEvent(ST.event) ? "삭제" : "취소";
-    document.getElementById("delete-event-btn-word").textContent = word;
+    document.getElementById("delete-event-btn-word").textContent = `일정 ${word}`;
     deleteBtn.addEventListener("click", () => {
       document.getElementById("delete-page-title").textContent = `일정 ${word}`;
       document.getElementById("delete-page-notify-label").textContent =

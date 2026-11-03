@@ -146,6 +146,16 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // 영문 보기 - 서버가 쿠키를 보고 사전을 붙여 주므로 바꾼 뒤 새로고침합니다.
+  const langToggleBtn = document.getElementById("lang-toggle-btn");
+  if (langToggleBtn) {
+    langToggleBtn.addEventListener("click", () => {
+      const next = document.documentElement.lang === "en" ? "ko" : "en";
+      document.cookie = `commeet_lang=${next}; path=/; max-age=31536000; SameSite=Lax`;
+      window.location.reload();
+    });
+  }
+
   const themeToggleBtn = document.getElementById("theme-toggle-btn");
   if (themeToggleBtn) {
     themeToggleBtn.addEventListener("click", () => {

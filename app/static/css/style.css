@@ -801,6 +801,14 @@ textarea.input {
   flex-shrink: 0;
 }
 
+/* 언어 전환 - 지금과 반대 언어의 약자(EN / KO)를 보여 줍니다. */
+.lang-toggle-btn {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
 .theme-toggle-btn {
   color: var(--color-text-muted);
 }

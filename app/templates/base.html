@@ -1,5 +1,9 @@
 <!doctype html>
-<html lang="ko">
+{# 영문 보기: 헤더의 EN 버튼이 쿠키를 바꾸고 새로고침합니다. 영문일 때만
+   사전(i18n-en.js)을 받고, 번역을 마칠 때까지 본문을 숨겨 한국어가 비치지
+   않게 합니다 (i18n.js 참고). #}
+{% set LANG = "en" if request and request.cookies.get("commeet_lang") == "en" else "ko" %}
+<html lang="{{ LANG }}"{% if LANG == "en" %} class="i18n-pending"{% endif %}>
   <head>
     <meta charset="UTF-8" />
     <!-- 모바일: 입력 포커스 확대 금지 + 노치까지 화면 사용 + (안드로이드)
@@ -25,6 +29,11 @@
         }
       })();
     </script>
+    {% if LANG == "en" %}
+    <style>html.i18n-pending body { visibility: hidden; }</style>
+    <script src="{{ asset('js/i18n-en.js') }}"></script>
+    <script src="{{ asset('js/i18n.js') }}"></script>
+    {% endif %}
     <title>{% block title %}{{ APP_NAME }} - {{ APP_FULL_NAME }}{% endblock %}</title>
     <meta name="description" content="{% block description %}모두의 가능한 시간을 한눈에 모아 그룹 일정을 빠르게 조율하세요.{% endblock %}" />
     <!-- 홈 화면 앱(PWA). apple-* 메타와 아이콘은 "홈 화면에 추가"하는 순간

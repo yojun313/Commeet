@@ -9,9 +9,10 @@
       <button class="btn-icon" type="button" id="cal-prev" aria-label="이전">&lsaquo;</button>
       <button class="btn-icon" type="button" id="cal-next" aria-label="다음">&rsaquo;</button>
       <div class="toggle-group" id="cal-view-toggle">
-        <button type="button" data-view="day">일</button>
-        <button type="button" data-view="week">주</button>
-        <button type="button" class="active" data-view="month">월</button>
+        {# "일"·"월"은 요일 이름과 같아 영문 보기에서 헷갈리므로 data-en으로 따로 적습니다. #}
+        <button type="button" data-view="day" data-en="Day">일</button>
+        <button type="button" data-view="week" data-en="Week">주</button>
+        <button type="button" class="active" data-view="month" data-en="Month">월</button>
       </div>
     </div>
   </div>

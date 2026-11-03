@@ -1,13 +1,13 @@
 <div class="container" style="padding-bottom: 60px;">
   <div class="event-header">
     <div>
-      <h1 id="ev-title">{{ event_name }}</h1>
+      <h1 id="ev-title" translate="no">{{ event_name }}</h1>
       <div class="event-meta" id="ev-meta"></div>
     </div>
     <div class="event-header-actions">
       <button class="btn btn-secondary btn-sm" type="button" id="copy-link-btn">링크 복사</button>
       <button class="btn btn-secondary btn-sm" type="button" id="edit-event-btn" style="display: none;">일정 정보 수정</button>
-      <button class="btn btn-ghost btn-sm" type="button" id="delete-event-btn" style="display: none; color: var(--color-danger);">일정 <span id="delete-event-btn-word">취소</span></button>
+      <button class="btn btn-ghost btn-sm" type="button" id="delete-event-btn" style="display: none; color: var(--color-danger);"><span id="delete-event-btn-word">일정 취소</span></button>
       <a class="btn-finalize" id="finalize-link-btn" style="display: none;" href="/e/{{ event_id }}/finalize">
         <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M8 2v3M16 2v3M3.5 9h17M5 5h14a1.5 1.5 0 011.5 1.5V19a1.5 1.5 0 01-1.5 1.5H5A1.5 1.5 0 013.5 19V6.5A1.5 1.5 0 015 5z"></path>
@@ -20,7 +20,7 @@
 
   {# 설명이 있으면 그대로 펼쳐 보입니다 (없으면 통째로 숨김 - event-grid.js). #}
   <div class="event-description" id="ev-description" style="display: none;">
-    <div class="event-description-body md-body" id="ev-description-body"></div>
+    <div class="event-description-body md-body" id="ev-description-body" translate="no"></div>
   </div>
 
   <div id="guest-owner-banner"></div>

@@ -111,7 +111,7 @@ function eventCard(event) {
     ${isList ? grip : ""}
     <div class="event-card-top">
       <div>
-        <div class="event-card-title"><a href="${url}">${escapeHtml(event.name)}</a></div>
+        <div class="event-card-title" translate="no"><a href="${url}">${escapeHtml(event.name)}</a></div>
         <div class="event-card-meta">${fmtDateRange(event)} &middot; 응답 ${event.numResponses ?? 0}명</div>
         <div class="event-card-created">${
           readOnly
